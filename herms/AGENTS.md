@@ -19,6 +19,23 @@ HERMS is Bun-only. Translate third-party `npm`/`npx` examples to `bun`/`bunx` an
 - `tailwind-design-system` for Tailwind CSS v4 tokens, themes, responsive patterns, and component variants.
 - `web-design-guidelines` for UI, UX, and accessibility reviews; fetch its current guideline source when performing a review.
 
+## Backend and database skills
+
+When working in `apps/api`, use the matching project skill from `.agents/skills`:
+
+- `hono` for Hono routing, middleware, validation, testing, streaming, and CLI-based request checks.
+- `hono-rpc` for chained route typing and the end-to-end Hono RPC client contract.
+- `hono-testing` for `app.request()`, `testClient()`, middleware, validation, and integration tests.
+- `api-design-patterns` for REST resources, errors, security, pagination, versioning, response formats, and OpenAPI documentation.
+- `better-auth-best-practices` for authentication configuration, adapters, sessions, hooks, plugins, and security.
+
+When working in `packages/db`, use:
+
+- `drizzle` for schemas, typed queries, relations, transactions, and performance patterns.
+- `drizzle-migrations` for migration-first, forward-only database evolution.
+
+HERMS architecture and roadmap documents override generic skill examples. Use Neon PostgreSQL through its HTTP/serverless driver, never a per-invocation pooled `pg` connection, and run migrations only as gated steps - not during Lambda cold starts. HERMS is Bun-only: translate `npm`, `npx`, `pnpm`, or `yarn` examples to `bun` or `bunx` and never create another package-manager lockfile.
+
 ## Hono CLI
 
 When working in apps/api, use the project-local Hono CLI for focused context and testing:

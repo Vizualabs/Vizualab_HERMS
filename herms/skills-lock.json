@@ -1,6 +1,48 @@
 {
   "version": 1,
   "skills": {
+    "api-design-patterns": {
+      "source": "asyrafhussin/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/api-design-patterns/SKILL.md",
+      "computedHash": "4c9048d7644cb28fcef996d042f9a8a4b6d5bd1131f40f720592b0247f1b928d"
+    },
+    "better-auth-best-practices": {
+      "source": "better-auth/skills",
+      "sourceType": "github",
+      "skillPath": "better-auth/best-practices/SKILL.md",
+      "computedHash": "e8b46af23c6b1bc7aefdae3cf816368058c05e46eadb9bdca4f744b17d05a866"
+    },
+    "drizzle": {
+      "source": "bobmatnyc/claude-mpm-skills",
+      "sourceType": "github",
+      "skillPath": "toolchains/typescript/data/drizzle/SKILL.md",
+      "computedHash": "daefe2ce00404d56ac89ff312abc57457d3779ff5f8a38a1c6b4867c67a86ea4"
+    },
+    "drizzle-migrations": {
+      "source": "bobmatnyc/claude-mpm-skills",
+      "sourceType": "github",
+      "skillPath": "toolchains/typescript/data/drizzle-migrations/SKILL.md",
+      "computedHash": "4544281a83af424b8ca10f5c30d256ac876f6f2591e2a2a9b82c7383d6bd0c0f"
+    },
+    "hono": {
+      "source": "yusukebe/hono-skill",
+      "sourceType": "github",
+      "skillPath": "skills/hono/SKILL.md",
+      "computedHash": "24bad73932f309cec73a5a9171b838f59050990a634d8590c2d2c204507e64f9"
+    },
+    "hono-rpc": {
+      "source": "bobmatnyc/claude-mpm-skills",
+      "sourceType": "github",
+      "skillPath": "toolchains/javascript/frameworks/hono/hono-rpc/SKILL.md",
+      "computedHash": "f27f565ac6a4c1f38175774a5217d7128c87f05f4eb8c8718b5f21fb8f8d61aa"
+    },
+    "hono-testing": {
+      "source": "bobmatnyc/claude-mpm-skills",
+      "sourceType": "github",
+      "skillPath": "toolchains/javascript/frameworks/hono/hono-testing/SKILL.md",
+      "computedHash": "ea5df0c4a5d4821d34b0b358500acd479dfe444d28b5e0f4d291b4d7405290a8"
+    },
     "playwright-best-practices": {
       "source": "currents-dev/playwright-best-practices-skill",
       "sourceType": "github",
