@@ -4,6 +4,8 @@
   "type": "module",
   "private": true,
   "devDependencies": {
+    "@tanstack/cli": "^0.70.2",
+    "@tanstack/intent": "^0.3.6",
     "@types/bun": "latest"
   },
   "peerDependencies": {
@@ -12,5 +14,16 @@
   "workspaces": [
     "apps/*",
     "packages/*"
-  ]
+  ],
+  "intent": {
+    "skills": [
+      "@tanstack/cli"
+    ],
+    "exclude": [
+      "@tanstack/cli#add-addons-existing-app",
+      "@tanstack/cli#choose-ecosystem-integrations",
+      "@tanstack/cli#create-app-scaffold",
+      "@tanstack/cli#maintain-custom-addons-dev-watch"
+    ]
+  }
 }
