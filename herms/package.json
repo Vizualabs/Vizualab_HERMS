@@ -4,6 +4,7 @@
   "type": "module",
   "private": true,
   "devDependencies": {
+    "@hono/cli": "^0.1.11",
     "@tanstack/cli": "^0.70.2",
     "@tanstack/intent": "^0.3.6",
     "@types/bun": "latest"
