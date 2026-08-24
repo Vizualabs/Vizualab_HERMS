@@ -8,6 +8,13 @@
       "when": 1787529600000,
       "tag": "0000_phase_0_baseline",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1787529601000,
+      "tag": "0001_identity_rbac_master_data",
+      "breakpoints": true
     }
   ]
 }

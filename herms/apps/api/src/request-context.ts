@@ -1,4 +1,4 @@
-import { REQUEST_ID_HEADER, resolveRequestId } from '@herms/shared'
+import { REQUEST_ID_HEADER, resolveRequestId, type SessionUser } from '@herms/shared'
 import { createMiddleware } from 'hono/factory'
 
 import type { AppLogger } from './logger'
@@ -6,6 +6,7 @@ import type { AppLogger } from './logger'
 export type AppEnv = {
   Variables: {
     requestId: string
+    user: SessionUser
   }
 }
 

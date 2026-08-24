@@ -4,11 +4,16 @@
   "workspaces": {
     "": {
       "name": "herms",
+      "dependencies": {
+        "@herms/db": "workspace:*",
+        "@herms/shared": "workspace:*",
+      },
       "devDependencies": {
         "@hono/cli": "^0.1.11",
         "@tanstack/cli": "^0.70.2",
         "@tanstack/intent": "^0.3.6",
         "@types/bun": "latest",
+        "drizzle-orm": "^0.44.5",
         "typescript": "^6.0.2",
       },
     },
@@ -19,6 +24,7 @@
         "@herms/db": "workspace:*",
         "@herms/shared": "workspace:*",
         "hono": "^4.13.3",
+        "zod": "^4.1.5",
       },
       "devDependencies": {
         "@types/aws-lambda": "^8.10.152",
