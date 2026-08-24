@@ -18,6 +18,11 @@ export const apiEnvSchema = runtimeEnvSchema.extend({
     .enum(['true', 'false'])
     .default('false')
     .transform((value) => value === 'true'),
+  BUSINESS_TIMEZONE: z.string().min(1).default('Asia/Colombo'),
+  BUSINESS_CURRENCY: z.string().length(3).default('LKR'),
+  QUOTATION_EXPIRY_DAYS: z.coerce.number().int().min(1).max(365).default(14),
+  QUOTATION_NUMBER_PREFIX: z.string().trim().min(1).max(12).default('QT'),
+  ORDER_NUMBER_PREFIX: z.string().trim().min(1).max(12).default('ORD'),
 })
 
 export const migrationEnvSchema = z.object({

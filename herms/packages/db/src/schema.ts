@@ -28,6 +28,9 @@ export const priceChangeReason = pgEnum('price_change_reason', [
   'correction',
 ])
 export const auditActorType = pgEnum('audit_actor_type', ['user', 'token'])
+export const quotationStatus = pgEnum('quotation_status', ['sent', 'accepted', 'rejected', 'expired'])
+export const orderStatus = pgEnum('order_status', ['open', 'fully_returned', 'cancelled'])
+export const outboxStatus = pgEnum('outbox_status', ['pending', 'published', 'failed'])
 
 const timestamps = {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -147,6 +150,82 @@ export const auditLogs = pgTable(
   ],
 )
 
+export const quotations = pgTable(
+  'quotation',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    quotationNumber: text('quotation_number').notNull().unique(),
+    customerId: uuid('customer_id').notNull().references(() => customers.id),
+    status: quotationStatus('status').default('sent').notNull(),
+    totalValueCents: integer('total_value_cents').default(0).notNull(),
+    createdBy: uuid('created_by').references(() => users.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index('quotation_customer_id_idx').on(table.customerId), index('quotation_status_idx').on(table.status)],
+)
+
+export const quotationLines = pgTable(
+  'quotation_line',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    quotationId: uuid('quotation_id').notNull().references(() => quotations.id, { onDelete: 'cascade' }),
+    equipmentItemId: uuid('equipment_item_id').notNull().references(() => equipmentItems.id),
+    quantity: integer('quantity').notNull(),
+    unitPriceCents: integer('unit_price_cents').notNull(),
+    lineTotalCents: integer('line_total_cents').notNull(),
+  },
+  (table) => [index('quotation_line_quotation_id_idx').on(table.quotationId)],
+)
+
+export const orders = pgTable(
+  'order',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    orderNumber: text('order_number').notNull().unique(),
+    quotationId: uuid('quotation_id').unique().references(() => quotations.id),
+    customerId: uuid('customer_id').notNull().references(() => customers.id),
+    status: orderStatus('status').default('open').notNull(),
+    totalValueCents: integer('total_value_cents').default(0).notNull(),
+    createdBy: uuid('created_by').references(() => users.id),
+    ...timestamps,
+  },
+  (table) => [index('order_customer_id_idx').on(table.customerId), index('order_status_idx').on(table.status)],
+)
+
+export const orderLines = pgTable(
+  'order_line',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    orderId: uuid('order_id').notNull().references(() => orders.id, { onDelete: 'cascade' }),
+    equipmentItemId: uuid('equipment_item_id').notNull().references(() => equipmentItems.id),
+    quantity: integer('quantity').notNull(),
+    unitPriceCents: integer('unit_price_cents').notNull(),
+    lineTotalCents: integer('line_total_cents').notNull(),
+  },
+  (table) => [index('order_line_order_id_idx').on(table.orderId)],
+)
+
+export const outboxEvents = pgTable(
+  'outbox',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    eventType: text('event_type').notNull(),
+    aggregateType: text('aggregate_type').notNull(),
+    aggregateId: uuid('aggregate_id').notNull(),
+    payload: jsonb('payload').$type<Record<string, unknown>>().notNull(),
+    idempotencyKey: text('idempotency_key').notNull().unique(),
+    status: outboxStatus('status').default('pending').notNull(),
+    attempts: integer('attempts').default(0).notNull(),
+    availableAt: timestamp('available_at', { withTimezone: true }).defaultNow().notNull(),
+    publishedAt: timestamp('published_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index('outbox_status_available_at_idx').on(table.status, table.availableAt)],
+)
+
 export type Store = typeof stores.$inferSelect
 export type User = typeof users.$inferSelect
 export type Customer = typeof customers.$inferSelect
@@ -154,3 +233,8 @@ export type EquipmentItem = typeof equipmentItems.$inferSelect
 export type CustomerPrice = typeof customerPrices.$inferSelect
 export type PriceHistoryEntry = typeof priceHistory.$inferSelect
 export type AuditLog = typeof auditLogs.$inferSelect
+export type Quotation = typeof quotations.$inferSelect
+export type QuotationLine = typeof quotationLines.$inferSelect
+export type Order = typeof orders.$inferSelect
+export type OrderLine = typeof orderLines.$inferSelect
+export type OutboxEvent = typeof outboxEvents.$inferSelect

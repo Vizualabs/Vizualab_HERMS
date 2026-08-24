@@ -15,10 +15,14 @@ export const PRICE_CHANGE_REASONS = [
   'negotiated',
   'correction',
 ] as const
+export const QUOTATION_STATUSES = ['sent', 'accepted', 'rejected', 'expired'] as const
+export const ORDER_STATUSES = ['open', 'fully_returned', 'cancelled'] as const
 
 export type UserRole = (typeof USER_ROLES)[number]
 export type CustomerType = (typeof CUSTOMER_TYPES)[number]
 export type PriceChangeReason = (typeof PRICE_CHANGE_REASONS)[number]
+export type QuotationStatus = (typeof QUOTATION_STATUSES)[number]
+export type OrderStatus = (typeof ORDER_STATUSES)[number]
 
 const nullableEmail = z.union([z.string().trim().email().max(254), z.literal(''), z.null()]).optional()
 const nullableText = (max: number) =>
@@ -76,6 +80,20 @@ export const recurringCustomerInputSchema = z.object({
   ),
 })
 
+export const quotationLineInputSchema = z.object({
+  equipmentItemId: z.string().uuid(),
+  quantity: z.number().int().positive().max(1_000_000),
+  manualUnitPriceCents: z.number().int().positive().max(2_000_000_000).optional(),
+})
+
+export const quotationInputSchema = z.object({
+  customerId: z.string().uuid(),
+  lines: z.array(quotationLineInputSchema).min(1).max(100).refine(
+    (lines) => new Set(lines.map((line) => line.equipmentItemId)).size === lines.length,
+    'Each equipment item may appear only once',
+  ),
+})
+
 export type LoginInput = z.infer<typeof loginInputSchema>
 export type CustomerInput = z.infer<typeof customerInputSchema>
 export type CustomerUpdate = z.infer<typeof customerUpdateSchema>
@@ -83,6 +101,7 @@ export type EquipmentInput = z.infer<typeof equipmentInputSchema>
 export type EquipmentUpdate = z.infer<typeof equipmentUpdateSchema>
 export type PriceChangeInput = z.infer<typeof priceChangeInputSchema>
 export type RecurringCustomerInput = z.infer<typeof recurringCustomerInputSchema>
+export type QuotationInput = z.infer<typeof quotationInputSchema>
 
 export type SessionUser = {
   id: string

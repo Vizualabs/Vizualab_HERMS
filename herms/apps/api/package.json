@@ -13,6 +13,7 @@
     "@herms/db": "workspace:*",
     "@herms/shared": "workspace:*",
     "hono": "^4.13.3",
+    "pdf-lib": "^1.17.1",
     "zod": "^4.1.5"
   },
   "devDependencies": {

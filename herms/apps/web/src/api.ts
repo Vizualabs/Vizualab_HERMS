@@ -5,6 +5,9 @@ import type {
   PriceChangeReason,
   RecurringCustomerInput,
   SessionUser,
+  QuotationInput,
+  QuotationStatus,
+  OrderStatus,
 } from '@herms/shared'
 
 export type Customer = {
@@ -51,6 +54,59 @@ export type PriceHistoryEntry = {
   reason: PriceChangeReason
   createdBy: string | null
   createdAt: string
+}
+
+export type CommercialLine = {
+  id: string
+  equipmentItemId: string
+  equipmentName: string
+  unitOfMeasure: string
+  quantity: number
+  unitPriceCents: number
+  lineTotalCents: number
+}
+
+export type QuotationSummary = {
+  id: string
+  quotationNumber: string
+  customerId: string
+  customerName: string
+  status: QuotationStatus
+  totalValueCents: number
+  createdAt: string
+  expiresAt: string | null
+}
+
+export type QuotationDetail = QuotationSummary & {
+  customerType: CustomerType
+  customerPhone: string | null
+  customerEmail: string | null
+  customerAddress: string | null
+  storeName: string
+  storeAddress: string | null
+  currency: string
+  timezone: string
+  sentAt: string | null
+  updatedAt: string
+  lines: CommercialLine[]
+}
+
+export type OrderSummary = {
+  id: string
+  orderNumber: string
+  quotationId: string | null
+  customerId: string
+  customerName: string
+  status: OrderStatus
+  totalValueCents: number
+  createdAt: string
+}
+
+export type OrderDetail = OrderSummary & {
+  currency: string
+  timezone: string
+  updatedAt: string
+  lines: CommercialLine[]
 }
 
 export class ApiError extends Error {
@@ -128,6 +184,18 @@ export const api = {
     }),
   priceHistory: (id: string) =>
     request<PriceHistoryEntry[]>(`/api/items/${id}/price-history`),
+  quotations: () => request<QuotationSummary[]>('/api/quotations'),
+  quotation: (id: string) => request<QuotationDetail>(`/api/quotations/${id}`),
+  createQuotation: (input: QuotationInput) =>
+    request<QuotationDetail>('/api/quotations', { method: 'POST', body: JSON.stringify(input) }),
+  acceptQuotation: (id: string) =>
+    request<OrderDetail>(`/api/quotations/${id}/accept`, { method: 'POST', body: '{}' }),
+  rejectQuotation: (id: string) =>
+    request<QuotationDetail>(`/api/quotations/${id}/reject`, { method: 'POST', body: '{}' }),
+  expireQuotation: (id: string) =>
+    request<QuotationDetail>(`/api/quotations/${id}/expire`, { method: 'POST', body: '{}' }),
+  orders: () => request<OrderSummary[]>('/api/orders'),
+  order: (id: string) => request<OrderDetail>(`/api/orders/${id}`),
 }
 
 export function formatMinorUnits(value: number) {
@@ -135,4 +203,8 @@ export function formatMinorUnits(value: number) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(value / 100)
+}
+
+export function formatMoney(value: number, currency = 'LKR') {
+  return `${currency} ${formatMinorUnits(value)}`
 }

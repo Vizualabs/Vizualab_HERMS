@@ -2,6 +2,7 @@ import {
   DataConflictError,
   DataNotFoundError,
   type DbHealthCheck,
+  type CommercialService,
   type IdentityService,
   type MasterDataService,
 } from '@herms/db'
@@ -12,6 +13,7 @@ import {
   equipmentUpdateSchema,
   loginInputSchema,
   priceChangeInputSchema,
+  quotationInputSchema,
   recurringCustomerInputSchema,
   REQUEST_ID_HEADER,
 } from '@herms/shared'
@@ -30,11 +32,13 @@ import {
 } from './auth'
 import { jsonLogger, type AppLogger } from './logger'
 import { requestContext, type AppEnv } from './request-context'
+import { createQuotationPdf } from './quotation-pdf'
 
 export type AppDependencies = {
   healthCheck: DbHealthCheck
   identity: IdentityService
   masterData: MasterDataService
+  commercial: CommercialService
   auth: AuthConfig
   logger?: AppLogger
 }
@@ -86,6 +90,7 @@ export function createApp({
   healthCheck,
   identity,
   masterData,
+  commercial,
   auth,
   logger = jsonLogger,
 }: AppDependencies) {
@@ -99,7 +104,7 @@ export function createApp({
     .get('/', (c) =>
       c.json({
         name: 'HERMS API',
-        phase: 1,
+        phase: 2,
         health: '/api/health',
       }),
     )
@@ -216,9 +221,44 @@ export function createApp({
       c.json({ data: await masterData.listPriceHistory(c.req.param('id')) }),
     )
 
+  const commercialRoutes = priceRoutes
+    .get('/api/quotations', requireRoles('sales'), async (c) =>
+      c.json({ data: await commercial.listQuotations(c.get('user')) }),
+    )
+    .post('/api/quotations', requireRoles('sales'), async (c) => {
+      const parsed = await validatedJson(c, quotationInputSchema)
+      if ('response' in parsed) return parsed.response
+      return c.json({ data: await commercial.createQuotation(parsed.data, actor(c)) }, 201)
+    })
+    .get('/api/quotations/:id/pdf', requireRoles('sales'), async (c) => {
+      const quotation = await commercial.getQuotation(c.req.param('id'), c.get('user'))
+      const pdf = await createQuotationPdf(quotation)
+      c.header('Content-Type', 'application/pdf')
+      c.header('Content-Disposition', `attachment; filename="${quotation.quotationNumber}.pdf"`)
+      return c.body(pdf.buffer as ArrayBuffer)
+    })
+    .get('/api/quotations/:id', requireRoles('sales'), async (c) =>
+      c.json({ data: await commercial.getQuotation(c.req.param('id'), c.get('user')) }),
+    )
+    .post('/api/quotations/:id/accept', requireRoles('sales'), async (c) =>
+      c.json({ data: await commercial.acceptQuotation(c.req.param('id'), actor(c)) }),
+    )
+    .post('/api/quotations/:id/reject', requireRoles('sales'), async (c) =>
+      c.json({ data: await commercial.rejectQuotation(c.req.param('id'), actor(c)) }),
+    )
+    .post('/api/quotations/:id/expire', requireRoles('sales', 'system_admin'), async (c) =>
+      c.json({ data: await commercial.expireQuotation(c.req.param('id'), actor(c)) }),
+    )
+    .get('/api/orders', requireRoles('sales'), async (c) =>
+      c.json({ data: await commercial.listOrders(c.get('user')) }),
+    )
+    .get('/api/orders/:id', requireRoles('sales'), async (c) =>
+      c.json({ data: await commercial.getOrder(c.req.param('id'), c.get('user')) }),
+    )
+
   app.use('/api/audit-logs', requireRoles('business_owner', 'system_admin'))
 
-  const finalRoutes = priceRoutes.get('/api/audit-logs', async (c) =>
+  const finalRoutes = commercialRoutes.get('/api/audit-logs', async (c) =>
     c.json({ data: await masterData.listAuditLogs() }),
   )
 

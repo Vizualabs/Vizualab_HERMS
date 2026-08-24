@@ -20,6 +20,8 @@
     "db:seed": "bun run packages/db/src/seed.ts",
     "config:phase1": "bun run scripts/configure-phase1-env.ts",
     "verify:phase1": "bun run scripts/verify-phase1.ts",
+    "config:phase2": "bun run scripts/configure-phase2-env.ts",
+    "verify:phase2": "bun run scripts/verify-phase2.ts",
     "smoke:health": "bun --env-file=.env run hono request apps/api/src/index.ts -P /api/health",
     "ci": "bun run typecheck && bun run test && bun run db:check && bun run build"
   },

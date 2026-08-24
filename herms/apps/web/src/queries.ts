@@ -9,6 +9,10 @@ export const queryKeys = {
   items: ['items'] as const,
   item: (id: string) => ['items', id] as const,
   priceHistory: (id: string) => ['items', id, 'price-history'] as const,
+  quotations: ['quotations'] as const,
+  quotation: (id: string) => ['quotations', id] as const,
+  orders: ['orders'] as const,
+  order: (id: string) => ['orders', id] as const,
 }
 
 export const sessionQuery = queryOptions({
@@ -28,4 +32,16 @@ export const itemsQuery = queryOptions({
   queryKey: queryKeys.items,
   queryFn: api.items,
   staleTime: 15_000,
+})
+
+export const quotationsQuery = queryOptions({
+  queryKey: queryKeys.quotations,
+  queryFn: api.quotations,
+  staleTime: 10_000,
+})
+
+export const ordersQuery = queryOptions({
+  queryKey: queryKeys.orders,
+  queryFn: api.orders,
+  staleTime: 10_000,
 })

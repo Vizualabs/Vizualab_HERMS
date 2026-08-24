@@ -23,6 +23,7 @@ export function AppShell({
   const canUseCustomers = user.role === 'business_owner' || user.role === 'sales'
   const canUseItems =
     user.role === 'business_owner' || user.role === 'sales' || user.role === 'system_admin'
+  const canUseSales = user.role === 'sales'
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -51,6 +52,24 @@ export function AppShell({
                 activeProps={{ className: 'bg-primary text-primary-foreground hover:bg-primary' }}
               >
                 Equipment
+              </Link>
+            )}
+            {canUseSales && (
+              <Link
+                to="/quotations"
+                className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-muted"
+                activeProps={{ className: 'bg-primary text-primary-foreground hover:bg-primary' }}
+              >
+                Quotations
+              </Link>
+            )}
+            {canUseSales && (
+              <Link
+                to="/orders"
+                className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-muted"
+                activeProps={{ className: 'bg-primary text-primary-foreground hover:bg-primary' }}
+              >
+                Orders
               </Link>
             )}
           </nav>

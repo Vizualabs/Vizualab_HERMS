@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import type { IdentityService, MasterDataService } from '@herms/db'
+import type { CommercialService, IdentityService, MasterDataService } from '@herms/db'
 import { REQUEST_ID_HEADER, type SessionUser, type UserRole } from '@herms/shared'
 
 import { createApp } from './app'
@@ -84,7 +84,63 @@ function createServices() {
     listAuditLogs: async () => [],
   } as unknown as MasterDataService
 
-  return { identity, masterData }
+  const quotation = {
+    id: '30000000-0000-4000-8000-000000000001',
+    quotationNumber: 'QT-2026-000001',
+    customerId: '20000000-0000-4000-8000-000000000001',
+    customerName: 'Customer',
+    customerType: 'new' as const,
+    customerPhone: null,
+    customerEmail: null,
+    customerAddress: null,
+    storeName: 'HERMS Main Store',
+    storeAddress: null,
+    status: 'sent' as const,
+    totalValueCents: 2500,
+    createdBy: user('sales').id,
+    createdAt: new Date('2026-08-24T00:00:00Z'),
+    sentAt: new Date('2026-08-24T00:00:00Z'),
+    expiresAt: new Date('2026-09-07T00:00:00Z'),
+    updatedAt: new Date('2026-08-24T00:00:00Z'),
+    currency: 'LKR',
+    timezone: 'Asia/Colombo',
+    lines: [{
+      id: '40000000-0000-4000-8000-000000000001',
+      equipmentItemId: '50000000-0000-4000-8000-000000000001',
+      equipmentName: 'Test item',
+      unitOfMeasure: 'unit',
+      quantity: 1,
+      unitPriceCents: 2500,
+      lineTotalCents: 2500,
+    }],
+  }
+  const order = {
+    id: '60000000-0000-4000-8000-000000000001',
+    orderNumber: 'ORD-2026-000001',
+    quotationId: quotation.id,
+    customerId: quotation.customerId,
+    customerName: quotation.customerName,
+    status: 'open' as const,
+    totalValueCents: quotation.totalValueCents,
+    createdBy: user('sales').id,
+    createdAt: quotation.createdAt,
+    updatedAt: quotation.updatedAt,
+    currency: 'LKR',
+    timezone: 'Asia/Colombo',
+    lines: quotation.lines,
+  }
+  const commercial = {
+    listQuotations: async () => [quotation],
+    getQuotation: async () => quotation,
+    createQuotation: async () => quotation,
+    acceptQuotation: async () => order,
+    rejectQuotation: async () => ({ ...quotation, status: 'rejected' as const }),
+    expireQuotation: async () => ({ ...quotation, status: 'expired' as const }),
+    listOrders: async () => [order],
+    getOrder: async () => order,
+  } as unknown as CommercialService
+
+  return { identity, masterData, commercial }
 }
 
 function createTestApp(healthCheck: () => Promise<number> = async () => 12.34) {
@@ -217,5 +273,50 @@ describe('Phase 1 API', () => {
     expect((await app.request('/api/items', { headers: { Cookie: cookie } })).status).toBe(200)
     expect((await app.request('/api/customers', { headers: { Cookie: cookie } })).status).toBe(403)
     expect((await app.request('/api/audit-logs', { headers: { Cookie: cookie } })).status).toBe(200)
+  })
+})
+
+describe('Phase 2 API', () => {
+  test('allows Sales quotation/order access and produces a downloadable PDF', async () => {
+    const app = createTestApp()
+    const cookie = await sessionCookie(app, 'sales')
+    expect((await app.request('/api/quotations', { headers: { Cookie: cookie } })).status).toBe(200)
+    expect((await app.request('/api/orders', { headers: { Cookie: cookie } })).status).toBe(200)
+    const pdf = await app.request('/api/quotations/30000000-0000-4000-8000-000000000001/pdf', {
+      headers: { Cookie: cookie },
+    })
+    expect(pdf.status).toBe(200)
+    expect(pdf.headers.get('content-type')).toBe('application/pdf')
+    expect(pdf.headers.get('content-disposition')).toContain('QT-2026-000001.pdf')
+    expect(new TextDecoder().decode((await pdf.arrayBuffer()).slice(0, 5))).toBe('%PDF-')
+  })
+
+  test('rejects duplicate quotation lines before the service', async () => {
+    const app = createTestApp()
+    const cookie = await sessionCookie(app, 'sales')
+    const itemId = '50000000-0000-4000-8000-000000000001'
+    const response = await app.request('/api/quotations', {
+      method: 'POST',
+      headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        customerId: '20000000-0000-4000-8000-000000000001',
+        lines: [
+          { equipmentItemId: itemId, quantity: 1, manualUnitPriceCents: 100 },
+          { equipmentItemId: itemId, quantity: 1, manualUnitPriceCents: 100 },
+        ],
+      }),
+    })
+    expect(response.status).toBe(400)
+  })
+
+  test('denies non-Sales roles and only exposes expiry to System Admin', async () => {
+    const app = createTestApp()
+    const fieldCookie = await sessionCookie(app, 'field_staff')
+    expect((await app.request('/api/quotations', { headers: { Cookie: fieldCookie } })).status).toBe(403)
+    const systemCookie = await sessionCookie(app, 'system_admin')
+    expect((await app.request('/api/quotations', { headers: { Cookie: systemCookie } })).status).toBe(403)
+    expect((await app.request('/api/quotations/id/expire', {
+      method: 'POST', headers: { Cookie: systemCookie, 'Content-Type': 'application/json' }, body: '{}',
+    })).status).toBe(200)
   })
 })
