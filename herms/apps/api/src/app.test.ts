@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import type { CommercialService, IdentityService, MasterDataService } from '@herms/db'
+import type { CommercialService, DeliveryService, IdentityService, MasterDataService } from '@herms/db'
 import { REQUEST_ID_HEADER, type SessionUser, type UserRole } from '@herms/shared'
 
 import { createApp } from './app'
@@ -140,7 +140,46 @@ function createServices() {
     getOrder: async () => order,
   } as unknown as CommercialService
 
-  return { identity, masterData, commercial }
+  const deliveryNote = {
+    id: '70000000-0000-4000-8000-000000000001',
+    dnNumber: 'DN-2026-000001',
+    orderId: order.id,
+    orderNumber: order.orderNumber,
+    customerId: order.customerId,
+    customerName: order.customerName,
+    storeId: '10000000-0000-4000-8000-000000000001',
+    status: 'pending_approval' as const,
+    submittedBy: null,
+    approvedBy: null,
+    submittedAt: new Date('2026-08-24T01:00:00Z'),
+    approvedAt: null,
+    createdAt: new Date('2026-08-24T00:30:00Z'),
+    updatedAt: new Date('2026-08-24T01:00:00Z'),
+    lines: [{
+      id: '80000000-0000-4000-8000-000000000001',
+      equipmentItemId: quotation.lines[0]!.equipmentItemId,
+      equipmentName: 'Test item', unitOfMeasure: 'unit', issuedQty: 1,
+      handedOverQty: 1, countedQty: null, mismatchReason: null, mismatchDetail: null,
+      countDifference: null,
+    }],
+  }
+  const delivery = {
+    createFromOrder: async () => ({ ...deliveryNote, status: 'draft' as const, submissionLink: 'http://localhost:3000/notes/test-token', tokenExpiresAt: new Date() }),
+    listForOrder: async () => [deliveryNote],
+    getDeliveryNote: async () => deliveryNote,
+    getLink: async () => ({ submissionLink: 'http://localhost:3000/notes/test-token', expiresAt: new Date() }),
+    regenerateLink: async () => ({ submissionLink: 'http://localhost:3000/notes/new-token', expiresAt: new Date() }),
+    readByToken: async () => deliveryNote,
+    submitByToken: async () => deliveryNote,
+    listApprovals: async () => [deliveryNote],
+    countNote: async () => ({ ...deliveryNote, lines: deliveryNote.lines.map((line) => ({ ...line, countedQty: 1, countDifference: 0 })) }),
+    approveNote: async () => ({ ...deliveryNote, status: 'approved' as const }),
+    rejectNote: async () => ({ ...deliveryNote, status: 'rejected' as const }),
+    reopenNote: async () => ({ ...deliveryNote, status: 'reopened' as const, submissionLink: 'http://localhost:3000/notes/reopened-token', tokenExpiresAt: new Date() }),
+    listStock: async () => [],
+  } as unknown as DeliveryService
+
+  return { identity, masterData, commercial, delivery }
 }
 
 function createTestApp(healthCheck: () => Promise<number> = async () => 12.34) {
@@ -318,5 +357,54 @@ describe('Phase 2 API', () => {
     expect((await app.request('/api/quotations/id/expire', {
       method: 'POST', headers: { Cookie: systemCookie, 'Content-Type': 'application/json' }, body: '{}',
     })).status).toBe(200)
+  })
+})
+
+describe('Phase 3 API', () => {
+  test('opens scoped note-token routes without a login and redacts token paths from logs', async () => {
+    const { entries, logger } = createTestLogger()
+    const app = createApp({ healthCheck: async () => 1, ...createServices(), auth: TEST_AUTH, logger })
+    const response = await app.request('/api/notes/token/highly-sensitive-token-value')
+    expect(response.status).toBe(200)
+    expect(entries.at(-1)?.path).toBe('/api/notes/token/[REDACTED]')
+    expect(JSON.stringify(entries)).not.toContain('highly-sensitive-token-value')
+  })
+
+  test('validates public delivery-note submissions', async () => {
+    const app = createTestApp()
+    const response = await app.request('/api/notes/token/token/submit', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lines: [] }),
+    })
+    expect(response.status).toBe(400)
+  })
+
+  test('allows Sales to create delivery notes but denies Field Staff', async () => {
+    const app = createTestApp()
+    const salesCookie = await sessionCookie(app, 'sales')
+    const created = await app.request('/api/orders/60000000-0000-4000-8000-000000000001/delivery-notes', {
+      method: 'POST', headers: { Cookie: salesCookie, 'Content-Type': 'application/json' }, body: JSON.stringify({ lines: [{ equipmentItemId: '50000000-0000-4000-8000-000000000001', issuedQty: 1 }] }),
+    })
+    expect(created.status).toBe(201)
+    const fieldCookie = await sessionCookie(app, 'field_staff')
+    expect((await app.request('/api/orders/id/delivery-notes', {
+      method: 'POST', headers: { Cookie: fieldCookie, 'Content-Type': 'application/json' }, body: JSON.stringify({ lines: [{ equipmentItemId: '50000000-0000-4000-8000-000000000001', issuedQty: 1 }] }),
+    })).status).toBe(403)
+  })
+
+  test('enforces Store Admin approval and physical-count validation', async () => {
+    const app = createTestApp()
+    const storeCookie = await sessionCookie(app, 'store_admin')
+    expect((await app.request('/api/approvals', { headers: { Cookie: storeCookie } })).status).toBe(200)
+    const invalidCount = await app.request('/api/approvals/note/count', {
+      method: 'POST', headers: { Cookie: storeCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lines: [] }),
+    })
+    expect(invalidCount.status).toBe(400)
+    expect((await app.request('/api/approvals/note/approve', {
+      method: 'POST', headers: { Cookie: storeCookie, 'Content-Type': 'application/json' }, body: '{}',
+    })).status).toBe(200)
+    const salesCookie = await sessionCookie(app, 'sales')
+    expect((await app.request('/api/approvals', { headers: { Cookie: salesCookie } })).status).toBe(403)
   })
 })

@@ -2,6 +2,7 @@ import {
   createDatabase,
   createDbHealthCheck,
   createCommercialService,
+  createDeliveryService,
   createIdentityService,
   createMasterDataService,
 } from '@herms/db'
@@ -21,6 +22,13 @@ const app = createApp({
     quotationExpiryDays: env.QUOTATION_EXPIRY_DAYS,
     quotationNumberPrefix: env.QUOTATION_NUMBER_PREFIX,
     orderNumberPrefix: env.ORDER_NUMBER_PREFIX,
+  }),
+  delivery: createDeliveryService(db, {
+    timezone: env.BUSINESS_TIMEZONE,
+    deliveryNoteNumberPrefix: env.DELIVERY_NOTE_NUMBER_PREFIX,
+    tokenSecret: env.NOTE_TOKEN_SECRET,
+    tokenTtlSeconds: env.NOTE_TOKEN_TTL_SECONDS,
+    publicAppUrl: env.PUBLIC_APP_URL,
   }),
   auth: {
     secret: env.AUTH_SECRET,

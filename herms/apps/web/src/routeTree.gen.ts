@@ -12,11 +12,16 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
+import { Route as AuthenticatedApprovalsRouteImport } from './routes/_authenticated/approvals'
 import { Route as AuthenticatedCustomersRouteImport } from './routes/_authenticated/customers'
 import { Route as AuthenticatedItemsRouteImport } from './routes/_authenticated/items'
 import { Route as AuthenticatedOrdersRouteImport } from './routes/_authenticated/orders'
 import { Route as AuthenticatedQuotationsRouteImport } from './routes/_authenticated/quotations'
+import { Route as AuthenticatedStockRouteImport } from './routes/_authenticated/stock'
+import { Route as NotesTokenRouteImport } from './routes/notes.$token'
+import { Route as AuthenticatedApprovalsNoteIdRouteImport } from './routes/_authenticated/approvals.$noteId'
 import { Route as AuthenticatedCustomersCustomerIdRouteImport } from './routes/_authenticated/customers.$customerId'
+import { Route as AuthenticatedDeliveryNotesNoteIdRouteImport } from './routes/_authenticated/delivery-notes.$noteId'
 import { Route as AuthenticatedItemsItemIdRouteImport } from './routes/_authenticated/items.$itemId'
 import { Route as AuthenticatedOrdersOrderIdRouteImport } from './routes/_authenticated/orders.$orderId'
 import { Route as AuthenticatedQuotationsQuotationIdRouteImport } from './routes/_authenticated/quotations.$quotationId'
@@ -33,6 +38,11 @@ const LoginRoute = LoginRouteImport.update({
 const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedApprovalsRoute = AuthenticatedApprovalsRouteImport.update({
+  id: '/approvals',
+  path: '/approvals',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedCustomersRoute = AuthenticatedCustomersRouteImport.update({
@@ -55,11 +65,33 @@ const AuthenticatedQuotationsRoute = AuthenticatedQuotationsRouteImport.update({
   path: '/quotations',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedStockRoute = AuthenticatedStockRouteImport.update({
+  id: '/stock',
+  path: '/stock',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const NotesTokenRoute = NotesTokenRouteImport.update({
+  id: '/notes/$token',
+  path: '/notes/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedApprovalsNoteIdRoute =
+  AuthenticatedApprovalsNoteIdRouteImport.update({
+    id: '/$noteId',
+    path: '/$noteId',
+    getParentRoute: () => AuthenticatedApprovalsRoute,
+  } as any)
 const AuthenticatedCustomersCustomerIdRoute =
   AuthenticatedCustomersCustomerIdRouteImport.update({
     id: '/$customerId',
     path: '/$customerId',
     getParentRoute: () => AuthenticatedCustomersRoute,
+  } as any)
+const AuthenticatedDeliveryNotesNoteIdRoute =
+  AuthenticatedDeliveryNotesNoteIdRouteImport.update({
+    id: '/delivery-notes/$noteId',
+    path: '/delivery-notes/$noteId',
+    getParentRoute: () => AuthenticatedRoute,
   } as any)
 const AuthenticatedItemsItemIdRoute =
   AuthenticatedItemsItemIdRouteImport.update({
@@ -83,23 +115,33 @@ const AuthenticatedQuotationsQuotationIdRoute =
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/login': typeof LoginRoute
+  '/approvals': typeof AuthenticatedApprovalsRouteWithChildren
   '/customers': typeof AuthenticatedCustomersRouteWithChildren
   '/items': typeof AuthenticatedItemsRouteWithChildren
   '/orders': typeof AuthenticatedOrdersRouteWithChildren
   '/quotations': typeof AuthenticatedQuotationsRouteWithChildren
+  '/stock': typeof AuthenticatedStockRoute
+  '/notes/$token': typeof NotesTokenRoute
+  '/approvals/$noteId': typeof AuthenticatedApprovalsNoteIdRoute
   '/customers/$customerId': typeof AuthenticatedCustomersCustomerIdRoute
+  '/delivery-notes/$noteId': typeof AuthenticatedDeliveryNotesNoteIdRoute
   '/items/$itemId': typeof AuthenticatedItemsItemIdRoute
   '/orders/$orderId': typeof AuthenticatedOrdersOrderIdRoute
   '/quotations/$quotationId': typeof AuthenticatedQuotationsQuotationIdRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
+  '/approvals': typeof AuthenticatedApprovalsRouteWithChildren
   '/customers': typeof AuthenticatedCustomersRouteWithChildren
   '/items': typeof AuthenticatedItemsRouteWithChildren
   '/orders': typeof AuthenticatedOrdersRouteWithChildren
   '/quotations': typeof AuthenticatedQuotationsRouteWithChildren
+  '/stock': typeof AuthenticatedStockRoute
+  '/notes/$token': typeof NotesTokenRoute
   '/': typeof AuthenticatedIndexRoute
+  '/approvals/$noteId': typeof AuthenticatedApprovalsNoteIdRoute
   '/customers/$customerId': typeof AuthenticatedCustomersCustomerIdRoute
+  '/delivery-notes/$noteId': typeof AuthenticatedDeliveryNotesNoteIdRoute
   '/items/$itemId': typeof AuthenticatedItemsItemIdRoute
   '/orders/$orderId': typeof AuthenticatedOrdersOrderIdRoute
   '/quotations/$quotationId': typeof AuthenticatedQuotationsQuotationIdRoute
@@ -108,12 +150,17 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/login': typeof LoginRoute
+  '/_authenticated/approvals': typeof AuthenticatedApprovalsRouteWithChildren
   '/_authenticated/customers': typeof AuthenticatedCustomersRouteWithChildren
   '/_authenticated/items': typeof AuthenticatedItemsRouteWithChildren
   '/_authenticated/orders': typeof AuthenticatedOrdersRouteWithChildren
   '/_authenticated/quotations': typeof AuthenticatedQuotationsRouteWithChildren
+  '/_authenticated/stock': typeof AuthenticatedStockRoute
+  '/notes/$token': typeof NotesTokenRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
+  '/_authenticated/approvals/$noteId': typeof AuthenticatedApprovalsNoteIdRoute
   '/_authenticated/customers/$customerId': typeof AuthenticatedCustomersCustomerIdRoute
+  '/_authenticated/delivery-notes/$noteId': typeof AuthenticatedDeliveryNotesNoteIdRoute
   '/_authenticated/items/$itemId': typeof AuthenticatedItemsItemIdRoute
   '/_authenticated/orders/$orderId': typeof AuthenticatedOrdersOrderIdRoute
   '/_authenticated/quotations/$quotationId': typeof AuthenticatedQuotationsQuotationIdRoute
@@ -123,23 +170,33 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
+    | '/approvals'
     | '/customers'
     | '/items'
     | '/orders'
     | '/quotations'
+    | '/stock'
+    | '/notes/$token'
+    | '/approvals/$noteId'
     | '/customers/$customerId'
+    | '/delivery-notes/$noteId'
     | '/items/$itemId'
     | '/orders/$orderId'
     | '/quotations/$quotationId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
+    | '/approvals'
     | '/customers'
     | '/items'
     | '/orders'
     | '/quotations'
+    | '/stock'
+    | '/notes/$token'
     | '/'
+    | '/approvals/$noteId'
     | '/customers/$customerId'
+    | '/delivery-notes/$noteId'
     | '/items/$itemId'
     | '/orders/$orderId'
     | '/quotations/$quotationId'
@@ -147,12 +204,17 @@ export interface FileRouteTypes {
     | '__root__'
     | '/_authenticated'
     | '/login'
+    | '/_authenticated/approvals'
     | '/_authenticated/customers'
     | '/_authenticated/items'
     | '/_authenticated/orders'
     | '/_authenticated/quotations'
+    | '/_authenticated/stock'
+    | '/notes/$token'
     | '/_authenticated/'
+    | '/_authenticated/approvals/$noteId'
     | '/_authenticated/customers/$customerId'
+    | '/_authenticated/delivery-notes/$noteId'
     | '/_authenticated/items/$itemId'
     | '/_authenticated/orders/$orderId'
     | '/_authenticated/quotations/$quotationId'
@@ -161,6 +223,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   LoginRoute: typeof LoginRoute
+  NotesTokenRoute: typeof NotesTokenRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -184,6 +247,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedIndexRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/approvals': {
+      id: '/_authenticated/approvals'
+      path: '/approvals'
+      fullPath: '/approvals'
+      preLoaderRoute: typeof AuthenticatedApprovalsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/customers': {
@@ -214,12 +284,40 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedQuotationsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/stock': {
+      id: '/_authenticated/stock'
+      path: '/stock'
+      fullPath: '/stock'
+      preLoaderRoute: typeof AuthenticatedStockRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/notes/$token': {
+      id: '/notes/$token'
+      path: '/notes/$token'
+      fullPath: '/notes/$token'
+      preLoaderRoute: typeof NotesTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/approvals/$noteId': {
+      id: '/_authenticated/approvals/$noteId'
+      path: '/$noteId'
+      fullPath: '/approvals/$noteId'
+      preLoaderRoute: typeof AuthenticatedApprovalsNoteIdRouteImport
+      parentRoute: typeof AuthenticatedApprovalsRoute
+    }
     '/_authenticated/customers/$customerId': {
       id: '/_authenticated/customers/$customerId'
       path: '/$customerId'
       fullPath: '/customers/$customerId'
       preLoaderRoute: typeof AuthenticatedCustomersCustomerIdRouteImport
       parentRoute: typeof AuthenticatedCustomersRoute
+    }
+    '/_authenticated/delivery-notes/$noteId': {
+      id: '/_authenticated/delivery-notes/$noteId'
+      path: '/delivery-notes/$noteId'
+      fullPath: '/delivery-notes/$noteId'
+      preLoaderRoute: typeof AuthenticatedDeliveryNotesNoteIdRouteImport
+      parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/items/$itemId': {
       id: '/_authenticated/items/$itemId'
@@ -244,6 +342,20 @@ declare module '@tanstack/react-router' {
     }
   }
 }
+
+interface AuthenticatedApprovalsRouteChildren {
+  AuthenticatedApprovalsNoteIdRoute: typeof AuthenticatedApprovalsNoteIdRoute
+}
+
+const AuthenticatedApprovalsRouteChildren: AuthenticatedApprovalsRouteChildren =
+  {
+    AuthenticatedApprovalsNoteIdRoute: AuthenticatedApprovalsNoteIdRoute,
+  }
+
+const AuthenticatedApprovalsRouteWithChildren =
+  AuthenticatedApprovalsRoute._addFileChildren(
+    AuthenticatedApprovalsRouteChildren,
+  )
 
 interface AuthenticatedCustomersRouteChildren {
   AuthenticatedCustomersCustomerIdRoute: typeof AuthenticatedCustomersCustomerIdRoute
@@ -298,19 +410,25 @@ const AuthenticatedQuotationsRouteWithChildren =
   )
 
 interface AuthenticatedRouteChildren {
+  AuthenticatedApprovalsRoute: typeof AuthenticatedApprovalsRouteWithChildren
   AuthenticatedCustomersRoute: typeof AuthenticatedCustomersRouteWithChildren
   AuthenticatedItemsRoute: typeof AuthenticatedItemsRouteWithChildren
   AuthenticatedOrdersRoute: typeof AuthenticatedOrdersRouteWithChildren
   AuthenticatedQuotationsRoute: typeof AuthenticatedQuotationsRouteWithChildren
+  AuthenticatedStockRoute: typeof AuthenticatedStockRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
+  AuthenticatedDeliveryNotesNoteIdRoute: typeof AuthenticatedDeliveryNotesNoteIdRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
+  AuthenticatedApprovalsRoute: AuthenticatedApprovalsRouteWithChildren,
   AuthenticatedCustomersRoute: AuthenticatedCustomersRouteWithChildren,
   AuthenticatedItemsRoute: AuthenticatedItemsRouteWithChildren,
   AuthenticatedOrdersRoute: AuthenticatedOrdersRouteWithChildren,
   AuthenticatedQuotationsRoute: AuthenticatedQuotationsRouteWithChildren,
+  AuthenticatedStockRoute: AuthenticatedStockRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
+  AuthenticatedDeliveryNotesNoteIdRoute: AuthenticatedDeliveryNotesNoteIdRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
@@ -320,6 +438,7 @@ const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   LoginRoute: LoginRoute,
+  NotesTokenRoute: NotesTokenRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

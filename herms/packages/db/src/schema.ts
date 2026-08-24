@@ -31,6 +31,12 @@ export const auditActorType = pgEnum('audit_actor_type', ['user', 'token'])
 export const quotationStatus = pgEnum('quotation_status', ['sent', 'accepted', 'rejected', 'expired'])
 export const orderStatus = pgEnum('order_status', ['open', 'fully_returned', 'cancelled'])
 export const outboxStatus = pgEnum('outbox_status', ['pending', 'published', 'failed'])
+export const noteStatus = pgEnum('note_status', ['draft', 'submitted', 'pending_approval', 'approved', 'rejected', 'reopened'])
+export const discrepancyType = pgEnum('discrepancy_type', ['missing', 'damaged', 'not_accepted', 'other'])
+export const discrepancyStatus = pgEnum('discrepancy_status', ['open', 'resolved', 'written_off', 'claimed'])
+export const responsibleParty = pgEnum('responsible_party', ['customer', 'staff_member'])
+export const stockDirection = pgEnum('stock_direction', ['in', 'out', 'write_off'])
+export const tokenStatus = pgEnum('token_status', ['active', 'used', 'revoked'])
 
 const timestamps = {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -226,6 +232,104 @@ export const outboxEvents = pgTable(
   (table) => [index('outbox_status_available_at_idx').on(table.status, table.availableAt)],
 )
 
+export const deliveryNotes = pgTable(
+  'delivery_note',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    dnNumber: text('dn_number').notNull().unique(),
+    orderId: uuid('order_id').notNull().references(() => orders.id),
+    storeId: uuid('store_id').references(() => stores.id),
+    status: noteStatus('status').default('draft').notNull(),
+    submittedBy: uuid('submitted_by').references(() => users.id),
+    approvedBy: uuid('approved_by').references(() => users.id),
+    submittedAt: timestamp('submitted_at', { withTimezone: true }),
+    approvedAt: timestamp('approved_at', { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [index('delivery_note_order_id_idx').on(table.orderId), index('delivery_note_store_status_idx').on(table.storeId, table.status)],
+)
+
+export const deliveryNoteLines = pgTable(
+  'delivery_note_line',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    deliveryNoteId: uuid('delivery_note_id').notNull().references(() => deliveryNotes.id, { onDelete: 'cascade' }),
+    equipmentItemId: uuid('equipment_item_id').notNull().references(() => equipmentItems.id),
+    issuedQty: integer('issued_qty').notNull(),
+    handedOverQty: integer('handed_over_qty').notNull(),
+    countedQty: integer('counted_qty'),
+    mismatchReason: discrepancyType('mismatch_reason'),
+    mismatchDetail: text('mismatch_detail'),
+  },
+  (table) => [unique('delivery_note_line_item_unique').on(table.deliveryNoteId, table.equipmentItemId), index('delivery_note_line_note_id_idx').on(table.deliveryNoteId)],
+)
+
+export const stockLedger = pgTable(
+  'stock_ledger',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    equipmentItemId: uuid('equipment_item_id').notNull().references(() => equipmentItems.id),
+    storeId: uuid('store_id').references(() => stores.id),
+    sourceType: text('source_type').notNull(),
+    sourceNoteId: uuid('source_note_id').notNull(),
+    direction: stockDirection('direction').notNull(),
+    quantityDelta: integer('quantity_delta').notNull(),
+    createdBy: uuid('created_by').references(() => users.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    unique('stock_ledger_source_item_unique').on(table.sourceType, table.sourceNoteId, table.equipmentItemId),
+    index('stock_ledger_item_created_idx').on(table.equipmentItemId, table.createdAt),
+    index('stock_ledger_store_id_idx').on(table.storeId),
+  ],
+)
+
+export const discrepancies = pgTable(
+  'discrepancy',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    sourceType: text('source_type').notNull(),
+    sourceNoteId: uuid('source_note_id').notNull(),
+    sourceLineId: uuid('source_line_id'),
+    orderId: uuid('order_id').references(() => orders.id),
+    equipmentItemId: uuid('equipment_item_id').notNull().references(() => equipmentItems.id),
+    quantity: integer('quantity').notNull(),
+    discrepancyType: discrepancyType('discrepancy_type').notNull(),
+    reason: text('reason'),
+    responsibleParty: responsibleParty('responsible_party'),
+    valueCents: integer('value_cents').default(0).notNull(),
+    status: discrepancyStatus('status').default('open').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('discrepancy_source_line_unique').on(table.sourceType, table.sourceLineId).where(sql`${table.sourceLineId} is not null`),
+    index('discrepancy_status_idx').on(table.status),
+    index('discrepancy_equipment_item_id_idx').on(table.equipmentItemId),
+    index('discrepancy_order_id_idx').on(table.orderId),
+  ],
+)
+
+export const noteTokens = pgTable(
+  'note_token',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    tokenHash: text('token_hash').notNull().unique(),
+    noteType: text('note_type').notNull(),
+    noteId: uuid('note_id').notNull(),
+    status: tokenStatus('status').default('active').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+    createdBy: uuid('created_by').references(() => users.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('note_token_live_note_unique').on(table.noteType, table.noteId).where(sql`${table.status} in ('active', 'used')`),
+    index('note_token_note_idx').on(table.noteType, table.noteId),
+  ],
+)
+
 export type Store = typeof stores.$inferSelect
 export type User = typeof users.$inferSelect
 export type Customer = typeof customers.$inferSelect
@@ -238,3 +342,8 @@ export type QuotationLine = typeof quotationLines.$inferSelect
 export type Order = typeof orders.$inferSelect
 export type OrderLine = typeof orderLines.$inferSelect
 export type OutboxEvent = typeof outboxEvents.$inferSelect
+export type DeliveryNote = typeof deliveryNotes.$inferSelect
+export type DeliveryNoteLine = typeof deliveryNoteLines.$inferSelect
+export type StockLedgerEntry = typeof stockLedger.$inferSelect
+export type Discrepancy = typeof discrepancies.$inferSelect
+export type NoteToken = typeof noteTokens.$inferSelect

@@ -17,12 +17,18 @@ export const PRICE_CHANGE_REASONS = [
 ] as const
 export const QUOTATION_STATUSES = ['sent', 'accepted', 'rejected', 'expired'] as const
 export const ORDER_STATUSES = ['open', 'fully_returned', 'cancelled'] as const
+export const NOTE_STATUSES = ['draft', 'submitted', 'pending_approval', 'approved', 'rejected', 'reopened'] as const
+export const DISCREPANCY_TYPES = ['missing', 'damaged', 'not_accepted', 'other'] as const
+export const DISCREPANCY_STATUSES = ['open', 'resolved', 'written_off', 'claimed'] as const
 
 export type UserRole = (typeof USER_ROLES)[number]
 export type CustomerType = (typeof CUSTOMER_TYPES)[number]
 export type PriceChangeReason = (typeof PRICE_CHANGE_REASONS)[number]
 export type QuotationStatus = (typeof QUOTATION_STATUSES)[number]
 export type OrderStatus = (typeof ORDER_STATUSES)[number]
+export type NoteStatus = (typeof NOTE_STATUSES)[number]
+export type DiscrepancyType = (typeof DISCREPANCY_TYPES)[number]
+export type DiscrepancyStatus = (typeof DISCREPANCY_STATUSES)[number]
 
 const nullableEmail = z.union([z.string().trim().email().max(254), z.literal(''), z.null()]).optional()
 const nullableText = (max: number) =>
@@ -94,6 +100,38 @@ export const quotationInputSchema = z.object({
   ),
 })
 
+export const deliveryNoteSubmissionSchema = z.object({
+  lines: z.array(z.object({
+    lineId: z.string().uuid(),
+    handedOverQty: z.number().int().min(0).max(1_000_000),
+    mismatchReason: z.enum(DISCREPANCY_TYPES).nullable().optional(),
+    mismatchDetail: z.string().trim().max(500).nullable().optional(),
+  })).min(1).max(100).refine(
+    (lines) => new Set(lines.map((line) => line.lineId)).size === lines.length,
+    'Each delivery note line may appear only once',
+  ),
+})
+
+export const deliveryNoteCreateSchema = z.object({
+  lines: z.array(z.object({
+    equipmentItemId: z.string().uuid(),
+    issuedQty: z.number().int().positive().max(1_000_000),
+  })).min(1).max(100).refine(
+    (lines) => new Set(lines.map((line) => line.equipmentItemId)).size === lines.length,
+    'Each equipment item may appear only once',
+  ),
+})
+
+export const deliveryNoteCountSchema = z.object({
+  lines: z.array(z.object({
+    lineId: z.string().uuid(),
+    countedQty: z.number().int().min(0).max(1_000_000),
+  })).min(1).max(100).refine(
+    (lines) => new Set(lines.map((line) => line.lineId)).size === lines.length,
+    'Each delivery note line may appear only once',
+  ),
+})
+
 export type LoginInput = z.infer<typeof loginInputSchema>
 export type CustomerInput = z.infer<typeof customerInputSchema>
 export type CustomerUpdate = z.infer<typeof customerUpdateSchema>
@@ -102,6 +140,9 @@ export type EquipmentUpdate = z.infer<typeof equipmentUpdateSchema>
 export type PriceChangeInput = z.infer<typeof priceChangeInputSchema>
 export type RecurringCustomerInput = z.infer<typeof recurringCustomerInputSchema>
 export type QuotationInput = z.infer<typeof quotationInputSchema>
+export type DeliveryNoteSubmission = z.infer<typeof deliveryNoteSubmissionSchema>
+export type DeliveryNoteCreate = z.infer<typeof deliveryNoteCreateSchema>
+export type DeliveryNoteCount = z.infer<typeof deliveryNoteCountSchema>
 
 export type SessionUser = {
   id: string

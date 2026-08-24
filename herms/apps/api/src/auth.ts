@@ -114,3 +114,23 @@ export function requireRoles(...allowed: UserRole[]): MiddlewareHandler<AppEnv> 
     await next()
   })
 }
+
+export function requireStoreApprover(): MiddlewareHandler<AppEnv> {
+  return createMiddleware<AppEnv>(async (c, next) => {
+    const user = c.get('user')
+    if ((user.role !== 'store_admin' && !user.isDeputyAdmin) || !user.storeId) {
+      return c.json({ error: { code: 'FORBIDDEN', message: 'Store Admin or Deputy access is required', request_id: c.get('requestId') } }, 403)
+    }
+    await next()
+  })
+}
+
+export function requireDeliveryLinkAccess(): MiddlewareHandler<AppEnv> {
+  return createMiddleware<AppEnv>(async (c, next) => {
+    const user = c.get('user')
+    if (user.role !== 'sales' && user.role !== 'store_admin' && !user.isDeputyAdmin) {
+      return c.json({ error: { code: 'FORBIDDEN', message: 'Sales, Store Admin, or Deputy access is required', request_id: c.get('requestId') } }, 403)
+    }
+    await next()
+  })
+}

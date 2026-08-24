@@ -1,5 +1,6 @@
 export * from './client'
 export * from './commercial'
+export * from './delivery'
 export * from './health'
 export * from './schema'
 export * from './services'

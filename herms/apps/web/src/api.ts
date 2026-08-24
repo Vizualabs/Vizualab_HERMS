@@ -8,6 +8,11 @@ import type {
   QuotationInput,
   QuotationStatus,
   OrderStatus,
+  NoteStatus,
+  DiscrepancyType,
+  DeliveryNoteSubmission,
+  DeliveryNoteCount,
+  DeliveryNoteCreate,
 } from '@herms/shared'
 
 export type Customer = {
@@ -109,6 +114,54 @@ export type OrderDetail = OrderSummary & {
   lines: CommercialLine[]
 }
 
+export type DeliveryNoteLine = {
+  id: string
+  equipmentItemId: string
+  equipmentName: string
+  unitOfMeasure: string
+  issuedQty: number
+  handedOverQty: number
+  countedQty: number | null
+  mismatchReason: DiscrepancyType | null
+  mismatchDetail: string | null
+  countDifference: number | null
+}
+
+export type DeliveryNoteSummary = {
+  id: string
+  dnNumber: string
+  orderId: string
+  storeId: string | null
+  status: NoteStatus
+  createdAt: string
+  submittedAt: string | null
+  approvedAt: string | null
+  orderNumber?: string
+  customerName?: string
+}
+
+export type DeliveryNoteDetail = DeliveryNoteSummary & {
+  orderNumber: string
+  customerId: string
+  customerName: string
+  submittedBy: string | null
+  approvedBy: string | null
+  updatedAt: string
+  lines: DeliveryNoteLine[]
+  submissionLink?: string
+  tokenExpiresAt?: string
+}
+
+export type NoteLink = { submissionLink: string; expiresAt: string }
+export type StockItem = {
+  equipmentItemId: string
+  equipmentName: string
+  unitOfMeasure: string
+  quantity: number
+  currentUnitPriceCents: number
+  valueCents: number
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -196,6 +249,19 @@ export const api = {
     request<QuotationDetail>(`/api/quotations/${id}/expire`, { method: 'POST', body: '{}' }),
   orders: () => request<OrderSummary[]>('/api/orders'),
   order: (id: string) => request<OrderDetail>(`/api/orders/${id}`),
+  deliveryNotes: (orderId: string) => request<DeliveryNoteSummary[]>(`/api/orders/${orderId}/delivery-notes`),
+  createDeliveryNote: (orderId: string, input: DeliveryNoteCreate) => request<DeliveryNoteDetail>(`/api/orders/${orderId}/delivery-notes`, { method: 'POST', body: JSON.stringify(input) }),
+  deliveryNote: (id: string) => request<DeliveryNoteDetail>(`/api/delivery-notes/${id}`),
+  deliveryNoteLink: (id: string) => request<NoteLink>(`/api/delivery-notes/${id}/link`),
+  regenerateDeliveryNoteLink: (id: string) => request<NoteLink>(`/api/delivery-notes/${id}/resend-link`, { method: 'POST', body: '{}' }),
+  tokenNote: (token: string) => request<DeliveryNoteDetail>(`/api/notes/token/${encodeURIComponent(token)}`),
+  submitTokenNote: (token: string, input: DeliveryNoteSubmission) => request<DeliveryNoteDetail>(`/api/notes/token/${encodeURIComponent(token)}/submit`, { method: 'POST', body: JSON.stringify(input) }),
+  approvals: () => request<DeliveryNoteSummary[]>('/api/approvals'),
+  countDeliveryNote: (id: string, input: DeliveryNoteCount) => request<DeliveryNoteDetail>(`/api/approvals/${id}/count`, { method: 'POST', body: JSON.stringify(input) }),
+  approveDeliveryNote: (id: string) => request<DeliveryNoteDetail>(`/api/approvals/${id}/approve`, { method: 'POST', body: '{}' }),
+  rejectDeliveryNote: (id: string) => request<DeliveryNoteDetail>(`/api/approvals/${id}/reject`, { method: 'POST', body: '{}' }),
+  reopenDeliveryNote: (id: string) => request<DeliveryNoteDetail>(`/api/approvals/${id}/reopen`, { method: 'POST', body: '{}' }),
+  stock: () => request<StockItem[]>('/api/stock'),
 }
 
 export function formatMinorUnits(value: number) {

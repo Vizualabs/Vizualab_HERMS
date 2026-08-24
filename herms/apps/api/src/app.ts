@@ -3,6 +3,7 @@ import {
   DataNotFoundError,
   type DbHealthCheck,
   type CommercialService,
+  type DeliveryService,
   type IdentityService,
   type MasterDataService,
 } from '@herms/db'
@@ -15,6 +16,9 @@ import {
   priceChangeInputSchema,
   quotationInputSchema,
   recurringCustomerInputSchema,
+  deliveryNoteSubmissionSchema,
+  deliveryNoteCountSchema,
+  deliveryNoteCreateSchema,
   REQUEST_ID_HEADER,
 } from '@herms/shared'
 import { Hono, type Context } from 'hono'
@@ -28,6 +32,8 @@ import {
   clearSession,
   establishSession,
   requireRoles,
+  requireStoreApprover,
+  requireDeliveryLinkAccess,
   type AuthConfig,
 } from './auth'
 import { jsonLogger, type AppLogger } from './logger'
@@ -39,6 +45,7 @@ export type AppDependencies = {
   identity: IdentityService
   masterData: MasterDataService
   commercial: CommercialService
+  delivery: DeliveryService
   auth: AuthConfig
   logger?: AppLogger
 }
@@ -91,6 +98,7 @@ export function createApp({
   identity,
   masterData,
   commercial,
+  delivery,
   auth,
   logger = jsonLogger,
 }: AppDependencies) {
@@ -104,7 +112,7 @@ export function createApp({
     .get('/', (c) =>
       c.json({
         name: 'HERMS API',
-        phase: 2,
+        phase: 3,
         health: '/api/health',
       }),
     )
@@ -134,9 +142,19 @@ export function createApp({
       return c.json({ data: user })
     })
 
+  const publicRoutes = routes
+    .get('/api/notes/token/:token', async (c) =>
+      c.json({ data: await delivery.readByToken(c.req.param('token'), c.get('requestId')) }),
+    )
+    .post('/api/notes/token/:token/submit', async (c) => {
+      const parsed = await validatedJson(c, deliveryNoteSubmissionSchema)
+      if ('response' in parsed) return parsed.response
+      return c.json({ data: await delivery.submitByToken(c.req.param('token'), parsed.data, c.get('requestId')) })
+    })
+
   app.use('/api/*', authenticate(identity, auth))
 
-  const protectedRoutes = routes
+  const protectedRoutes = publicRoutes
     .post('/api/auth/logout', (c) => {
       clearSession(c, auth)
       return c.json({ ok: true as const })
@@ -256,9 +274,48 @@ export function createApp({
       c.json({ data: await commercial.getOrder(c.req.param('id'), c.get('user')) }),
     )
 
+  const deliveryRoutes = commercialRoutes
+    .post('/api/orders/:id/delivery-notes', requireRoles('sales'), async (c) => {
+      const parsed = await validatedJson(c, deliveryNoteCreateSchema)
+      if ('response' in parsed) return parsed.response
+      return c.json({ data: await delivery.createFromOrder(c.req.param('id'), parsed.data, actor(c)) }, 201)
+    })
+    .get('/api/orders/:id/delivery-notes', requireRoles('sales'), async (c) =>
+      c.json({ data: await delivery.listForOrder(c.req.param('id'), c.get('user')) }),
+    )
+    .get('/api/delivery-notes/:id', requireDeliveryLinkAccess(), async (c) =>
+      c.json({ data: await delivery.getDeliveryNote(c.req.param('id'), c.get('user')) }),
+    )
+    .get('/api/delivery-notes/:id/link', requireDeliveryLinkAccess(), async (c) =>
+      c.json({ data: await delivery.getLink(c.req.param('id'), actor(c)) }),
+    )
+    .post('/api/delivery-notes/:id/resend-link', requireDeliveryLinkAccess(), async (c) =>
+      c.json({ data: await delivery.regenerateLink(c.req.param('id'), actor(c)) }),
+    )
+    .get('/api/approvals', requireStoreApprover(), async (c) =>
+      c.json({ data: await delivery.listApprovals(c.get('user')) }),
+    )
+    .post('/api/approvals/:noteId/count', requireStoreApprover(), async (c) => {
+      const parsed = await validatedJson(c, deliveryNoteCountSchema)
+      if ('response' in parsed) return parsed.response
+      return c.json({ data: await delivery.countNote(c.req.param('noteId'), parsed.data, actor(c)) })
+    })
+    .post('/api/approvals/:noteId/approve', requireStoreApprover(), async (c) =>
+      c.json({ data: await delivery.approveNote(c.req.param('noteId'), actor(c)) }),
+    )
+    .post('/api/approvals/:noteId/reject', requireStoreApprover(), async (c) =>
+      c.json({ data: await delivery.rejectNote(c.req.param('noteId'), actor(c)) }),
+    )
+    .post('/api/approvals/:noteId/reopen', requireStoreApprover(), async (c) =>
+      c.json({ data: await delivery.reopenNote(c.req.param('noteId'), actor(c)) }),
+    )
+    .get('/api/stock', requireStoreApprover(), async (c) =>
+      c.json({ data: await delivery.listStock(c.get('user')) }),
+    )
+
   app.use('/api/audit-logs', requireRoles('business_owner', 'system_admin'))
 
-  const finalRoutes = commercialRoutes.get('/api/audit-logs', async (c) =>
+  const finalRoutes = deliveryRoutes.get('/api/audit-logs', async (c) =>
     c.json({ data: await masterData.listAuditLogs() }),
   )
 

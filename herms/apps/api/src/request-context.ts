@@ -26,7 +26,7 @@ export function requestContext(logger: AppLogger) {
         event: 'request_completed',
         requestId,
         method: c.req.method,
-        path: c.req.path,
+        path: c.req.path.replace(/(\/api\/notes\/token\/)[^/]+/g, '$1[REDACTED]'),
         status: c.res.status,
         durationMs: Math.round((performance.now() - startedAt) * 100) / 100,
       })
