@@ -1,0 +1,57 @@
+name: Deploy HERMS web
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'herms/apps/web/**'
+      - 'herms/packages/shared/**'
+      - 'herms/package.json'
+      - 'herms/bun.lock'
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production-vps
+    defaults:
+      run:
+        working-directory: herms
+    env:
+      VPS_HOST: ${{ vars.VPS_HOST }}
+      VPS_USER: ${{ vars.VPS_USER }}
+      VPS_WEB_ROOT: ${{ vars.VPS_WEB_ROOT }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun test
+      - run: bun run build:web
+      - uses: webfactory/ssh-agent@v0.9.1
+        with:
+          ssh-private-key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+      - name: Trust configured VPS host key
+        working-directory: .
+        env:
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+      - name: Upload immutable release
+        run: |
+          release="$VPS_WEB_ROOT/releases/$GITHUB_SHA"
+          ssh "$VPS_USER@$VPS_HOST" "mkdir -p '$release'"
+          rsync -az --delete apps/web/dist/client/ "$VPS_USER@$VPS_HOST:$release/"
+      - name: Activate release
+        run: |
+          release="$VPS_WEB_ROOT/releases/$GITHUB_SHA"
+          ssh "$VPS_USER@$VPS_HOST" "ln -sfn '$release' '$VPS_WEB_ROOT/current'"

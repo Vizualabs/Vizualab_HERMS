@@ -1,0 +1,43 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: HERMS Phase 0 Hono API on an AWS Lambda Function URL
+
+Parameters:
+  DatabaseUrl:
+    Type: String
+    NoEcho: true
+    Description: Neon pooled runtime URL supplied by the deployment environment
+  ApiTimeoutSeconds:
+    Type: Number
+    Default: 20
+    MinValue: 3
+    MaxValue: 25
+
+Resources:
+  HermsApi:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: herms-api
+      CodeUri: ../../apps/api/dist/
+      Handler: lambda.handler
+      Runtime: nodejs22.x
+      Architectures:
+        - arm64
+      MemorySize: 512
+      Timeout: !Ref ApiTimeoutSeconds
+      Tracing: Active
+      Environment:
+        Variables:
+          APP_ENV: production
+          DATABASE_URL: !Ref DatabaseUrl
+      FunctionUrlConfig:
+        AuthType: NONE
+        InvokeMode: BUFFERED
+
+Outputs:
+  ApiFunctionName:
+    Value: !Ref HermsApi
+  ApiFunctionUrl:
+    Value: !GetAtt HermsApiUrl.FunctionUrl
+  ApiTimeoutSeconds:
+    Value: !Ref ApiTimeoutSeconds

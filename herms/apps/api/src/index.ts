@@ -1,9 +1,12 @@
-import { Hono } from 'hono'
+import { createDbHealthCheck } from '@herms/db'
+import { parseRuntimeEnv } from '@herms/shared'
 
-const app = new Hono()
+import { createApp } from './app'
 
-app.get('/', (c) => {
-  return c.text('Hello Hono!')
+const env = parseRuntimeEnv(process.env)
+const app = createApp({
+  healthCheck: createDbHealthCheck(env.DATABASE_URL),
 })
 
 export default app
+export { app }

@@ -1,0 +1,40 @@
+# Replace __HERMS_DOMAIN__ and __LAMBDA_FUNCTION_URL_HOST__ during VPS setup.
+# Lambda timeout is 20 seconds; proxy_read_timeout is intentionally higher.
+
+map $http_x_request_id $herms_request_id {
+    default $http_x_request_id;
+    ""      $request_id;
+}
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name __HERMS_DOMAIN__;
+
+    root /var/www/herms/current;
+    index _shell.html;
+
+    location /api/ {
+        proxy_http_version 1.1;
+        proxy_set_header Host __LAMBDA_FUNCTION_URL_HOST__;
+        proxy_set_header X-Request-ID $herms_request_id;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_ssl_server_name on;
+        proxy_ssl_name __LAMBDA_FUNCTION_URL_HOST__;
+        proxy_connect_timeout 5s;
+        proxy_send_timeout 25s;
+        proxy_read_timeout 25s;
+        proxy_pass https://__LAMBDA_FUNCTION_URL_HOST__;
+    }
+
+    location /assets/ {
+        try_files $uri =404;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    location / {
+        try_files $uri $uri/ /_shell.html;
+    }
+}

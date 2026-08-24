@@ -1,18 +1,14 @@
 {
-  "name": "herms-backend",
+  "name": "herms-notifier",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun --watch src/server.ts",
-    "build": "bun build src/lambda.ts --target=node --outdir=dist",
     "typecheck": "tsc --noEmit",
     "test": "bun test"
   },
   "dependencies": {
-    "@herms/db": "workspace:*",
-    "@herms/shared": "workspace:*",
-    "hono": "^4.13.3"
+    "@herms/shared": "workspace:*"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.152",

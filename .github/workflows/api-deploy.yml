@@ -1,0 +1,88 @@
+name: Deploy HERMS API
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'herms/apps/api/**'
+      - 'herms/packages/db/**'
+      - 'herms/packages/shared/**'
+      - 'herms/infra/aws/**'
+      - 'herms/package.json'
+      - 'herms/bun.lock'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: herms
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun test
+      - run: bun run db:check
+      - run: bun run build:api
+
+  migrate:
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: phase-0-migrations
+    defaults:
+      run:
+        working-directory: herms
+    env:
+      MIGRATION_DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - run: bun install --frozen-lockfile
+      - run: bun run db:migrate
+
+  deploy:
+    needs: migrate
+    runs-on: ubuntu-latest
+    environment: production-api
+    defaults:
+      run:
+        working-directory: herms
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      STACK_NAME: ${{ vars.AWS_STACK_NAME }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - uses: aws-actions/setup-sam@v2
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - run: bun install --frozen-lockfile
+      - run: bun run build:api
+      - run: sam validate --template-file infra/aws/template.yaml
+      - run: sam build --template-file infra/aws/template.yaml
+      - name: Deploy Lambda
+        run: >
+          sam deploy
+          --stack-name "$STACK_NAME"
+          --region "$AWS_REGION"
+          --capabilities CAPABILITY_IAM
+          --resolve-s3
+          --no-confirm-changeset
+          --no-fail-on-empty-changeset
+          --parameter-overrides "DatabaseUrl=$DATABASE_URL"
