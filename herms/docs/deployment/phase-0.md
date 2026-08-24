@@ -85,8 +85,8 @@ sudo systemctl reload nginx
 Once AWS, VPS, and domain values are configured:
 
 1. Push an approved commit to `main`.
-2. Approve the migration environment.
-3. Confirm the API and web workflows succeed.
+2. Manually run the API workflow and approve the migration environment.
+3. Manually run the web workflow and confirm both workflows succeed.
 4. Open `https://<domain>` in a real browser.
 5. Confirm the health card is green and shows a database round-trip duration.
 6. Confirm the response includes `X-Request-ID`.
@@ -94,3 +94,7 @@ Once AWS, VPS, and domain values are configured:
 
 The browser-to-Nginx-to-Lambda smoke test remains pending until the hosting
 values are supplied.
+
+The deployment workflows are manual-only until AWS and VPS configuration is
+supplied and verified. Enable automatic `main` deployment triggers as part of
+the hosting setup checkpoint.

@@ -2,16 +2,6 @@ name: Deploy HERMS API
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - 'herms/apps/api/**'
-      - 'herms/packages/db/**'
-      - 'herms/packages/shared/**'
-      - 'herms/infra/aws/**'
-      - 'herms/package.json'
-      - 'herms/bun.lock'
 
 permissions:
   contents: read
