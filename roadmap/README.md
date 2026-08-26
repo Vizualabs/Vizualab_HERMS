@@ -151,6 +151,7 @@ Use the client's exact words in code, UI copy, and commit messages. The client i
 5. Schema first: Drizzle migration, then API, then UI. Never let the UI shape the schema.
 6. Write the invariant test with the feature, not after it.
 7. Close the loop: typecheck, tests, migration applied against a scratch branch. Report satisfied vs open FR IDs.
+8. After a module is complete and its required checks pass, create and push a separate focused commit for that module before starting the next module. Stage only files belonging to that module; never include unrelated or user-owned worktree changes.
 
 ### Stack rules
 
