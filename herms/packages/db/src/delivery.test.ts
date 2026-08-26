@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import { fileURLToPath } from 'node:url'
 
-describe('Phase 3 stock write boundary', () => {
-  test('keeps the only application stock-ledger insert in the approval service', async () => {
+describe('Stock write boundary', () => {
+  test('keeps application stock-ledger inserts inside note approval/reversal services', async () => {
     const files = new Bun.Glob('**/*.ts').scan({ cwd: fileURLToPath(new URL('../../..', import.meta.url)) })
     const insertLocations: string[] = []
     for await (const file of files) {
@@ -13,6 +13,7 @@ describe('Phase 3 stock write boundary', () => {
       if (source.includes('INSERT INTO ${stockLedger}') || source.includes('.insert(stockLedger)')) insertLocations.push(normalized)
     }
     expect(insertLocations).toEqual(expect.arrayContaining([expect.stringContaining('packages/db/src/delivery.ts')]))
-    expect(insertLocations).toHaveLength(1)
+    expect(insertLocations).toEqual(expect.arrayContaining([expect.stringContaining('packages/db/src/retention.ts')]))
+    expect(insertLocations).toHaveLength(2)
   })
 })

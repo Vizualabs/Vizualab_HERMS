@@ -1,6 +1,12 @@
 import { describe, expect, test } from 'bun:test'
 
-import type { CommercialService, DeliveryService, IdentityService, MasterDataService } from '@herms/db'
+import type {
+  CommercialService,
+  DeliveryService,
+  IdentityService,
+  MasterDataService,
+  RetentionService,
+} from '@herms/db'
 import { REQUEST_ID_HEADER, type SessionUser, type UserRole } from '@herms/shared'
 
 import { createApp } from './app'
@@ -164,6 +170,7 @@ function createServices() {
     }],
   }
   const delivery = {
+    resolveTokenType: async () => 'delivery_note' as const,
     createFromOrder: async () => ({ ...deliveryNote, status: 'draft' as const, submissionLink: 'http://localhost:3000/notes/test-token', tokenExpiresAt: new Date() }),
     listForOrder: async () => [deliveryNote],
     getDeliveryNote: async () => deliveryNote,
@@ -179,7 +186,87 @@ function createServices() {
     listStock: async () => [],
   } as unknown as DeliveryService
 
-  return { identity, masterData, commercial, delivery }
+  const retentionNote = {
+    id: '90000000-0000-4000-8000-000000000001',
+    rnNumber: 'RN-2026-000001',
+    noteType: 'retention_note' as const,
+    orderId: order.id,
+    orderNumber: order.orderNumber,
+    customerId: order.customerId,
+    customerName: order.customerName,
+    deliveryNoteId: null,
+    storeId: '10000000-0000-4000-8000-000000000001',
+    status: 'pending_approval' as const,
+    submittedBy: null,
+    approvedBy: null,
+    submittedAt: new Date('2026-08-24T02:00:00Z'),
+    approvedAt: null,
+    createdAt: new Date('2026-08-24T01:30:00Z'),
+    updatedAt: new Date('2026-08-24T02:00:00Z'),
+    lines: [{
+      id: '91000000-0000-4000-8000-000000000001',
+      equipmentItemId: quotation.lines[0]!.equipmentItemId,
+      equipmentName: 'Test item',
+      unitOfMeasure: 'unit',
+      deliveredQty: 1,
+      returnedQty: 1,
+      balanceQty: 0,
+      missingDamagedQty: 0,
+      countedReturnedQty: null,
+      mismatchReason: null,
+      responsibleParty: null,
+      reasonDetail: null,
+      countDifference: null,
+      discrepancyId: null,
+      discrepancyStatus: null,
+      writeOffLedgerId: null,
+      writeOffCreatedAt: null,
+      writeOffReversed: false,
+    }],
+  }
+  const retention = {
+    ownsNote: async (id: string) => id === retentionNote.id,
+    createFromOrder: async () => ({
+      ...retentionNote,
+      status: 'draft' as const,
+      submissionLink: 'http://localhost:3000/notes/retention-token',
+      tokenExpiresAt: new Date(),
+    }),
+    listForOrder: async () => [retentionNote],
+    getRetentionNote: async () => retentionNote,
+    getLink: async () => ({
+      submissionLink: 'http://localhost:3000/notes/retention-token',
+      expiresAt: new Date(),
+    }),
+    regenerateLink: async () => ({
+      submissionLink: 'http://localhost:3000/notes/new-retention-token',
+      expiresAt: new Date(),
+    }),
+    readByToken: async () => retentionNote,
+    submitByToken: async () => retentionNote,
+    listApprovals: async () => [retentionNote],
+    countNote: async () => ({
+      ...retentionNote,
+      lines: retentionNote.lines.map((line) => ({
+        ...line,
+        countedReturnedQty: 1,
+        countDifference: 0,
+      })),
+    }),
+    approveNote: async () => ({ ...retentionNote, status: 'approved' as const }),
+    rejectNote: async () => ({ ...retentionNote, status: 'rejected' as const }),
+    reopenNote: async () => ({
+      ...retentionNote,
+      status: 'reopened' as const,
+      submissionLink: 'http://localhost:3000/notes/reopened-retention-token',
+      tokenExpiresAt: new Date(),
+    }),
+    closeOrder: async () => ({ order: { ...order, status: 'fully_returned' as const }, reconciliation: [] }),
+    reverseWriteOff: async (id: string) => ({ discrepancy: { id, status: 'resolved' }, reversalLedgerId: 'ledger-1' }),
+    reconciliation: async () => [],
+  } as unknown as RetentionService
+
+  return { identity, masterData, commercial, delivery, retention }
 }
 
 function createTestApp(healthCheck: () => Promise<number> = async () => 12.34) {
@@ -406,5 +493,67 @@ describe('Phase 3 API', () => {
     })).status).toBe(200)
     const salesCookie = await sessionCookie(app, 'sales')
     expect((await app.request('/api/approvals', { headers: { Cookie: salesCookie } })).status).toBe(403)
+  })
+})
+
+describe('Phase 4 API', () => {
+  test('allows Sales to create retention notes but not Field Staff', async () => {
+    const app = createTestApp()
+    const salesCookie = await sessionCookie(app, 'sales')
+    const created = await app.request(
+      '/api/orders/60000000-0000-4000-8000-000000000001/retention-notes',
+      {
+        method: 'POST',
+        headers: { Cookie: salesCookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lines: [{ equipmentItemId: '50000000-0000-4000-8000-000000000001' }],
+        }),
+      },
+    )
+    expect(created.status).toBe(201)
+    const fieldCookie = await sessionCookie(app, 'field_staff')
+    expect((await app.request('/api/orders/id/retention-notes', {
+      method: 'POST',
+      headers: { Cookie: fieldCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        lines: [{ equipmentItemId: '50000000-0000-4000-8000-000000000001' }],
+      }),
+    })).status).toBe(403)
+  })
+
+  test('dispatches retention counts through the reused approval route', async () => {
+    const app = createTestApp()
+    const cookie = await sessionCookie(app, 'store_admin')
+    const response = await app.request(
+      '/api/approvals/90000000-0000-4000-8000-000000000001/count',
+      {
+        method: 'POST',
+        headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lines: [{
+            lineId: '91000000-0000-4000-8000-000000000001',
+            countedReturnedQty: 1,
+          }],
+        }),
+      },
+    )
+    expect(response.status).toBe(200)
+  })
+
+  test('restricts order close and write-off reversal to the proper roles', async () => {
+    const app = createTestApp()
+    const storeCookie = await sessionCookie(app, 'store_admin')
+    expect((await app.request('/api/orders/order/close', {
+      method: 'POST', headers: { Cookie: storeCookie, 'Content-Type': 'application/json' }, body: '{}',
+    })).status).toBe(200)
+    expect((await app.request('/api/discrepancies/discrepancy/write-off-reverse', {
+      method: 'POST',
+      headers: { Cookie: storeCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: 'Count correction' }),
+    })).status).toBe(200)
+    const salesCookie = await sessionCookie(app, 'sales')
+    expect((await app.request('/api/orders/order/close', {
+      method: 'POST', headers: { Cookie: salesCookie, 'Content-Type': 'application/json' }, body: '{}',
+    })).status).toBe(403)
   })
 })

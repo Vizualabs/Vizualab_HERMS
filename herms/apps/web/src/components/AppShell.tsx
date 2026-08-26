@@ -25,6 +25,7 @@ export function AppShell({
     user.role === 'business_owner' || user.role === 'sales' || user.role === 'system_admin'
   const canUseSales = user.role === 'sales'
   const canApprove = user.role === 'store_admin' || user.isDeputyAdmin
+  const canUseOrders = canUseSales || user.role === 'store_admin'
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -74,7 +75,7 @@ export function AppShell({
                 Stock
               </Link>
             )}
-            {canUseSales && (
+            {canUseOrders && (
               <Link
                 to="/orders"
                 className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-muted"

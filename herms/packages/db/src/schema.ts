@@ -264,6 +264,47 @@ export const deliveryNoteLines = pgTable(
   (table) => [unique('delivery_note_line_item_unique').on(table.deliveryNoteId, table.equipmentItemId), index('delivery_note_line_note_id_idx').on(table.deliveryNoteId)],
 )
 
+export const retentionNotes = pgTable(
+  'retention_note',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    rnNumber: text('rn_number').notNull().unique(),
+    orderId: uuid('order_id').notNull().references(() => orders.id),
+    deliveryNoteId: uuid('delivery_note_id').references(() => deliveryNotes.id),
+    storeId: uuid('store_id').references(() => stores.id),
+    status: noteStatus('status').default('draft').notNull(),
+    submittedBy: uuid('submitted_by').references(() => users.id),
+    approvedBy: uuid('approved_by').references(() => users.id),
+    submittedAt: timestamp('submitted_at', { withTimezone: true }),
+    approvedAt: timestamp('approved_at', { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [
+    index('retention_note_order_id_idx').on(table.orderId),
+    index('retention_note_store_status_idx').on(table.storeId, table.status),
+  ],
+)
+
+export const retentionNoteLines = pgTable(
+  'retention_note_line',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    retentionNoteId: uuid('retention_note_id').notNull().references(() => retentionNotes.id, { onDelete: 'cascade' }),
+    equipmentItemId: uuid('equipment_item_id').notNull().references(() => equipmentItems.id),
+    returnedQty: integer('returned_qty').default(0).notNull(),
+    balanceQty: integer('balance_qty').default(0).notNull(),
+    missingDamagedQty: integer('missing_damaged_qty').default(0).notNull(),
+    countedReturnedQty: integer('counted_returned_qty'),
+    mismatchReason: discrepancyType('mismatch_reason'),
+    responsibleParty: responsibleParty('responsible_party'),
+    reasonDetail: text('reason_detail'),
+  },
+  (table) => [
+    unique('retention_note_line_item_unique').on(table.retentionNoteId, table.equipmentItemId),
+    index('retention_note_line_note_id_idx').on(table.retentionNoteId),
+  ],
+)
+
 export const stockLedger = pgTable(
   'stock_ledger',
   {
@@ -274,11 +315,14 @@ export const stockLedger = pgTable(
     sourceNoteId: uuid('source_note_id').notNull(),
     direction: stockDirection('direction').notNull(),
     quantityDelta: integer('quantity_delta').notNull(),
+    reversalOfId: uuid('reversal_of_id'),
+    reversalReason: text('reversal_reason'),
     createdBy: uuid('created_by').references(() => users.id),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    unique('stock_ledger_source_item_unique').on(table.sourceType, table.sourceNoteId, table.equipmentItemId),
+    unique('stock_ledger_source_item_direction_unique').on(table.sourceType, table.sourceNoteId, table.equipmentItemId, table.direction),
+    uniqueIndex('stock_ledger_reversal_of_unique').on(table.reversalOfId).where(sql`${table.reversalOfId} is not null`),
     index('stock_ledger_item_created_idx').on(table.equipmentItemId, table.createdAt),
     index('stock_ledger_store_id_idx').on(table.storeId),
   ],
@@ -344,6 +388,8 @@ export type OrderLine = typeof orderLines.$inferSelect
 export type OutboxEvent = typeof outboxEvents.$inferSelect
 export type DeliveryNote = typeof deliveryNotes.$inferSelect
 export type DeliveryNoteLine = typeof deliveryNoteLines.$inferSelect
+export type RetentionNote = typeof retentionNotes.$inferSelect
+export type RetentionNoteLine = typeof retentionNoteLines.$inferSelect
 export type StockLedgerEntry = typeof stockLedger.$inferSelect
 export type Discrepancy = typeof discrepancies.$inferSelect
 export type NoteToken = typeof noteTokens.$inferSelect

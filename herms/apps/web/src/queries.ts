@@ -15,7 +15,10 @@ export const queryKeys = {
   order: (id: string) => ['orders', id] as const,
   deliveryNotes: (orderId: string) => ['orders', orderId, 'delivery-notes'] as const,
   deliveryNote: (id: string) => ['delivery-notes', id] as const,
+  retentionNotes: (orderId: string) => ['orders', orderId, 'retention-notes'] as const,
+  retentionNote: (id: string) => ['retention-notes', id] as const,
   approvals: ['approvals'] as const,
+  approvalNote: (id: string) => ['approvals', id] as const,
   stock: ['stock'] as const,
 }
 

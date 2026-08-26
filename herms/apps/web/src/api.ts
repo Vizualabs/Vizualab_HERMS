@@ -13,6 +13,9 @@ import type {
   DeliveryNoteSubmission,
   DeliveryNoteCount,
   DeliveryNoteCreate,
+  RetentionNoteCreate,
+  RetentionNoteSubmission,
+  RetentionNoteCount,
 } from '@herms/shared'
 
 export type Customer = {
@@ -141,6 +144,7 @@ export type DeliveryNoteSummary = {
 }
 
 export type DeliveryNoteDetail = DeliveryNoteSummary & {
+  noteType: 'delivery_note'
   orderNumber: string
   customerId: string
   customerName: string
@@ -151,6 +155,77 @@ export type DeliveryNoteDetail = DeliveryNoteSummary & {
   submissionLink?: string
   tokenExpiresAt?: string
 }
+
+export type RetentionNoteLine = {
+  id: string
+  equipmentItemId: string
+  equipmentName: string
+  unitOfMeasure: string
+  deliveredQty: number
+  returnedQty: number
+  balanceQty: number
+  missingDamagedQty: number
+  countedReturnedQty: number | null
+  mismatchReason: 'missing' | 'damaged' | 'other' | null
+  responsibleParty: 'customer' | 'staff_member' | null
+  reasonDetail: string | null
+  countDifference: number | null
+  discrepancyId: string | null
+  discrepancyStatus: 'open' | 'resolved' | 'written_off' | 'claimed' | null
+  writeOffLedgerId: string | null
+  writeOffCreatedAt: string | null
+  writeOffReversed: boolean
+}
+
+export type RetentionNoteSummary = {
+  id: string
+  rnNumber: string
+  orderId: string
+  storeId: string | null
+  status: NoteStatus
+  createdAt: string
+  submittedAt: string | null
+  approvedAt: string | null
+}
+
+export type RetentionNoteDetail = RetentionNoteSummary & {
+  noteType: 'retention_note'
+  orderNumber: string
+  customerId: string
+  customerName: string
+  deliveryNoteId: string | null
+  submittedBy: string | null
+  approvedBy: string | null
+  updatedAt: string
+  lines: RetentionNoteLine[]
+  submissionLink?: string
+  tokenExpiresAt?: string
+}
+
+export type ApprovalSummary = {
+  id: string
+  noteType: 'delivery_note' | 'retention_note'
+  dnNumber?: string
+  rnNumber?: string
+  orderId: string
+  orderNumber: string
+  customerName: string
+  status: NoteStatus
+  submittedAt: string | null
+  createdAt: string
+}
+
+export type ReconciliationLine = {
+  equipmentItemId: string
+  equipmentName: string
+  deliveredQty: number
+  returnedQty: number
+  balanceQty: number
+  missingDamagedQty: number
+  accountedQty: number
+}
+
+export type TokenNote = DeliveryNoteDetail | RetentionNoteDetail
 
 export type NoteLink = { submissionLink: string; expiresAt: string }
 export type StockItem = {
@@ -254,13 +329,25 @@ export const api = {
   deliveryNote: (id: string) => request<DeliveryNoteDetail>(`/api/delivery-notes/${id}`),
   deliveryNoteLink: (id: string) => request<NoteLink>(`/api/delivery-notes/${id}/link`),
   regenerateDeliveryNoteLink: (id: string) => request<NoteLink>(`/api/delivery-notes/${id}/resend-link`, { method: 'POST', body: '{}' }),
-  tokenNote: (token: string) => request<DeliveryNoteDetail>(`/api/notes/token/${encodeURIComponent(token)}`),
-  submitTokenNote: (token: string, input: DeliveryNoteSubmission) => request<DeliveryNoteDetail>(`/api/notes/token/${encodeURIComponent(token)}/submit`, { method: 'POST', body: JSON.stringify(input) }),
-  approvals: () => request<DeliveryNoteSummary[]>('/api/approvals'),
+  tokenNote: (token: string) => request<TokenNote>(`/api/notes/token/${encodeURIComponent(token)}`),
+  submitTokenNote: (token: string, input: DeliveryNoteSubmission | RetentionNoteSubmission) => request<TokenNote>(`/api/notes/token/${encodeURIComponent(token)}/submit`, { method: 'POST', body: JSON.stringify(input) }),
+  retentionNotes: (orderId: string) => request<RetentionNoteSummary[]>(`/api/orders/${orderId}/retention-notes`),
+  createRetentionNote: (orderId: string, input: RetentionNoteCreate) => request<RetentionNoteDetail>(`/api/orders/${orderId}/retention-notes`, { method: 'POST', body: JSON.stringify(input) }),
+  retentionNote: (id: string) => request<RetentionNoteDetail>(`/api/retention-notes/${id}`),
+  retentionNoteLink: (id: string) => request<NoteLink>(`/api/retention-notes/${id}/link`),
+  regenerateRetentionNoteLink: (id: string) => request<NoteLink>(`/api/retention-notes/${id}/resend-link`, { method: 'POST', body: '{}' }),
+  approvals: () => request<ApprovalSummary[]>('/api/approvals'),
+  approvalNote: (id: string) => request<TokenNote>(`/api/approvals/${id}`),
   countDeliveryNote: (id: string, input: DeliveryNoteCount) => request<DeliveryNoteDetail>(`/api/approvals/${id}/count`, { method: 'POST', body: JSON.stringify(input) }),
   approveDeliveryNote: (id: string) => request<DeliveryNoteDetail>(`/api/approvals/${id}/approve`, { method: 'POST', body: '{}' }),
   rejectDeliveryNote: (id: string) => request<DeliveryNoteDetail>(`/api/approvals/${id}/reject`, { method: 'POST', body: '{}' }),
   reopenDeliveryNote: (id: string) => request<DeliveryNoteDetail>(`/api/approvals/${id}/reopen`, { method: 'POST', body: '{}' }),
+  countRetentionNote: (id: string, input: RetentionNoteCount) => request<RetentionNoteDetail>(`/api/approvals/${id}/count`, { method: 'POST', body: JSON.stringify(input) }),
+  approveRetentionNote: (id: string) => request<RetentionNoteDetail>(`/api/approvals/${id}/approve`, { method: 'POST', body: '{}' }),
+  rejectRetentionNote: (id: string) => request<RetentionNoteDetail>(`/api/approvals/${id}/reject`, { method: 'POST', body: '{}' }),
+  reopenRetentionNote: (id: string) => request<RetentionNoteDetail>(`/api/approvals/${id}/reopen`, { method: 'POST', body: '{}' }),
+  closeOrder: (id: string) => request<{ order: OrderDetail; reconciliation: ReconciliationLine[] }>(`/api/orders/${id}/close`, { method: 'POST', body: '{}' }),
+  reverseWriteOff: (id: string, reason: string) => request<{ discrepancy: { id: string; status: string }; reversalLedgerId: string }>(`/api/discrepancies/${id}/write-off-reverse`, { method: 'POST', body: JSON.stringify({ reason }) }),
   stock: () => request<StockItem[]>('/api/stock'),
 }
 

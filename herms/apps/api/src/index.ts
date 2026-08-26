@@ -5,6 +5,7 @@ import {
   createDeliveryService,
   createIdentityService,
   createMasterDataService,
+  createRetentionService,
 } from '@herms/db'
 import { parseApiEnv } from '@herms/shared'
 
@@ -26,6 +27,13 @@ const app = createApp({
   delivery: createDeliveryService(db, {
     timezone: env.BUSINESS_TIMEZONE,
     deliveryNoteNumberPrefix: env.DELIVERY_NOTE_NUMBER_PREFIX,
+    tokenSecret: env.NOTE_TOKEN_SECRET,
+    tokenTtlSeconds: env.NOTE_TOKEN_TTL_SECONDS,
+    publicAppUrl: env.PUBLIC_APP_URL,
+  }),
+  retention: createRetentionService(db, {
+    timezone: env.BUSINESS_TIMEZONE,
+    retentionNoteNumberPrefix: env.RETENTION_NOTE_NUMBER_PREFIX,
     tokenSecret: env.NOTE_TOKEN_SECRET,
     tokenTtlSeconds: env.NOTE_TOKEN_TTL_SECONDS,
     publicAppUrl: env.PUBLIC_APP_URL,

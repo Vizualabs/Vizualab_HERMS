@@ -24,6 +24,7 @@ export const apiEnvSchema = runtimeEnvSchema.extend({
   QUOTATION_NUMBER_PREFIX: z.string().trim().min(1).max(12).default('QT'),
   ORDER_NUMBER_PREFIX: z.string().trim().min(1).max(12).default('ORD'),
   DELIVERY_NOTE_NUMBER_PREFIX: z.string().trim().min(1).max(12).default('DN'),
+  RETENTION_NOTE_NUMBER_PREFIX: z.string().trim().min(1).max(12).default('RN'),
   NOTE_TOKEN_SECRET: z.string().min(32, 'NOTE_TOKEN_SECRET must contain at least 32 characters'),
   NOTE_TOKEN_TTL_SECONDS: z.coerce.number().int().min(300).max(2_592_000).default(259_200),
   PUBLIC_APP_URL: z.string().url().default('http://localhost:3000'),

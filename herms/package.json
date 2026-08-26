@@ -24,6 +24,8 @@
     "verify:phase2": "bun run scripts/verify-phase2.ts",
     "config:phase3": "bun run scripts/configure-phase3-env.ts",
     "verify:phase3": "bun run scripts/verify-phase3.ts",
+    "config:phase4": "bun run scripts/configure-phase4-env.ts",
+    "verify:phase4": "bun run scripts/verify-phase4.ts",
     "smoke:health": "bun --env-file=.env run hono request apps/api/src/index.ts -P /api/health",
     "ci": "bun run typecheck && bun run test && bun run db:check && bun run build"
   },

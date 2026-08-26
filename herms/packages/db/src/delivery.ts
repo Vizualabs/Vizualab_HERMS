@@ -135,6 +135,7 @@ export function createDeliveryService(db: Database, config: DeliveryConfig) {
       .orderBy(equipmentItems.name)
     return {
       ...note,
+      noteType: 'delivery_note' as const,
       lines: lines.map((line) => ({
         ...line,
         countDifference: line.countedQty === null ? null : line.countedQty - line.handedOverQty,
@@ -162,6 +163,28 @@ export function createDeliveryService(db: Database, config: DeliveryConfig) {
   }
 
   return {
+    async resolveTokenType(raw: string, requestId: string) {
+      const [token] = await db.select().from(noteTokens)
+        .where(eq(noteTokens.tokenHash, await sha256(raw))).limit(1)
+      if (!token || !['delivery_note', 'retention_note'].includes(token.noteType)) {
+        await db.insert(auditLogs).values({
+          actorType: 'token', actorId: null, action: 'note_token.denied',
+          entityType: 'note_token', entityId: null, before: null,
+          after: { reason: 'not_found' }, requestId,
+        })
+        throw new DataNotFoundError('Note link not found')
+      }
+      if (token.status === 'revoked' || token.expiresAt <= new Date()) {
+        await db.insert(auditLogs).values({
+          actorType: 'token', actorId: token.id, action: 'note_token.denied',
+          entityType: token.noteType, entityId: token.noteId, before: null,
+          after: { reason: token.status === 'revoked' ? 'revoked' : 'expired' }, requestId,
+        })
+        throw new DataConflictError('The note link is expired or revoked')
+      }
+      return token.noteType as 'delivery_note' | 'retention_note'
+    },
+
     async createFromOrder(orderId: string, input: DeliveryNoteCreate, actor: AuditActor) {
       const [order] = await db
         .select({ id: orders.id, status: orders.status, customerId: orders.customerId, storeId: customers.storeId })

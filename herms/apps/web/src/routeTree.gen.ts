@@ -25,6 +25,7 @@ import { Route as AuthenticatedDeliveryNotesNoteIdRouteImport } from './routes/_
 import { Route as AuthenticatedItemsItemIdRouteImport } from './routes/_authenticated/items.$itemId'
 import { Route as AuthenticatedOrdersOrderIdRouteImport } from './routes/_authenticated/orders.$orderId'
 import { Route as AuthenticatedQuotationsQuotationIdRouteImport } from './routes/_authenticated/quotations.$quotationId'
+import { Route as AuthenticatedRetentionNotesNoteIdRouteImport } from './routes/_authenticated/retention-notes.$noteId'
 
 const AuthenticatedRoute = AuthenticatedRouteImport.update({
   id: '/_authenticated',
@@ -111,6 +112,12 @@ const AuthenticatedQuotationsQuotationIdRoute =
     path: '/$quotationId',
     getParentRoute: () => AuthenticatedQuotationsRoute,
   } as any)
+const AuthenticatedRetentionNotesNoteIdRoute =
+  AuthenticatedRetentionNotesNoteIdRouteImport.update({
+    id: '/retention-notes/$noteId',
+    path: '/retention-notes/$noteId',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
@@ -128,6 +135,7 @@ export interface FileRoutesByFullPath {
   '/items/$itemId': typeof AuthenticatedItemsItemIdRoute
   '/orders/$orderId': typeof AuthenticatedOrdersOrderIdRoute
   '/quotations/$quotationId': typeof AuthenticatedQuotationsQuotationIdRoute
+  '/retention-notes/$noteId': typeof AuthenticatedRetentionNotesNoteIdRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
@@ -145,6 +153,7 @@ export interface FileRoutesByTo {
   '/items/$itemId': typeof AuthenticatedItemsItemIdRoute
   '/orders/$orderId': typeof AuthenticatedOrdersOrderIdRoute
   '/quotations/$quotationId': typeof AuthenticatedQuotationsQuotationIdRoute
+  '/retention-notes/$noteId': typeof AuthenticatedRetentionNotesNoteIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -164,6 +173,7 @@ export interface FileRoutesById {
   '/_authenticated/items/$itemId': typeof AuthenticatedItemsItemIdRoute
   '/_authenticated/orders/$orderId': typeof AuthenticatedOrdersOrderIdRoute
   '/_authenticated/quotations/$quotationId': typeof AuthenticatedQuotationsQuotationIdRoute
+  '/_authenticated/retention-notes/$noteId': typeof AuthenticatedRetentionNotesNoteIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -183,6 +193,7 @@ export interface FileRouteTypes {
     | '/items/$itemId'
     | '/orders/$orderId'
     | '/quotations/$quotationId'
+    | '/retention-notes/$noteId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
@@ -200,6 +211,7 @@ export interface FileRouteTypes {
     | '/items/$itemId'
     | '/orders/$orderId'
     | '/quotations/$quotationId'
+    | '/retention-notes/$noteId'
   id:
     | '__root__'
     | '/_authenticated'
@@ -218,6 +230,7 @@ export interface FileRouteTypes {
     | '/_authenticated/items/$itemId'
     | '/_authenticated/orders/$orderId'
     | '/_authenticated/quotations/$quotationId'
+    | '/_authenticated/retention-notes/$noteId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -340,6 +353,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedQuotationsQuotationIdRouteImport
       parentRoute: typeof AuthenticatedQuotationsRoute
     }
+    '/_authenticated/retention-notes/$noteId': {
+      id: '/_authenticated/retention-notes/$noteId'
+      path: '/retention-notes/$noteId'
+      fullPath: '/retention-notes/$noteId'
+      preLoaderRoute: typeof AuthenticatedRetentionNotesNoteIdRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
   }
 }
 
@@ -418,6 +438,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedStockRoute: typeof AuthenticatedStockRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedDeliveryNotesNoteIdRoute: typeof AuthenticatedDeliveryNotesNoteIdRoute
+  AuthenticatedRetentionNotesNoteIdRoute: typeof AuthenticatedRetentionNotesNoteIdRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
@@ -429,6 +450,8 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedStockRoute: AuthenticatedStockRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedDeliveryNotesNoteIdRoute: AuthenticatedDeliveryNotesNoteIdRoute,
+  AuthenticatedRetentionNotesNoteIdRoute:
+    AuthenticatedRetentionNotesNoteIdRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
