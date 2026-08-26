@@ -115,6 +115,7 @@ export const deliveryNoteSubmissionSchema = z.object({
 })
 
 export const deliveryNoteCreateSchema = z.object({
+  fieldStaffUserId: z.string().uuid(),
   lines: z.array(z.object({
     equipmentItemId: z.string().uuid(),
     issuedQty: z.number().int().positive().max(1_000_000),
@@ -135,12 +136,17 @@ export const deliveryNoteCountSchema = z.object({
 })
 
 export const retentionNoteCreateSchema = z.object({
+  fieldStaffUserId: z.string().uuid(),
   lines: z.array(z.object({
     equipmentItemId: z.string().uuid(),
   })).min(1).max(100).refine(
     (lines) => new Set(lines.map((line) => line.equipmentItemId)).size === lines.length,
     'Each equipment item may appear only once',
   ),
+})
+
+export const noteLinkRecipientSchema = z.object({
+  fieldStaffUserId: z.string().uuid().optional(),
 })
 
 const retentionNoteSubmissionLineSchema = z.object({
@@ -205,6 +211,7 @@ export type RetentionNoteCreate = z.infer<typeof retentionNoteCreateSchema>
 export type RetentionNoteSubmission = z.infer<typeof retentionNoteSubmissionSchema>
 export type RetentionNoteCount = z.infer<typeof retentionNoteCountSchema>
 export type WriteOffReversal = z.infer<typeof writeOffReversalSchema>
+export type NoteLinkRecipient = z.infer<typeof noteLinkRecipientSchema>
 
 export type SessionUser = {
   id: string

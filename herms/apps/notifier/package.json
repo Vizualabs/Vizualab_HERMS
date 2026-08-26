@@ -5,9 +5,11 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "bun test"
+    "test": "bun test",
+    "build": "bun build src/index.ts --target=node --outdir=dist"
   },
   "dependencies": {
+    "@herms/db": "workspace:*",
     "@herms/shared": "workspace:*"
   },
   "devDependencies": {

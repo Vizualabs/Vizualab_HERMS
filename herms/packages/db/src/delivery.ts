@@ -1,6 +1,12 @@
 import { Buffer } from 'node:buffer'
 
-import type { DeliveryNoteCount, DeliveryNoteCreate, DeliveryNoteSubmission, SessionUser } from '@herms/shared'
+import type {
+  DeliveryNoteCount,
+  DeliveryNoteCreate,
+  DeliveryNoteSubmission,
+  NoteLinkRecipient,
+  SessionUser,
+} from '@herms/shared'
 import { and, desc, eq, inArray, sql } from 'drizzle-orm'
 
 import type { Database } from './client'
@@ -17,6 +23,7 @@ import {
   outboxEvents,
   stockLedger,
 } from './schema'
+import { requireActiveFieldStaff, resolveFieldStaffRecipient } from './notifications'
 import { DataConflictError, DataNotFoundError, type AuditActor } from './services'
 
 export type DeliveryConfig = {
@@ -194,6 +201,7 @@ export function createDeliveryService(db: Database, config: DeliveryConfig) {
         .limit(1)
       if (!order) throw new DataNotFoundError('Order not found')
       if (order.status !== 'open') throw new DataConflictError('Delivery notes require an open order')
+      await requireActiveFieldStaff(db, input.fieldStaffUserId, order.storeId)
       const sourceLines = await db.select().from(orderLines).where(eq(orderLines.orderId, orderId)).orderBy(orderLines.equipmentItemId)
       if (sourceLines.length === 0) throw new DataConflictError('The order has no lines')
       const sourceByItem = new Map(sourceLines.map((line) => [line.equipmentItemId, line]))
@@ -245,6 +253,20 @@ export function createDeliveryService(db: Database, config: DeliveryConfig) {
               AND existing_line.equipment_item_id = requested.equipment_item_id
           ), 0)`),
         db.insert(noteTokens).values(token.row),
+        db.insert(outboxEvents).values({
+          id: crypto.randomUUID(),
+          eventType: 'delivery_note_link_created',
+          aggregateType: 'delivery_note',
+          aggregateId: noteId,
+          idempotencyKey: 'delivery_note_link_created:' + noteId + ':' + token.row.id,
+          payload: {
+            deliveryNoteId: noteId,
+            tokenId: token.row.id,
+            recipientUserId: input.fieldStaffUserId,
+            initiatedByUserId: actor.id,
+            requestId: actor.requestId,
+          },
+        }),
         db.insert(auditLogs).values({
           actorType: 'user', actorId: actor.id, action: 'delivery_note.create', entityType: 'delivery_note',
           entityId: noteId, before: null, after: snapshot(note), requestId: actor.requestId,
@@ -289,9 +311,11 @@ export function createDeliveryService(db: Database, config: DeliveryConfig) {
       return { submissionLink: submissionLink(await rawToken(token.id)), expiresAt: token.expiresAt }
     },
 
-    async regenerateLink(id: string, actor: AuditActor) {
+    async regenerateLink(id: string, input: NoteLinkRecipient, actor: AuditActor) {
       const note = await noteHeader(id, actor)
       if (note.status === 'approved') throw new DataConflictError('An approved delivery note cannot receive a new link')
+      if (!note.storeId) throw new DataConflictError('The delivery note has no store')
+      const recipient = await resolveFieldStaffRecipient(db, input.fieldStaffUserId, id, note.storeId)
       const now = new Date()
       const created = await tokenValues(id, actor.id, now)
       await db.batch([
@@ -300,7 +324,13 @@ export function createDeliveryService(db: Database, config: DeliveryConfig) {
         db.insert(outboxEvents).values({
           id: crypto.randomUUID(), eventType: 'delivery_note_link_regenerated', aggregateType: 'delivery_note', aggregateId: id,
           idempotencyKey: `delivery_note_link_regenerated:${id}:${created.row.id}`,
-          payload: { deliveryNoteId: id, tokenId: created.row.id },
+          payload: {
+            deliveryNoteId: id,
+            tokenId: created.row.id,
+            recipientUserId: recipient.id,
+            initiatedByUserId: actor.id,
+            requestId: actor.requestId,
+          },
         }),
         db.insert(auditLogs).values({ actorType: 'user', actorId: actor.id, action: 'note_token.regenerate', entityType: 'delivery_note', entityId: id, before: null, after: { tokenId: created.row.id, expiresAt: created.row.expiresAt.toISOString() }, requestId: actor.requestId }),
       ])
@@ -342,6 +372,22 @@ export function createDeliveryService(db: Database, config: DeliveryConfig) {
         }
       })
       const now = new Date()
+      const pendingNotification = before.status === 'pending_approval'
+        ? db.execute(sql`SELECT 1`)
+        : db.insert(outboxEvents).values({
+            id: crypto.randomUUID(),
+            eventType: 'delivery_note_pending_approval',
+            aggregateType: 'delivery_note',
+            aggregateId: before.id,
+            idempotencyKey: 'delivery_note_pending_approval:' + before.id + ':' + token.id,
+            payload: {
+              deliveryNoteId: before.id,
+              noteType: 'delivery_note',
+              noteNumber: before.dnNumber,
+              storeId: before.storeId,
+              requestId,
+            },
+          })
       const mutationQuery = db.execute<{ id: string }>(sql`
         WITH updated_note AS (
           UPDATE ${deliveryNotes}
@@ -391,6 +437,7 @@ export function createDeliveryService(db: Database, config: DeliveryConfig) {
           SELECT 'token'::audit_actor_type, ${token.id}::uuid, 'delivery_note.submit', 'delivery_note', note.id,
           ${JSON.stringify(snapshot(before))}::jsonb, to_jsonb(note.*), ${requestId} FROM ${deliveryNotes} note
           WHERE note.id = ${before.id}::uuid AND note.status = 'pending_approval' AND note.updated_at = ${now}`),
+        pendingNotification,
       ])
       if (!mutation.rows[0]) throw new DataConflictError('Counting started or the delivery note changed; reload and retry')
       return noteDetail(before.id)
@@ -462,6 +509,20 @@ export function createDeliveryService(db: Database, config: DeliveryConfig) {
           SELECT 'user'::audit_actor_type, ${actor.id}::uuid, 'delivery_note.approve', 'delivery_note', note.id,
           ${JSON.stringify(snapshot(before))}::jsonb, to_jsonb(note.*), ${actor.requestId} FROM ${deliveryNotes} note
           WHERE note.id = ${id}::uuid AND note.status = 'approved' AND note.updated_at = ${now}`),
+        db.insert(outboxEvents).values({
+          id: crypto.randomUUID(),
+          eventType: 'delivery_note_approved',
+          aggregateType: 'delivery_note',
+          aggregateId: id,
+          idempotencyKey: 'delivery_note_approved:' + id + ':' + now.toISOString(),
+          payload: {
+            deliveryNoteId: id,
+            noteType: 'delivery_note',
+            noteNumber: before.dnNumber,
+            storeId: before.storeId,
+            requestId: actor.requestId,
+          },
+        }),
       ])
       if (!updated[0]) throw new DataConflictError('The delivery note changed; reload and retry')
       return noteDetail(id, actor)

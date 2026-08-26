@@ -10,7 +10,7 @@
   "scripts": {
     "dev:api": "bun --env-file=.env --watch apps/api/src/server.ts",
     "dev:web": "bun run --cwd apps/web dev",
-    "build": "bun run build:api && bun run build:web",
+    "build": "bun run build:api && bun run build:notifier && bun run build:web",
     "build:api": "bun run --cwd apps/api build",
     "build:web": "bun run --cwd apps/web build",
     "typecheck": "bun run --cwd packages/shared typecheck && bun run --cwd packages/db typecheck && bun run --cwd apps/api typecheck && bun run --cwd apps/notifier typecheck && bun run --cwd apps/web typecheck",
@@ -27,7 +27,10 @@
     "config:phase4": "bun run scripts/configure-phase4-env.ts",
     "verify:phase4": "bun run scripts/verify-phase4.ts",
     "smoke:health": "bun --env-file=.env run hono request apps/api/src/index.ts -P /api/health",
-    "ci": "bun run typecheck && bun run test && bun run db:check && bun run build"
+    "ci": "bun run typecheck && bun run test && bun run db:check && bun run build",
+    "build:notifier": "bun run --cwd apps/notifier build",
+    "config:phase5": "bun run scripts/configure-phase5-env.ts",
+    "verify:phase5": "bun run scripts/verify-phase5.ts"
   },
   "devDependencies": {
     "@hono/cli": "^0.1.11",

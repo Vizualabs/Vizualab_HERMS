@@ -17,6 +17,7 @@ import app from '../apps/api/src/index'
 const apiEnv = parseApiEnv(process.env)
 const seedEnv = parseSeedEnv(process.env)
 const db = createDatabase(apiEnv.DATABASE_URL)
+const fieldStaffUserId = '20000000-0000-4000-8000-000000000003'
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
@@ -80,7 +81,13 @@ const [ledgerBefore] = await db.select({ value: count() }).from(stockLedger)
 const orderResponse = await request(`/api/orders/${openOrder.id}`, salesCookie)
 assert(orderResponse.status === 200, 'Could not load the verification order')
 const orderDetail = (await orderResponse.json()) as { data: { lines: Array<{ equipmentItemId: string; quantity: number }> } }
-const createInput = { lines: orderDetail.data.lines.map((line) => ({ equipmentItemId: line.equipmentItemId, issuedQty: line.quantity - 1 })) }
+const createInput = {
+  fieldStaffUserId,
+  lines: orderDetail.data.lines.map((line) => ({
+    equipmentItemId: line.equipmentItemId,
+    issuedQty: line.quantity - 1,
+  })),
+}
 const createResponse = await request(`/api/orders/${openOrder.id}/delivery-notes`, salesCookie, { method: 'POST', body: JSON.stringify(createInput) })
 assert(createResponse.status === 201, `Delivery note creation failed: ${createResponse.status}`)
 const created = (await createResponse.json()) as { data: { id: string; dnNumber: string; submissionLink: string; lines: Array<{ id: string; issuedQty: number; equipmentItemId: string }> } }
@@ -179,7 +186,13 @@ try {
 }
 assert(deleteRejected, 'stock_ledger accepted DELETE')
 
-const secondInput = { lines: orderDetail.data.lines.map((line) => ({ equipmentItemId: line.equipmentItemId, issuedQty: 1 })) }
+const secondInput = {
+  fieldStaffUserId,
+  lines: orderDetail.data.lines.map((line) => ({
+    equipmentItemId: line.equipmentItemId,
+    issuedQty: 1,
+  })),
+}
 const secondCreate = await request(`/api/orders/${openOrder.id}/delivery-notes`, salesCookie, { method: 'POST', body: JSON.stringify(secondInput) })
 assert(secondCreate.status === 201, 'Second delivery note creation failed')
 const second = (await secondCreate.json()) as { data: { id: string; submissionLink: string; lines: Array<{ id: string; equipmentItemId: string; issuedQty: number }> } }

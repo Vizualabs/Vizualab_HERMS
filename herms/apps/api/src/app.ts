@@ -6,6 +6,7 @@ import {
   type DeliveryService,
   type IdentityService,
   type MasterDataService,
+  type NotificationService,
   type RetentionService,
 } from '@herms/db'
 import {
@@ -14,6 +15,7 @@ import {
   equipmentInputSchema,
   equipmentUpdateSchema,
   loginInputSchema,
+  noteLinkRecipientSchema,
   priceChangeInputSchema,
   quotationInputSchema,
   recurringCustomerInputSchema,
@@ -49,6 +51,7 @@ export type AppDependencies = {
   healthCheck: DbHealthCheck
   identity: IdentityService
   masterData: MasterDataService
+  notifications: NotificationService
   commercial: CommercialService
   delivery: DeliveryService
   retention: RetentionService
@@ -103,6 +106,7 @@ export function createApp({
   healthCheck,
   identity,
   masterData,
+  notifications,
   commercial,
   delivery,
   retention,
@@ -119,7 +123,7 @@ export function createApp({
     .get('/', (c) =>
       c.json({
         name: 'HERMS API',
-        phase: 4,
+        phase: 5,
         health: '/api/health',
       }),
     )
@@ -300,6 +304,9 @@ export function createApp({
     )
 
   const deliveryRoutes = commercialRoutes
+    .get('/api/notification-recipients/field-staff', requireRoles('sales', 'store_admin'), async (c) =>
+      c.json({ data: await notifications.listFieldStaff(c.get('user')) }),
+    )
     .post('/api/orders/:id/delivery-notes', requireRoles('sales'), async (c) => {
       const parsed = await validatedJson(c, deliveryNoteCreateSchema)
       if ('response' in parsed) return parsed.response
@@ -324,18 +331,22 @@ export function createApp({
     .get('/api/delivery-notes/:id/link', requireDeliveryLinkAccess(), async (c) =>
       c.json({ data: await delivery.getLink(c.req.param('id'), actor(c)) }),
     )
-    .post('/api/delivery-notes/:id/resend-link', requireDeliveryLinkAccess(), async (c) =>
-      c.json({ data: await delivery.regenerateLink(c.req.param('id'), actor(c)) }),
-    )
+    .post('/api/delivery-notes/:id/resend-link', requireDeliveryLinkAccess(), async (c) => {
+      const parsed = await validatedJson(c, noteLinkRecipientSchema)
+      if ('response' in parsed) return parsed.response
+      return c.json({ data: await delivery.regenerateLink(c.req.param('id'), parsed.data, actor(c)) })
+    })
     .get('/api/retention-notes/:id', requireDeliveryLinkAccess(), async (c) =>
       c.json({ data: await retention.getRetentionNote(c.req.param('id'), c.get('user')) }),
     )
     .get('/api/retention-notes/:id/link', requireDeliveryLinkAccess(), async (c) =>
       c.json({ data: await retention.getLink(c.req.param('id'), actor(c)) }),
     )
-    .post('/api/retention-notes/:id/resend-link', requireDeliveryLinkAccess(), async (c) =>
-      c.json({ data: await retention.regenerateLink(c.req.param('id'), actor(c)) }),
-    )
+    .post('/api/retention-notes/:id/resend-link', requireDeliveryLinkAccess(), async (c) => {
+      const parsed = await validatedJson(c, noteLinkRecipientSchema)
+      if ('response' in parsed) return parsed.response
+      return c.json({ data: await retention.regenerateLink(c.req.param('id'), parsed.data, actor(c)) })
+    })
     .get('/api/approvals', requireStoreApprover(), async (c) => {
       const [deliveryRows, retentionRows] = await Promise.all([
         delivery.listApprovals(c.get('user')),

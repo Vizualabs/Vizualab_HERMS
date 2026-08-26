@@ -5,6 +5,7 @@ import {
   createDeliveryService,
   createIdentityService,
   createMasterDataService,
+  createNotificationService,
   createRetentionService,
 } from '@herms/db'
 import { parseApiEnv } from '@herms/shared'
@@ -17,6 +18,11 @@ const app = createApp({
   healthCheck: createDbHealthCheck(env.DATABASE_URL),
   identity: createIdentityService(db),
   masterData: createMasterDataService(db),
+  notifications: createNotificationService(db, {
+    businessCurrency: env.BUSINESS_CURRENCY,
+    noteTokenSecret: env.NOTE_TOKEN_SECRET,
+    publicAppUrl: env.PUBLIC_APP_URL,
+  }),
   commercial: createCommercialService(db, {
     timezone: env.BUSINESS_TIMEZONE,
     currency: env.BUSINESS_CURRENCY,

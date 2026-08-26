@@ -30,18 +30,27 @@ function OrderDetailPage() {
     queryFn: () => api.retentionNotes(orderId),
     enabled: canUseSales,
   })
+  const fieldStaff = useQuery({
+    queryKey: queryKeys.fieldStaffRecipients,
+    queryFn: api.fieldStaffRecipients,
+    enabled: canUseSales,
+    staleTime: 30_000,
+  })
   const createDelivery = useMutation({
-    mutationFn: (lines: Array<{ equipmentItemId: string; issuedQty: number }>) =>
-      api.createDeliveryNote(orderId, { lines }),
+    mutationFn: (input: {
+      fieldStaffUserId: string
+      lines: Array<{ equipmentItemId: string; issuedQty: number }>
+    }) => api.createDeliveryNote(orderId, input),
     onSuccess: async (note) => {
       if (note.submissionLink) setNewLink({ type: 'delivery', url: note.submissionLink })
       await queryClient.invalidateQueries({ queryKey: queryKeys.deliveryNotes(orderId) })
     },
   })
   const createRetention = useMutation({
-    mutationFn: (equipmentItemIds: string[]) =>
+    mutationFn: (input: { fieldStaffUserId: string; equipmentItemIds: string[] }) =>
       api.createRetentionNote(orderId, {
-        lines: equipmentItemIds.map((equipmentItemId) => ({ equipmentItemId })),
+        fieldStaffUserId: input.fieldStaffUserId,
+        lines: input.equipmentItemIds.map((equipmentItemId) => ({ equipmentItemId })),
       }),
     onSuccess: async (note) => {
       if (note.submissionLink) setNewLink({ type: 'return', url: note.submissionLink })
@@ -124,13 +133,25 @@ function OrderDetailPage() {
           <form className="mt-4 flex flex-col gap-3" onSubmit={(event) => {
             event.preventDefault()
             const form = new FormData(event.currentTarget)
-            createDelivery.mutate(data.lines
-              .map((line) => ({
-                equipmentItemId: line.equipmentItemId,
-                issuedQty: Number(form.get(`delivery-${line.equipmentItemId}`)),
-              }))
-              .filter((line) => line.issuedQty > 0))
+            createDelivery.mutate({
+              fieldStaffUserId: String(form.get('deliveryFieldStaffUserId')),
+              lines: data.lines
+                .map((line) => ({
+                  equipmentItemId: line.equipmentItemId,
+                  issuedQty: Number(form.get(`delivery-${line.equipmentItemId}`)),
+                }))
+                .filter((line) => line.issuedQty > 0),
+            })
           }}>
+            <label className={'flex flex-col gap-2 text-sm font-medium'}>
+              Field staff recipient
+              <select className={'input'} name={'deliveryFieldStaffUserId'} required defaultValue={''}>
+                <option value={''} disabled>Select field staff</option>
+                {fieldStaff.data?.map((recipient) => <option key={recipient.id} value={recipient.id}>
+                  {recipient.name} - {recipient.phoneMasked}
+                </option>)}
+              </select>
+            </label>
             {data.lines.map((line) => <label key={line.id} className="grid grid-cols-[1fr_6rem] items-center gap-3 text-sm">
               <span>{line.equipmentName}<span className="block text-xs text-muted-foreground">Ordered {line.quantity}</span></span>
               <input className="input" name={`delivery-${line.equipmentItemId}`} type="number" min="0" max={line.quantity} step="1" defaultValue={line.quantity} />
@@ -158,10 +179,22 @@ function OrderDetailPage() {
           <form className="mt-4 flex flex-col gap-3" onSubmit={(event) => {
             event.preventDefault()
             const form = new FormData(event.currentTarget)
-            createRetention.mutate(data.lines
-              .filter((line) => form.get(`retention-${line.equipmentItemId}`) === 'on')
-              .map((line) => line.equipmentItemId))
+            createRetention.mutate({
+              fieldStaffUserId: String(form.get('retentionFieldStaffUserId')),
+              equipmentItemIds: data.lines
+                .filter((line) => form.get(`retention-${line.equipmentItemId}`) === 'on')
+                .map((line) => line.equipmentItemId),
+            })
           }}>
+            <label className={'flex flex-col gap-2 text-sm font-medium'}>
+              Field staff recipient
+              <select className={'input'} name={'retentionFieldStaffUserId'} required defaultValue={''}>
+                <option value={''} disabled>Select field staff</option>
+                {fieldStaff.data?.map((recipient) => <option key={recipient.id} value={recipient.id}>
+                  {recipient.name} - {recipient.phoneMasked}
+                </option>)}
+              </select>
+            </label>
             {data.lines.map((line) => <label key={line.id} className="flex items-center gap-3 text-sm">
               <input name={`retention-${line.equipmentItemId}`} type="checkbox" defaultChecked />
               <span>{line.equipmentName}</span>
@@ -189,6 +222,9 @@ function OrderDetailPage() {
             Copy secure link
           </button>
         </section>}
+        {fieldStaff.isSuccess && fieldStaff.data.length === 0 && <p role={'alert'} className={'text-sm text-danger'}>
+          Add an active field staff user with a WhatsApp phone number before creating a note.
+        </p>}
       </aside>}
     </div>
     {mutationError && <p role="alert" className="mt-4 text-sm text-danger">

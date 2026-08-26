@@ -4,6 +4,7 @@ import type {
   RetentionNoteCount,
   RetentionNoteCreate,
   RetentionNoteSubmission,
+  NoteLinkRecipient,
   SessionUser,
   WriteOffReversal,
 } from '@herms/shared'
@@ -24,6 +25,7 @@ import {
   retentionNotes,
   stockLedger,
 } from './schema'
+import { requireActiveFieldStaff, resolveFieldStaffRecipient } from './notifications'
 import { DataConflictError, DataNotFoundError, type AuditActor } from './services'
 
 export type RetentionConfig = {
@@ -279,6 +281,7 @@ export function createRetentionService(db: Database, config: RetentionConfig) {
         .limit(1)
       if (!order) throw new DataNotFoundError('Order not found')
       if (order.status !== 'open') throw new DataConflictError('Retention notes require an open order')
+      await requireActiveFieldStaff(db, input.fieldStaffUserId, order.storeId)
       const delivered = await db
         .select({
           equipmentItemId: deliveryNoteLines.equipmentItemId,
@@ -324,6 +327,20 @@ export function createRetentionService(db: Database, config: RetentionConfig) {
           reasonDetail: null,
         }))),
         db.insert(noteTokens).values(token.row),
+        db.insert(outboxEvents).values({
+          id: crypto.randomUUID(),
+          eventType: 'retention_note_link_created',
+          aggregateType: 'retention_note',
+          aggregateId: noteId,
+          idempotencyKey: 'retention_note_link_created:' + noteId + ':' + token.row.id,
+          payload: {
+            retentionNoteId: noteId,
+            tokenId: token.row.id,
+            recipientUserId: input.fieldStaffUserId,
+            initiatedByUserId: actor.id,
+            requestId: actor.requestId,
+          },
+        }),
         db.insert(auditLogs).values({
           actorType: 'user', actorId: actor.id, action: 'retention_note.create',
           entityType: 'retention_note', entityId: noteId, before: null,
@@ -386,11 +403,13 @@ export function createRetentionService(db: Database, config: RetentionConfig) {
       return { submissionLink: submissionLink(await rawToken(token.id)), expiresAt: token.expiresAt }
     },
 
-    async regenerateLink(id: string, actor: AuditActor) {
+    async regenerateLink(id: string, input: NoteLinkRecipient, actor: AuditActor) {
       const note = await noteHeader(id, actor)
       if (note.status === 'approved') {
         throw new DataConflictError('An approved retention note cannot receive a new link')
       }
+      if (!note.storeId) throw new DataConflictError('The retention note has no store')
+      const recipient = await resolveFieldStaffRecipient(db, input.fieldStaffUserId, id, note.storeId)
       const now = new Date()
       const created = await tokenValues(id, actor.id, now)
       await db.batch([
@@ -406,7 +425,13 @@ export function createRetentionService(db: Database, config: RetentionConfig) {
           aggregateType: 'retention_note',
           aggregateId: id,
           idempotencyKey: `retention_note_link_regenerated:${id}:${created.row.id}`,
-          payload: { retentionNoteId: id, tokenId: created.row.id },
+          payload: {
+            retentionNoteId: id,
+            tokenId: created.row.id,
+            recipientUserId: recipient.id,
+            initiatedByUserId: actor.id,
+            requestId: actor.requestId,
+          },
         }),
         db.insert(auditLogs).values({
           actorType: 'user', actorId: actor.id, action: 'note_token.regenerate',
@@ -456,6 +481,22 @@ export function createRetentionService(db: Database, config: RetentionConfig) {
         reasonDetail: line.reasonDetail?.trim() || null,
       }))
       const now = new Date()
+      const pendingNotification = before.status === 'pending_approval'
+        ? db.execute(sql`SELECT 1`)
+        : db.insert(outboxEvents).values({
+            id: crypto.randomUUID(),
+            eventType: 'retention_note_pending_approval',
+            aggregateType: 'retention_note',
+            aggregateId: before.id,
+            idempotencyKey: 'retention_note_pending_approval:' + before.id + ':' + token.id,
+            payload: {
+              retentionNoteId: before.id,
+              noteType: 'retention_note',
+              noteNumber: before.rnNumber,
+              storeId: before.storeId,
+              requestId,
+            },
+          })
       const mutationQuery = db.execute<{ id: string }>(sql`
         WITH locked AS (
           SELECT pg_advisory_xact_lock(hashtext(${before.orderId}))
@@ -563,6 +604,7 @@ export function createRetentionService(db: Database, config: RetentionConfig) {
             to_jsonb(note.*), ${requestId}
           FROM ${retentionNotes} note
           WHERE note.id = ${before.id}::uuid AND note.updated_at = ${now}`),
+        pendingNotification,
       ])
       if (!mutation.rows[0]) {
         throw new DataConflictError('Counting started or the retention note changed; reload and retry')
@@ -718,6 +760,20 @@ export function createRetentionService(db: Database, config: RetentionConfig) {
             to_jsonb(note.*), ${actor.requestId}
           FROM ${retentionNotes} note
           WHERE note.id = ${id}::uuid AND note.status = 'approved' AND note.updated_at = ${now}`),
+        db.insert(outboxEvents).values({
+          id: crypto.randomUUID(),
+          eventType: 'retention_note_approved',
+          aggregateType: 'retention_note',
+          aggregateId: id,
+          idempotencyKey: 'retention_note_approved:' + id + ':' + now.toISOString(),
+          payload: {
+            retentionNoteId: id,
+            noteType: 'retention_note',
+            noteNumber: before.rnNumber,
+            storeId: before.storeId,
+            requestId: actor.requestId,
+          },
+        }),
       ])
       if (!updated[0]) throw new DataConflictError('The retention note changed; reload and retry')
       return noteDetail(id, actor)

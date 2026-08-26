@@ -14,6 +14,7 @@ import app from '../apps/api/src/index'
 const apiEnv = parseApiEnv(process.env)
 const seedEnv = parseSeedEnv(process.env)
 const db = createDatabase(apiEnv.DATABASE_URL)
+const fieldStaffUserId = '20000000-0000-4000-8000-000000000003'
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
@@ -81,7 +82,10 @@ assert(equipmentItemId, 'Accepted order did not contain the verification item')
 
 const deliveryCreate = await request(`/api/orders/${orderId}/delivery-notes`, salesCookie, {
   method: 'POST',
-  body: JSON.stringify({ lines: [{ equipmentItemId, issuedQty: 100 }] }),
+  body: JSON.stringify({
+    fieldStaffUserId,
+    lines: [{ equipmentItemId, issuedQty: 100 }],
+  }),
 })
 assert(deliveryCreate.status === 201, `Delivery note creation failed: ${deliveryCreate.status}`)
 const delivery = (await deliveryCreate.json()) as {
@@ -125,7 +129,10 @@ async function createAndApproveRetention(input: {
     salesCookie,
     {
       method: 'POST',
-      body: JSON.stringify({ lines: [{ equipmentItemId }] }),
+      body: JSON.stringify({
+        fieldStaffUserId,
+        lines: [{ equipmentItemId }],
+      }),
     },
   )
   assert(createdResponse.status === 201, `Retention note creation failed: ${createdResponse.status}`)

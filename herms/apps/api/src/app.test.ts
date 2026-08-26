@@ -5,6 +5,7 @@ import type {
   DeliveryService,
   IdentityService,
   MasterDataService,
+  NotificationService,
   RetentionService,
 } from '@herms/db'
 import { REQUEST_ID_HEADER, type SessionUser, type UserRole } from '@herms/shared'
@@ -17,6 +18,8 @@ const TEST_AUTH = {
   ttlSeconds: 28_800,
   secureCookie: false,
 }
+
+const FIELD_STAFF_ID = '00000000-0000-4000-8000-000000000003'
 
 function user(role: UserRole): SessionUser {
   return {
@@ -89,6 +92,14 @@ function createServices() {
     listPriceHistory: async () => [],
     listAuditLogs: async () => [],
   } as unknown as MasterDataService
+
+  const notifications = {
+    listFieldStaff: async () => [{
+      id: FIELD_STAFF_ID,
+      name: user('field_staff').name,
+      phoneMasked: '•••• 1234',
+    }],
+  } as unknown as NotificationService
 
   const quotation = {
     id: '30000000-0000-4000-8000-000000000001',
@@ -266,7 +277,7 @@ function createServices() {
     reconciliation: async () => [],
   } as unknown as RetentionService
 
-  return { identity, masterData, commercial, delivery, retention }
+  return { identity, masterData, notifications, commercial, delivery, retention }
 }
 
 function createTestApp(healthCheck: () => Promise<number> = async () => 12.34) {
@@ -470,12 +481,12 @@ describe('Phase 3 API', () => {
     const app = createTestApp()
     const salesCookie = await sessionCookie(app, 'sales')
     const created = await app.request('/api/orders/60000000-0000-4000-8000-000000000001/delivery-notes', {
-      method: 'POST', headers: { Cookie: salesCookie, 'Content-Type': 'application/json' }, body: JSON.stringify({ lines: [{ equipmentItemId: '50000000-0000-4000-8000-000000000001', issuedQty: 1 }] }),
+      method: 'POST', headers: { Cookie: salesCookie, 'Content-Type': 'application/json' }, body: JSON.stringify({ fieldStaffUserId: FIELD_STAFF_ID, lines: [{ equipmentItemId: '50000000-0000-4000-8000-000000000001', issuedQty: 1 }] }),
     })
     expect(created.status).toBe(201)
     const fieldCookie = await sessionCookie(app, 'field_staff')
     expect((await app.request('/api/orders/id/delivery-notes', {
-      method: 'POST', headers: { Cookie: fieldCookie, 'Content-Type': 'application/json' }, body: JSON.stringify({ lines: [{ equipmentItemId: '50000000-0000-4000-8000-000000000001', issuedQty: 1 }] }),
+      method: 'POST', headers: { Cookie: fieldCookie, 'Content-Type': 'application/json' }, body: JSON.stringify({ fieldStaffUserId: FIELD_STAFF_ID, lines: [{ equipmentItemId: '50000000-0000-4000-8000-000000000001', issuedQty: 1 }] }),
     })).status).toBe(403)
   })
 
@@ -506,6 +517,7 @@ describe('Phase 4 API', () => {
         method: 'POST',
         headers: { Cookie: salesCookie, 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          fieldStaffUserId: FIELD_STAFF_ID,
           lines: [{ equipmentItemId: '50000000-0000-4000-8000-000000000001' }],
         }),
       },
@@ -516,6 +528,7 @@ describe('Phase 4 API', () => {
       method: 'POST',
       headers: { Cookie: fieldCookie, 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        fieldStaffUserId: FIELD_STAFF_ID,
         lines: [{ equipmentItemId: '50000000-0000-4000-8000-000000000001' }],
       }),
     })).status).toBe(403)
@@ -555,5 +568,40 @@ describe('Phase 4 API', () => {
     expect((await app.request('/api/orders/order/close', {
       method: 'POST', headers: { Cookie: salesCookie, 'Content-Type': 'application/json' }, body: '{}',
     })).status).toBe(403)
+  })
+})
+
+describe('Phase 5 API', () => {
+  test('lets Sales select an active field staff WhatsApp recipient without exposing the number', async () => {
+    const app = createTestApp()
+    const salesCookie = await sessionCookie(app, 'sales')
+    const response = await app.request('/api/notification-recipients/field-staff', {
+      headers: { Cookie: salesCookie },
+    })
+    expect(response.status).toBe(200)
+    const payload = (await response.json()) as {
+      data: Array<{ id: string; name: string; phoneMasked: string }>
+    }
+    expect(payload.data).toEqual([{ id: FIELD_STAFF_ID, name: 'field_staff', phoneMasked: '•••• 1234' }])
+    expect(JSON.stringify(payload)).not.toContain('+947')
+
+    const fieldCookie = await sessionCookie(app, 'field_staff')
+    expect((await app.request('/api/notification-recipients/field-staff', {
+      headers: { Cookie: fieldCookie },
+    })).status).toBe(403)
+  })
+
+  test('validates an explicitly changed recipient when resending note links', async () => {
+    const app = createTestApp()
+    const salesCookie = await sessionCookie(app, 'sales')
+    const response = await app.request(
+      '/api/delivery-notes/70000000-0000-4000-8000-000000000001/resend-link',
+      {
+        method: 'POST',
+        headers: { Cookie: salesCookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fieldStaffUserId: 'not-a-uuid' }),
+      },
+    )
+    expect(response.status).toBe(400)
   })
 })

@@ -5,11 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "bun --watch src/server.ts",
-    "build": "bun build src/lambda.ts --target=node --outdir=dist",
+    "build": "bun build src/lambda.ts src/publisher.ts --target=node --outdir=dist",
     "typecheck": "tsc --noEmit",
     "test": "bun test"
   },
   "dependencies": {
+    "@aws-sdk/client-sqs": "^3.1118.0",
     "@herms/db": "workspace:*",
     "@herms/shared": "workspace:*",
     "hono": "^4.13.3",

@@ -232,7 +232,12 @@ export function createCommercialService(db: Database, config: CommercialConfig) 
           aggregateType: 'quotation',
           aggregateId: id,
           idempotencyKey: `quotation_created:${id}`,
-          payload: { quotationId: id, quotationNumber, customerId: customer.id },
+          payload: {
+            quotationId: id,
+            quotationNumber,
+            customerId: customer.id,
+            requestId: actor.requestId,
+          },
         }),
         db.insert(auditLogs).values({
           actorType: 'user', actorId: actor.id, action: 'quotation.create', entityType: 'quotation', entityId: id,

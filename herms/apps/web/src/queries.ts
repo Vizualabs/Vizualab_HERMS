@@ -13,6 +13,7 @@ export const queryKeys = {
   quotation: (id: string) => ['quotations', id] as const,
   orders: ['orders'] as const,
   order: (id: string) => ['orders', id] as const,
+  fieldStaffRecipients: ['notification-recipients', 'field-staff'] as const,
   deliveryNotes: (orderId: string) => ['orders', orderId, 'delivery-notes'] as const,
   deliveryNote: (id: string) => ['delivery-notes', id] as const,
   retentionNotes: (orderId: string) => ['orders', orderId, 'retention-notes'] as const,

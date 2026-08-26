@@ -228,6 +228,11 @@ export type ReconciliationLine = {
 export type TokenNote = DeliveryNoteDetail | RetentionNoteDetail
 
 export type NoteLink = { submissionLink: string; expiresAt: string }
+export type FieldStaffRecipient = {
+  id: string
+  name: string
+  phoneMasked: string
+}
 export type StockItem = {
   equipmentItemId: string
   equipmentName: string
@@ -324,18 +329,28 @@ export const api = {
     request<QuotationDetail>(`/api/quotations/${id}/expire`, { method: 'POST', body: '{}' }),
   orders: () => request<OrderSummary[]>('/api/orders'),
   order: (id: string) => request<OrderDetail>(`/api/orders/${id}`),
+  fieldStaffRecipients: () =>
+    request<FieldStaffRecipient[]>('/api/notification-recipients/field-staff'),
   deliveryNotes: (orderId: string) => request<DeliveryNoteSummary[]>(`/api/orders/${orderId}/delivery-notes`),
   createDeliveryNote: (orderId: string, input: DeliveryNoteCreate) => request<DeliveryNoteDetail>(`/api/orders/${orderId}/delivery-notes`, { method: 'POST', body: JSON.stringify(input) }),
   deliveryNote: (id: string) => request<DeliveryNoteDetail>(`/api/delivery-notes/${id}`),
   deliveryNoteLink: (id: string) => request<NoteLink>(`/api/delivery-notes/${id}/link`),
-  regenerateDeliveryNoteLink: (id: string) => request<NoteLink>(`/api/delivery-notes/${id}/resend-link`, { method: 'POST', body: '{}' }),
+  regenerateDeliveryNoteLink: (id: string) =>
+    request<NoteLink>(`/api/delivery-notes/${id}/resend-link`, {
+      method: 'POST',
+      body: '{}',
+    }),
   tokenNote: (token: string) => request<TokenNote>(`/api/notes/token/${encodeURIComponent(token)}`),
   submitTokenNote: (token: string, input: DeliveryNoteSubmission | RetentionNoteSubmission) => request<TokenNote>(`/api/notes/token/${encodeURIComponent(token)}/submit`, { method: 'POST', body: JSON.stringify(input) }),
   retentionNotes: (orderId: string) => request<RetentionNoteSummary[]>(`/api/orders/${orderId}/retention-notes`),
   createRetentionNote: (orderId: string, input: RetentionNoteCreate) => request<RetentionNoteDetail>(`/api/orders/${orderId}/retention-notes`, { method: 'POST', body: JSON.stringify(input) }),
   retentionNote: (id: string) => request<RetentionNoteDetail>(`/api/retention-notes/${id}`),
   retentionNoteLink: (id: string) => request<NoteLink>(`/api/retention-notes/${id}/link`),
-  regenerateRetentionNoteLink: (id: string) => request<NoteLink>(`/api/retention-notes/${id}/resend-link`, { method: 'POST', body: '{}' }),
+  regenerateRetentionNoteLink: (id: string) =>
+    request<NoteLink>(`/api/retention-notes/${id}/resend-link`, {
+      method: 'POST',
+      body: '{}',
+    }),
   approvals: () => request<ApprovalSummary[]>('/api/approvals'),
   approvalNote: (id: string) => request<TokenNote>(`/api/approvals/${id}`),
   countDeliveryNote: (id: string, input: DeliveryNoteCount) => request<DeliveryNoteDetail>(`/api/approvals/${id}/count`, { method: 'POST', body: JSON.stringify(input) }),

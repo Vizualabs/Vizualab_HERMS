@@ -41,6 +41,7 @@ const seedUsers = USER_ROLES.map((role, index) => {
       .join(' '),
     role,
     email: `${localPart}@herms.local`,
+    phone: '+9477000000' + String(index + 1),
     passwordHash,
     active: true,
     isDeputyAdmin: false,
@@ -56,6 +57,7 @@ const seedCustomers = [
     name: 'Demo Recurring Customer',
     type: 'recurring' as const,
     email: 'recurring.customer@example.test',
+    phone: '+94771000001',
     createdAt: seededAt,
     updatedAt: seededAt,
   },
@@ -65,6 +67,7 @@ const seedCustomers = [
     name: 'Demo New Customer A',
     type: 'new' as const,
     email: 'new.customer.a@example.test',
+    phone: '+94771000002',
     createdAt: seededAt,
     updatedAt: seededAt,
   },
@@ -74,6 +77,7 @@ const seedCustomers = [
     name: 'Demo New Customer B',
     type: 'new' as const,
     email: 'new.customer.b@example.test',
+    phone: '+94771000003',
     createdAt: seededAt,
     updatedAt: seededAt,
   },
@@ -121,6 +125,7 @@ for (const user of seedUsers) {
         storeId: user.storeId,
         role: user.role,
         email: user.email,
+        phone: user.phone,
         passwordHash,
         active: true,
         updatedAt: new Date(),
@@ -129,7 +134,15 @@ for (const user of seedUsers) {
 }
 
 for (const customer of seedCustomers) {
-    await db.insert(customers).values(customer).onConflictDoNothing()
+    await db.insert(customers).values(customer).onConflictDoUpdate({
+      target: customers.id,
+      set: {
+        name: customer.name,
+        email: customer.email,
+        phone: customer.phone,
+        updatedAt: new Date(),
+      },
+    })
 }
 
 for (const item of seedItems) {
