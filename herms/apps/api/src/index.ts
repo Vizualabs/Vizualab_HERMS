@@ -1,5 +1,6 @@
 import {
   createDatabase,
+  createClaimService,
   createDbHealthCheck,
   createCommercialService,
   createDeliveryService,
@@ -42,6 +43,7 @@ const app = createApp({
     timezone: env.BUSINESS_TIMEZONE,
     currency: env.BUSINESS_CURRENCY,
   }),
+  claims: createClaimService(db),
   retention: createRetentionService(db, {
     timezone: env.BUSINESS_TIMEZONE,
     retentionNoteNumberPrefix: env.RETENTION_NOTE_NUMBER_PREFIX,

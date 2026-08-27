@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 
 import type {
   CommercialService,
+  ClaimService,
   DeliveryService,
   FinanceService,
   IdentityService,
@@ -343,7 +344,55 @@ function createServices() {
     }),
   } as unknown as FinanceService
 
-  return { identity, masterData, notifications, commercial, delivery, finance, retention }
+  const damageClaim = {
+    id: '94000000-0000-4000-8000-000000000001',
+    discrepancyId: '95000000-0000-4000-8000-000000000001',
+    orderId: order.id,
+    orderNumber: order.orderNumber,
+    customerId: order.customerId,
+    customerName: order.customerName,
+    equipmentItemId: quotation.lines[0]!.equipmentItemId,
+    equipmentName: 'Test item',
+    quantity: 1,
+    unitPriceCents: 2500,
+    claimAmountCents: 2500,
+    status: 'drafted' as const,
+    confirmedBy: null,
+    confirmedAt: null,
+    damageRecordedAt: new Date('2026-08-24T02:00:00Z'),
+    reason: 'Broken during use',
+    createdAt: new Date('2026-08-25T00:00:00Z'),
+    updatedAt: new Date('2026-08-25T00:00:00Z'),
+  }
+  const claims = {
+    getClaim: async () => damageClaim,
+    listClaims: async () => [damageClaim],
+    listClaimableDiscrepancies: async () => [{
+      id: damageClaim.discrepancyId,
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      customerId: order.customerId,
+      customerName: order.customerName,
+      equipmentItemId: damageClaim.equipmentItemId,
+      equipmentName: damageClaim.equipmentName,
+      quantity: 1,
+      reason: damageClaim.reason,
+      status: 'written_off' as const,
+      damageRecordedAt: damageClaim.damageRecordedAt,
+      unitPriceCents: 2500,
+      claimAmountCents: 2500,
+    }],
+    draftClaim: async () => damageClaim,
+    confirmClaim: async () => ({
+      ...damageClaim,
+      status: 'confirmed' as const,
+      confirmedBy: user('finance').id,
+      confirmedAt: new Date(),
+    }),
+    rejectClaim: async () => ({ ...damageClaim, status: 'rejected' as const }),
+  } as unknown as ClaimService
+
+  return { identity, masterData, notifications, commercial, delivery, finance, retention, claims }
 }
 
 function createTestApp(healthCheck: () => Promise<number> = async () => 12.34) {
@@ -763,5 +812,37 @@ describe('Phase 6 API', () => {
       '/api/customers/20000000-0000-4000-8000-000000000001/balance',
       { headers: { Cookie: ownerCookie } },
     )).status).toBe(403)
+  })
+})
+
+describe('Phase 7 API', () => {
+  test('lets Finance draft, confirm, reject, and list damage claims', async () => {
+    const app = createTestApp()
+    const cookie = await sessionCookie(app, 'finance')
+    expect((await app.request('/api/discrepancies/claimable', {
+      headers: { Cookie: cookie },
+    })).status).toBe(200)
+    expect((await app.request('/api/discrepancies/discrepancy/claim', {
+      method: 'POST', headers: { Cookie: cookie, 'Content-Type': 'application/json' }, body: '{}',
+    })).status).toBe(201)
+    expect((await app.request('/api/claims', { headers: { Cookie: cookie } })).status).toBe(200)
+    expect((await app.request('/api/claims/claim/confirm', {
+      method: 'POST', headers: { Cookie: cookie, 'Content-Type': 'application/json' }, body: '{}',
+    })).status).toBe(200)
+    expect((await app.request('/api/claims/claim/reject', {
+      method: 'POST', headers: { Cookie: cookie, 'Content-Type': 'application/json' }, body: '{}',
+    })).status).toBe(200)
+  })
+
+  test('allows owners to review claims but keeps claim decisions Finance-only', async () => {
+    const app = createTestApp()
+    const ownerCookie = await sessionCookie(app, 'business_owner')
+    expect((await app.request('/api/claims', { headers: { Cookie: ownerCookie } })).status).toBe(200)
+    expect((await app.request('/api/claims/claim/confirm', {
+      method: 'POST', headers: { Cookie: ownerCookie, 'Content-Type': 'application/json' }, body: '{}',
+    })).status).toBe(403)
+
+    const salesCookie = await sessionCookie(app, 'sales')
+    expect((await app.request('/api/claims', { headers: { Cookie: salesCookie } })).status).toBe(403)
   })
 })

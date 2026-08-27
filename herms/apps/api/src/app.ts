@@ -2,6 +2,7 @@ import {
   DataConflictError,
   DataNotFoundError,
   type DbHealthCheck,
+  type ClaimService,
   type CommercialService,
   type DeliveryService,
   type FinanceService,
@@ -59,6 +60,7 @@ export type AppDependencies = {
   commercial: CommercialService
   delivery: DeliveryService
   finance: FinanceService
+  claims: ClaimService
   retention: RetentionService
   auth: AuthConfig
   logger?: AppLogger
@@ -115,6 +117,7 @@ export function createApp({
   commercial,
   delivery,
   finance,
+  claims,
   retention,
   auth,
   logger = jsonLogger,
@@ -129,7 +132,7 @@ export function createApp({
     .get('/', (c) =>
       c.json({
         name: 'HERMS API',
-        phase: 6,
+        phase: 7,
         health: '/api/health',
       }),
     )
@@ -342,7 +345,24 @@ export function createApp({
       return c.json({ data: await finance.getMonthly(parsed.data.month) })
     })
 
-  const deliveryRoutes = financeRoutes
+  const claimRoutes = financeRoutes
+    .get('/api/discrepancies/claimable', requireRoles('finance'), async (c) =>
+      c.json({ data: await claims.listClaimableDiscrepancies(c.get('user')) }),
+    )
+    .post('/api/discrepancies/:id/claim', requireRoles('finance'), async (c) =>
+      c.json({ data: await claims.draftClaim(c.req.param('id'), actor(c)) }, 201),
+    )
+    .get('/api/claims', requireRoles('finance', 'business_owner'), async (c) =>
+      c.json({ data: await claims.listClaims(c.get('user')) }),
+    )
+    .post('/api/claims/:id/confirm', requireRoles('finance'), async (c) =>
+      c.json({ data: await claims.confirmClaim(c.req.param('id'), actor(c)) }),
+    )
+    .post('/api/claims/:id/reject', requireRoles('finance'), async (c) =>
+      c.json({ data: await claims.rejectClaim(c.req.param('id'), actor(c)) }),
+    )
+
+  const deliveryRoutes = claimRoutes
     .get('/api/notification-recipients/field-staff', requireRoles('sales', 'store_admin'), async (c) =>
       c.json({ data: await notifications.listFieldStaff(c.get('user')) }),
     )
