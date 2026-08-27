@@ -3,6 +3,7 @@ import {
   createDbHealthCheck,
   createCommercialService,
   createDeliveryService,
+  createFinanceService,
   createIdentityService,
   createMasterDataService,
   createNotificationService,
@@ -36,6 +37,10 @@ const app = createApp({
     tokenSecret: env.NOTE_TOKEN_SECRET,
     tokenTtlSeconds: env.NOTE_TOKEN_TTL_SECONDS,
     publicAppUrl: env.PUBLIC_APP_URL,
+  }),
+  finance: createFinanceService(db, {
+    timezone: env.BUSINESS_TIMEZONE,
+    currency: env.BUSINESS_CURRENCY,
   }),
   retention: createRetentionService(db, {
     timezone: env.BUSINESS_TIMEZONE,

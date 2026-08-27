@@ -4,6 +4,7 @@ import {
   type DbHealthCheck,
   type CommercialService,
   type DeliveryService,
+  type FinanceService,
   type IdentityService,
   type MasterDataService,
   type NotificationService,
@@ -14,9 +15,12 @@ import {
   customerUpdateSchema,
   equipmentInputSchema,
   equipmentUpdateSchema,
+  expenseInputSchema,
+  financeMonthSchema,
   loginInputSchema,
   noteLinkRecipientSchema,
   priceChangeInputSchema,
+  paymentInputSchema,
   quotationInputSchema,
   recurringCustomerInputSchema,
   deliveryNoteSubmissionSchema,
@@ -54,6 +58,7 @@ export type AppDependencies = {
   notifications: NotificationService
   commercial: CommercialService
   delivery: DeliveryService
+  finance: FinanceService
   retention: RetentionService
   auth: AuthConfig
   logger?: AppLogger
@@ -109,6 +114,7 @@ export function createApp({
   notifications,
   commercial,
   delivery,
+  finance,
   retention,
   auth,
   logger = jsonLogger,
@@ -123,7 +129,7 @@ export function createApp({
     .get('/', (c) =>
       c.json({
         name: 'HERMS API',
-        phase: 5,
+        phase: 6,
         health: '/api/health',
       }),
     )
@@ -191,8 +197,6 @@ export function createApp({
     .get('/api/me', (c) => c.json({ data: c.get('user') }))
 
   app.use('/api/customers', requireRoles('business_owner', 'sales'))
-  app.use('/api/customers/*', requireRoles('business_owner', 'sales'))
-
   const customerRoutes = protectedRoutes
     .get('/api/customers', async (c) =>
       c.json({ data: await masterData.listCustomers(c.get('user')) }),
@@ -203,28 +207,28 @@ export function createApp({
       const customer = await masterData.createCustomer(parsed.data, actor(c))
       return c.json({ data: customer }, 201)
     })
-    .get('/api/customers/:id', async (c) =>
+    .get('/api/customers/:id', requireRoles('business_owner', 'sales'), async (c) =>
       c.json({ data: await masterData.getCustomer(c.req.param('id'), c.get('user')) }),
     )
-    .put('/api/customers/:id', async (c) => {
+    .put('/api/customers/:id', requireRoles('business_owner', 'sales'), async (c) => {
       const parsed = await validatedJson(c, customerUpdateSchema)
       if ('response' in parsed) return parsed.response
       return c.json({
         data: await masterData.updateCustomer(c.req.param('id'), parsed.data, actor(c)),
       })
     })
-    .put('/api/customers/:id/recurring', async (c) => {
+    .put('/api/customers/:id/recurring', requireRoles('business_owner', 'sales'), async (c) => {
       const parsed = await validatedJson(c, recurringCustomerInputSchema)
       if ('response' in parsed) return parsed.response
       return c.json({
         data: await masterData.setRecurringCustomer(c.req.param('id'), parsed.data, actor(c)),
       })
     })
-    .get('/api/customers/:id/prices', async (c) => {
+    .get('/api/customers/:id/prices', requireRoles('business_owner', 'sales'), async (c) => {
       const customer = await masterData.getCustomer(c.req.param('id'), c.get('user'))
       return c.json({ data: customer.prices })
     })
-    .put('/api/customers/:id/prices', async (c) => {
+    .put('/api/customers/:id/prices', requireRoles('business_owner', 'sales'), async (c) => {
       const parsed = await validatedJson(c, recurringCustomerInputSchema)
       if ('response' in parsed) return parsed.response
       return c.json({
@@ -296,14 +300,49 @@ export function createApp({
     .post('/api/quotations/:id/expire', requireRoles('sales', 'system_admin'), async (c) =>
       c.json({ data: await commercial.expireQuotation(c.req.param('id'), actor(c)) }),
     )
-    .get('/api/orders', requireRoles('sales', 'store_admin'), async (c) =>
+    .get('/api/orders', requireRoles('sales', 'store_admin', 'finance'), async (c) =>
       c.json({ data: await commercial.listOrders(c.get('user')) }),
     )
-    .get('/api/orders/:id', requireRoles('sales', 'store_admin'), async (c) =>
+    .get('/api/orders/:id', requireRoles('sales', 'store_admin', 'finance'), async (c) =>
       c.json({ data: await commercial.getOrder(c.req.param('id'), c.get('user')) }),
     )
 
-  const deliveryRoutes = commercialRoutes
+  const financeRoutes = commercialRoutes
+    .get('/api/orders/:id/invoice', requireRoles('finance', 'sales'), async (c) =>
+      c.json({ data: await finance.getInvoice(c.req.param('id'), c.get('user')) }),
+    )
+    .post('/api/payments', requireRoles('finance'), async (c) => {
+      const parsed = await validatedJson(c, paymentInputSchema)
+      if ('response' in parsed) return parsed.response
+      return c.json({ data: await finance.recordPayment(parsed.data, actor(c)) }, 201)
+    })
+    .get('/api/customers/:id/balance', requireRoles('finance'), async (c) =>
+      c.json({ data: await finance.getCustomerBalance(c.req.param('id'), c.get('user')) }),
+    )
+    .post('/api/expenses', requireRoles('finance'), async (c) => {
+      const parsed = await validatedJson(c, expenseInputSchema)
+      if ('response' in parsed) return parsed.response
+      return c.json({ data: await finance.recordExpense(parsed.data, actor(c)) }, 201)
+    })
+    .get('/api/finance/monthly', requireRoles('finance', 'business_owner'), async (c) => {
+      const parsed = financeMonthSchema.safeParse(c.req.query())
+      if (!parsed.success) {
+        return errorResponse(
+          c,
+          400,
+          'VALIDATION_ERROR',
+          'The request contains invalid data',
+          parsed.error.issues.map((issue) => ({
+            field: issue.path.join('.') || 'query',
+            code: issue.code,
+            message: issue.message,
+          })),
+        )
+      }
+      return c.json({ data: await finance.getMonthly(parsed.data.month) })
+    })
+
+  const deliveryRoutes = financeRoutes
     .get('/api/notification-recipients/field-staff', requireRoles('sales', 'store_admin'), async (c) =>
       c.json({ data: await notifications.listFieldStaff(c.get('user')) }),
     )

@@ -3,6 +3,7 @@ import { describe, expect, test } from 'bun:test'
 import type {
   CommercialService,
   DeliveryService,
+  FinanceService,
   IdentityService,
   MasterDataService,
   NotificationService,
@@ -277,7 +278,72 @@ function createServices() {
     reconciliation: async () => [],
   } as unknown as RetentionService
 
-  return { identity, masterData, notifications, commercial, delivery, retention }
+  const invoice = {
+    id: order.id,
+    orderNumber: order.orderNumber,
+    quotationId: order.quotationId,
+    customerId: order.customerId,
+    customerName: order.customerName,
+    status: order.status,
+    createdAt: order.createdAt,
+    invoiceValueCents: 2500,
+    paidAmountCents: 500,
+    outstandingBalanceCents: 2000,
+    currency: 'LKR',
+    lines: order.lines,
+  }
+  const finance = {
+    getInvoice: async () => invoice,
+    recordPayment: async (input: {
+      orderId: string
+      amountCents: number
+      paymentDate: string
+      method: string
+    }) => ({
+      id: '92000000-0000-4000-8000-000000000001',
+      customerId: order.customerId,
+      createdBy: user('finance').id,
+      createdAt: new Date(),
+      ...input,
+      paymentDate: new Date(input.paymentDate),
+    }),
+    getCustomerBalance: async () => ({
+      id: order.customerId,
+      name: order.customerName,
+      outstandingBalanceCents: 2000,
+      currency: 'LKR',
+      orders: [{
+        id: order.id,
+        orderNumber: order.orderNumber,
+        status: order.status,
+        invoiceValueCents: 2500,
+        paidAmountCents: 500,
+        outstandingBalanceCents: 2000,
+      }],
+    }),
+    recordExpense: async (input: {
+      category: string
+      amountCents: number
+      expenseDate: string
+      description?: string | null
+    }) => ({
+      id: '93000000-0000-4000-8000-000000000001',
+      createdBy: user('finance').id,
+      createdAt: new Date(),
+      ...input,
+      expenseDate: new Date(input.expenseDate),
+    }),
+    getMonthly: async (month: string) => ({
+      month,
+      incomeCents: 500,
+      expenseCents: 200,
+      netPositionCents: 300,
+      currency: 'LKR',
+      timezone: 'Asia/Colombo',
+    }),
+  } as unknown as FinanceService
+
+  return { identity, masterData, notifications, commercial, delivery, finance, retention }
 }
 
 function createTestApp(healthCheck: () => Promise<number> = async () => 12.34) {
@@ -603,5 +669,99 @@ describe('Phase 5 API', () => {
       },
     )
     expect(response.status).toBe(400)
+  })
+})
+
+describe('Phase 6 API', () => {
+  test('allows Finance and Sales to read frozen-price invoices', async () => {
+    const app = createTestApp()
+    for (const role of ['finance', 'sales'] as const) {
+      const cookie = await sessionCookie(app, role)
+      const response = await app.request(
+        '/api/orders/60000000-0000-4000-8000-000000000001/invoice',
+        { headers: { Cookie: cookie } },
+      )
+      expect(response.status).toBe(200)
+      const payload = (await response.json()) as {
+        data: { invoiceValueCents: number; outstandingBalanceCents: number }
+      }
+      expect(payload.data.invoiceValueCents).toBe(2500)
+      expect(payload.data.outstandingBalanceCents).toBe(2000)
+    }
+    const storeCookie = await sessionCookie(app, 'store_admin')
+    expect((await app.request(
+      '/api/orders/60000000-0000-4000-8000-000000000001/invoice',
+      { headers: { Cookie: storeCookie } },
+    )).status).toBe(403)
+  })
+
+  test('restricts valid payment and expense creation to Finance', async () => {
+    const app = createTestApp()
+    const financeCookie = await sessionCookie(app, 'finance')
+    const payment = await app.request('/api/payments', {
+      method: 'POST',
+      headers: { Cookie: financeCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        orderId: '60000000-0000-4000-8000-000000000001',
+        amountCents: 500,
+        paymentDate: '2026-08-27T10:00:00+05:30',
+        method: 'bank_transfer',
+      }),
+    })
+    expect(payment.status).toBe(201)
+
+    const expense = await app.request('/api/expenses', {
+      method: 'POST',
+      headers: { Cookie: financeCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        category: 'Transport',
+        amountCents: 200,
+        expenseDate: '2026-08-27T11:00:00+05:30',
+        description: 'Delivery fuel',
+      }),
+    })
+    expect(expense.status).toBe(201)
+
+    const salesCookie = await sessionCookie(app, 'sales')
+    expect((await app.request('/api/payments', {
+      method: 'POST',
+      headers: { Cookie: salesCookie, 'Content-Type': 'application/json' },
+      body: '{}',
+    })).status).toBe(403)
+  })
+
+  test('validates finance inputs and exposes role-scoped balance and monthly views', async () => {
+    const app = createTestApp()
+    const financeCookie = await sessionCookie(app, 'finance')
+    expect((await app.request('/api/payments', {
+      method: 'POST',
+      headers: { Cookie: financeCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        orderId: 'not-a-uuid',
+        amountCents: 12.5,
+        paymentDate: 'not-a-date',
+        method: 'card',
+      }),
+    })).status).toBe(400)
+
+    expect((await app.request(
+      '/api/customers/20000000-0000-4000-8000-000000000001/balance',
+      { headers: { Cookie: financeCookie } },
+    )).status).toBe(200)
+    expect((await app.request('/api/finance/monthly?month=2026-08', {
+      headers: { Cookie: financeCookie },
+    })).status).toBe(200)
+    expect((await app.request('/api/finance/monthly?month=2026-13', {
+      headers: { Cookie: financeCookie },
+    })).status).toBe(400)
+
+    const ownerCookie = await sessionCookie(app, 'business_owner')
+    expect((await app.request('/api/finance/monthly?month=2026-08', {
+      headers: { Cookie: ownerCookie },
+    })).status).toBe(200)
+    expect((await app.request(
+      '/api/customers/20000000-0000-4000-8000-000000000001/balance',
+      { headers: { Cookie: ownerCookie } },
+    )).status).toBe(403)
   })
 })
