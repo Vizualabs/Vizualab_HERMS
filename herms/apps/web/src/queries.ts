@@ -21,6 +21,10 @@ export const queryKeys = {
   approvals: ['approvals'] as const,
   approvalNote: (id: string) => ['approvals', id] as const,
   stock: ['stock'] as const,
+  finance: ['finance'] as const,
+  invoice: (id: string) => ['finance', 'invoices', id] as const,
+  customerBalance: (id: string) => ['finance', 'customers', id, 'balance'] as const,
+  monthlyFinance: (month: string) => ['finance', 'monthly', month] as const,
 }
 
 export const sessionQuery = queryOptions({
@@ -64,4 +68,22 @@ export const stockQuery = queryOptions({
   queryKey: queryKeys.stock,
   queryFn: api.stock,
   staleTime: 10_000,
+})
+
+export const invoiceQuery = (id: string) => queryOptions({
+  queryKey: queryKeys.invoice(id),
+  queryFn: () => api.invoice(id),
+  staleTime: 5_000,
+})
+
+export const customerBalanceQuery = (id: string) => queryOptions({
+  queryKey: queryKeys.customerBalance(id),
+  queryFn: () => api.customerBalance(id),
+  staleTime: 5_000,
+})
+
+export const monthlyFinanceQuery = (month: string) => queryOptions({
+  queryKey: queryKeys.monthlyFinance(month),
+  queryFn: () => api.monthlyFinance(month),
+  staleTime: 5_000,
 })

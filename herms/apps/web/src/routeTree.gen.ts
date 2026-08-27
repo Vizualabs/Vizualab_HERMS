@@ -14,6 +14,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedApprovalsRouteImport } from './routes/_authenticated/approvals'
 import { Route as AuthenticatedCustomersRouteImport } from './routes/_authenticated/customers'
+import { Route as AuthenticatedFinanceRouteImport } from './routes/_authenticated/finance'
 import { Route as AuthenticatedItemsRouteImport } from './routes/_authenticated/items'
 import { Route as AuthenticatedOrdersRouteImport } from './routes/_authenticated/orders'
 import { Route as AuthenticatedQuotationsRouteImport } from './routes/_authenticated/quotations'
@@ -49,6 +50,11 @@ const AuthenticatedApprovalsRoute = AuthenticatedApprovalsRouteImport.update({
 const AuthenticatedCustomersRoute = AuthenticatedCustomersRouteImport.update({
   id: '/customers',
   path: '/customers',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedFinanceRoute = AuthenticatedFinanceRouteImport.update({
+  id: '/finance',
+  path: '/finance',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedItemsRoute = AuthenticatedItemsRouteImport.update({
@@ -124,6 +130,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/approvals': typeof AuthenticatedApprovalsRouteWithChildren
   '/customers': typeof AuthenticatedCustomersRouteWithChildren
+  '/finance': typeof AuthenticatedFinanceRoute
   '/items': typeof AuthenticatedItemsRouteWithChildren
   '/orders': typeof AuthenticatedOrdersRouteWithChildren
   '/quotations': typeof AuthenticatedQuotationsRouteWithChildren
@@ -141,6 +148,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/approvals': typeof AuthenticatedApprovalsRouteWithChildren
   '/customers': typeof AuthenticatedCustomersRouteWithChildren
+  '/finance': typeof AuthenticatedFinanceRoute
   '/items': typeof AuthenticatedItemsRouteWithChildren
   '/orders': typeof AuthenticatedOrdersRouteWithChildren
   '/quotations': typeof AuthenticatedQuotationsRouteWithChildren
@@ -161,6 +169,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/_authenticated/approvals': typeof AuthenticatedApprovalsRouteWithChildren
   '/_authenticated/customers': typeof AuthenticatedCustomersRouteWithChildren
+  '/_authenticated/finance': typeof AuthenticatedFinanceRoute
   '/_authenticated/items': typeof AuthenticatedItemsRouteWithChildren
   '/_authenticated/orders': typeof AuthenticatedOrdersRouteWithChildren
   '/_authenticated/quotations': typeof AuthenticatedQuotationsRouteWithChildren
@@ -182,6 +191,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/approvals'
     | '/customers'
+    | '/finance'
     | '/items'
     | '/orders'
     | '/quotations'
@@ -199,6 +209,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/approvals'
     | '/customers'
+    | '/finance'
     | '/items'
     | '/orders'
     | '/quotations'
@@ -218,6 +229,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/_authenticated/approvals'
     | '/_authenticated/customers'
+    | '/_authenticated/finance'
     | '/_authenticated/items'
     | '/_authenticated/orders'
     | '/_authenticated/quotations'
@@ -274,6 +286,13 @@ declare module '@tanstack/react-router' {
       path: '/customers'
       fullPath: '/customers'
       preLoaderRoute: typeof AuthenticatedCustomersRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/finance': {
+      id: '/_authenticated/finance'
+      path: '/finance'
+      fullPath: '/finance'
+      preLoaderRoute: typeof AuthenticatedFinanceRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/items': {
@@ -432,6 +451,7 @@ const AuthenticatedQuotationsRouteWithChildren =
 interface AuthenticatedRouteChildren {
   AuthenticatedApprovalsRoute: typeof AuthenticatedApprovalsRouteWithChildren
   AuthenticatedCustomersRoute: typeof AuthenticatedCustomersRouteWithChildren
+  AuthenticatedFinanceRoute: typeof AuthenticatedFinanceRoute
   AuthenticatedItemsRoute: typeof AuthenticatedItemsRouteWithChildren
   AuthenticatedOrdersRoute: typeof AuthenticatedOrdersRouteWithChildren
   AuthenticatedQuotationsRoute: typeof AuthenticatedQuotationsRouteWithChildren
@@ -444,6 +464,7 @@ interface AuthenticatedRouteChildren {
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedApprovalsRoute: AuthenticatedApprovalsRouteWithChildren,
   AuthenticatedCustomersRoute: AuthenticatedCustomersRouteWithChildren,
+  AuthenticatedFinanceRoute: AuthenticatedFinanceRoute,
   AuthenticatedItemsRoute: AuthenticatedItemsRouteWithChildren,
   AuthenticatedOrdersRoute: AuthenticatedOrdersRouteWithChildren,
   AuthenticatedQuotationsRoute: AuthenticatedQuotationsRouteWithChildren,

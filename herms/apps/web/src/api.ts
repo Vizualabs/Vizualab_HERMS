@@ -13,6 +13,9 @@ import type {
   DeliveryNoteSubmission,
   DeliveryNoteCount,
   DeliveryNoteCreate,
+  ExpenseInput,
+  PaymentInput,
+  PaymentMethod,
   RetentionNoteCreate,
   RetentionNoteSubmission,
   RetentionNoteCount,
@@ -115,6 +118,66 @@ export type OrderDetail = OrderSummary & {
   timezone: string
   updatedAt: string
   lines: CommercialLine[]
+}
+
+export type Invoice = {
+  id: string
+  orderNumber: string
+  quotationId: string | null
+  customerId: string
+  customerName: string
+  status: OrderStatus
+  createdAt: string
+  invoiceValueCents: number
+  paidAmountCents: number
+  outstandingBalanceCents: number
+  currency: string
+  lines: CommercialLine[]
+}
+
+export type Payment = {
+  id: string
+  orderId: string
+  customerId: string
+  amountCents: number
+  paymentDate: string
+  method: PaymentMethod
+  createdBy: string | null
+  createdAt: string
+}
+
+export type CustomerBalance = {
+  id: string
+  name: string
+  outstandingBalanceCents: number
+  currency: string
+  orders: Array<{
+    id: string
+    orderNumber: string
+    status: OrderStatus
+    invoiceValueCents: number
+    paidAmountCents: number
+    outstandingBalanceCents: number
+  }>
+}
+
+export type Expense = {
+  id: string
+  category: string
+  amountCents: number
+  expenseDate: string
+  description: string | null
+  createdBy: string | null
+  createdAt: string
+}
+
+export type MonthlyFinance = {
+  month: string
+  incomeCents: number
+  expenseCents: number
+  netPositionCents: number
+  currency: string
+  timezone: string
 }
 
 export type DeliveryNoteLine = {
@@ -329,6 +392,15 @@ export const api = {
     request<QuotationDetail>(`/api/quotations/${id}/expire`, { method: 'POST', body: '{}' }),
   orders: () => request<OrderSummary[]>('/api/orders'),
   order: (id: string) => request<OrderDetail>(`/api/orders/${id}`),
+  invoice: (id: string) => request<Invoice>(`/api/orders/${id}/invoice`),
+  recordPayment: (input: PaymentInput) =>
+    request<Payment>('/api/payments', { method: 'POST', body: JSON.stringify(input) }),
+  customerBalance: (id: string) =>
+    request<CustomerBalance>(`/api/customers/${id}/balance`),
+  recordExpense: (input: ExpenseInput) =>
+    request<Expense>('/api/expenses', { method: 'POST', body: JSON.stringify(input) }),
+  monthlyFinance: (month: string) =>
+    request<MonthlyFinance>(`/api/finance/monthly?month=${encodeURIComponent(month)}`),
   fieldStaffRecipients: () =>
     request<FieldStaffRecipient[]>('/api/notification-recipients/field-staff'),
   deliveryNotes: (orderId: string) => request<DeliveryNoteSummary[]>(`/api/orders/${orderId}/delivery-notes`),

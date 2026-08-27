@@ -26,6 +26,8 @@ export function AppShell({
   const canUseSales = user.role === 'sales'
   const canApprove = user.role === 'store_admin' || user.isDeputyAdmin
   const canUseOrders = canUseSales || user.role === 'store_admin'
+    || user.role === 'finance'
+  const canUseFinance = user.role === 'finance' || user.role === 'business_owner'
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -82,6 +84,15 @@ export function AppShell({
                 activeProps={{ className: 'bg-primary text-primary-foreground hover:bg-primary' }}
               >
                 Orders
+              </Link>
+            )}
+            {canUseFinance && (
+              <Link
+                to="/finance"
+                className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-muted"
+                activeProps={{ className: 'bg-primary text-primary-foreground hover:bg-primary' }}
+              >
+                Finance
               </Link>
             )}
           </nav>
