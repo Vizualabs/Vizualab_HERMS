@@ -293,6 +293,11 @@ export function createCommercialService(db: Database, config: CommercialConfig) 
         db.execute(sql`INSERT INTO ${orderLines} (id, order_id, equipment_item_id, quantity, unit_price_cents, line_total_cents)
           SELECT gen_random_uuid(), ${orderId}::uuid, equipment_item_id, quantity, unit_price_cents, line_total_cents
           FROM ${quotationLines} WHERE quotation_id = ${id}::uuid AND EXISTS (SELECT 1 FROM ${orders} WHERE ${orders.id} = ${orderId}::uuid)`),
+        db.execute(sql`UPDATE ${customers}
+          SET outstanding_balance_cents = outstanding_balance_cents + ${before.totalValueCents},
+              updated_at = ${now}
+          WHERE id = ${before.customerId}::uuid
+            AND EXISTS (SELECT 1 FROM ${orders} WHERE ${orders.id} = ${orderId}::uuid)`),
         db.execute(sql`INSERT INTO ${auditLogs} (actor_type, actor_id, action, entity_type, entity_id, before, after, request_id)
           SELECT 'user'::audit_actor_type, ${actor.id}::uuid, 'quotation.accept', 'quotation', ${id}::uuid,
           ${JSON.stringify(auditSnapshot(before))}::jsonb, to_jsonb(quotation.*), ${actor.requestId}

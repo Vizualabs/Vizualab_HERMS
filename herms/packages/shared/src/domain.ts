@@ -21,6 +21,7 @@ export const NOTE_STATUSES = ['draft', 'submitted', 'pending_approval', 'approve
 export const DISCREPANCY_TYPES = ['missing', 'damaged', 'not_accepted', 'other'] as const
 export const DISCREPANCY_STATUSES = ['open', 'resolved', 'written_off', 'claimed'] as const
 export const RESPONSIBLE_PARTIES = ['customer', 'staff_member'] as const
+export const PAYMENT_METHODS = ['cash', 'bank_transfer', 'cheque', 'other'] as const
 
 export type UserRole = (typeof USER_ROLES)[number]
 export type CustomerType = (typeof CUSTOMER_TYPES)[number]
@@ -31,6 +32,7 @@ export type NoteStatus = (typeof NOTE_STATUSES)[number]
 export type DiscrepancyType = (typeof DISCREPANCY_TYPES)[number]
 export type DiscrepancyStatus = (typeof DISCREPANCY_STATUSES)[number]
 export type ResponsibleParty = (typeof RESPONSIBLE_PARTIES)[number]
+export type PaymentMethod = (typeof PAYMENT_METHODS)[number]
 
 const nullableEmail = z.union([z.string().trim().email().max(254), z.literal(''), z.null()]).optional()
 const nullableText = (max: number) =>
@@ -196,6 +198,26 @@ export const writeOffReversalSchema = z.object({
   reason: z.string().trim().min(1).max(500),
 })
 
+const isoDateTime = z.string().datetime({ offset: true })
+
+export const paymentInputSchema = z.object({
+  orderId: z.string().uuid(),
+  amountCents: z.number().int().positive().max(2_000_000_000),
+  paymentDate: isoDateTime,
+  method: z.enum(PAYMENT_METHODS),
+})
+
+export const expenseInputSchema = z.object({
+  category: z.string().trim().min(1).max(120),
+  amountCents: z.number().int().positive().max(2_000_000_000),
+  expenseDate: isoDateTime,
+  description: nullableText(500),
+})
+
+export const financeMonthSchema = z.object({
+  month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Month must use YYYY-MM'),
+})
+
 export type LoginInput = z.infer<typeof loginInputSchema>
 export type CustomerInput = z.infer<typeof customerInputSchema>
 export type CustomerUpdate = z.infer<typeof customerUpdateSchema>
@@ -211,6 +233,9 @@ export type RetentionNoteCreate = z.infer<typeof retentionNoteCreateSchema>
 export type RetentionNoteSubmission = z.infer<typeof retentionNoteSubmissionSchema>
 export type RetentionNoteCount = z.infer<typeof retentionNoteCountSchema>
 export type WriteOffReversal = z.infer<typeof writeOffReversalSchema>
+export type PaymentInput = z.infer<typeof paymentInputSchema>
+export type ExpenseInput = z.infer<typeof expenseInputSchema>
+export type FinanceMonth = z.infer<typeof financeMonthSchema>
 export type NoteLinkRecipient = z.infer<typeof noteLinkRecipientSchema>
 
 export type SessionUser = {

@@ -1,6 +1,7 @@
 export * from './client'
 export * from './commercial'
 export * from './delivery'
+export * from './finance'
 export * from './health'
 export * from './notifications'
 export * from './outbox'

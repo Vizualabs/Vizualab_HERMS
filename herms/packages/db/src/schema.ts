@@ -37,6 +37,12 @@ export const discrepancyStatus = pgEnum('discrepancy_status', ['open', 'resolved
 export const responsibleParty = pgEnum('responsible_party', ['customer', 'staff_member'])
 export const stockDirection = pgEnum('stock_direction', ['in', 'out', 'write_off'])
 export const tokenStatus = pgEnum('token_status', ['active', 'used', 'revoked'])
+export const paymentMethod = pgEnum('payment_method', [
+  'cash',
+  'bank_transfer',
+  'cheque',
+  'other',
+])
 
 const timestamps = {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -212,6 +218,39 @@ export const orderLines = pgTable(
     lineTotalCents: integer('line_total_cents').notNull(),
   },
   (table) => [index('order_line_order_id_idx').on(table.orderId)],
+)
+
+export const payments = pgTable(
+  'payment',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    orderId: uuid('order_id').notNull().references(() => orders.id),
+    customerId: uuid('customer_id').notNull().references(() => customers.id),
+    amountCents: integer('amount_cents').notNull(),
+    paymentDate: timestamp('payment_date', { withTimezone: true }).notNull(),
+    method: paymentMethod('method').notNull(),
+    createdBy: uuid('created_by').references(() => users.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index('payment_order_id_idx').on(table.orderId),
+    index('payment_customer_id_idx').on(table.customerId),
+    index('payment_payment_date_idx').on(table.paymentDate),
+  ],
+)
+
+export const expenses = pgTable(
+  'expense',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    category: text('category').notNull(),
+    amountCents: integer('amount_cents').notNull(),
+    expenseDate: timestamp('expense_date', { withTimezone: true }).notNull(),
+    description: text('description'),
+    createdBy: uuid('created_by').references(() => users.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index('expense_expense_date_idx').on(table.expenseDate)],
 )
 
 export const outboxEvents = pgTable(
