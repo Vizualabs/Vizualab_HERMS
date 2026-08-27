@@ -30,7 +30,8 @@
     "ci": "bun run typecheck && bun run test && bun run db:check && bun run build",
     "build:notifier": "bun run --cwd apps/notifier build",
     "config:phase5": "bun run scripts/configure-phase5-env.ts",
-    "verify:phase5": "bun run scripts/verify-phase5.ts"
+    "verify:phase5": "bun run scripts/verify-phase5.ts",
+    "verify:phase6": "bun run scripts/verify-phase6.ts"
   },
   "devDependencies": {
     "@hono/cli": "^0.1.11",
