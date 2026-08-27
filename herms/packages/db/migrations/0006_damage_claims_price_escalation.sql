@@ -38,4 +38,3 @@ CREATE INDEX "damage_claim_order_id_idx" ON "damage_claim" ("order_id");
 CREATE UNIQUE INDEX "price_history_scheduled_effective_unique"
 ON "price_history" ("equipment_item_id", "effective_date")
 WHERE "reason" = 'scheduled_escalation';
-

@@ -25,4 +25,3 @@ export function calculateEscalatedPriceCents(currentPriceCents: number) {
   const escalated = (BigInt(currentPriceCents) * 110n + 50n) / 100n
   return checkedMinorUnits(escalated, 'Escalated price')
 }
-
