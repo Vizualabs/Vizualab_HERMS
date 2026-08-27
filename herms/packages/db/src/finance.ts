@@ -9,6 +9,7 @@ import type { Database } from './client'
 import {
   auditLogs,
   customers,
+  damageClaims,
   equipmentItems,
   expenses,
   orderLines,
@@ -36,16 +37,24 @@ function storeCondition(actor: SessionUser) {
 export function calculateInvoiceTotals(
   lines: ReadonlyArray<{ lineTotalCents: number }>,
   paidAmountCents: number,
+  claimAmountCents = 0,
 ) {
-  const invoiceValueCents = lines.reduce(
+  const orderValueCents = lines.reduce(
     (sum, line) => assertSafeMoney(sum + line.lineTotalCents, 'Invoice value'),
     0,
+  )
+  const claimValue = assertSafeMoney(claimAmountCents, 'Confirmed claim value')
+  const invoiceValueCents = assertSafeMoney(
+    orderValueCents + claimValue,
+    'Invoice and claim value',
   )
   const paid = assertSafeMoney(paidAmountCents, 'Paid amount')
   if (paid > invoiceValueCents) {
     throw new DataConflictError('Recorded payments exceed the frozen invoice value')
   }
   return {
+    orderValueCents,
+    claimAmountCents: claimValue,
     invoiceValueCents,
     paidAmountCents: paid,
     outstandingBalanceCents: invoiceValueCents - paid,
@@ -75,7 +84,7 @@ export function createFinanceService(db: Database, config: FinanceConfig) {
 
   async function getInvoice(id: string, actor: SessionUser) {
     const header = await orderHeader(id, actor)
-    const [lines, paidRows] = await Promise.all([
+    const [lines, paidRows, claimRows] = await Promise.all([
       db
         .select({
           id: orderLines.id,
@@ -96,8 +105,18 @@ export function createFinanceService(db: Database, config: FinanceConfig) {
         })
         .from(payments)
         .where(eq(payments.orderId, id)),
+      db
+        .select({
+          claimAmountCents: sql<number>`coalesce(sum(${damageClaims.claimAmountCents}), 0)::integer`,
+        })
+        .from(damageClaims)
+        .where(and(eq(damageClaims.orderId, id), eq(damageClaims.status, 'confirmed'))),
     ])
-    const totals = calculateInvoiceTotals(lines, paidRows[0]?.paidAmountCents ?? 0)
+    const totals = calculateInvoiceTotals(
+      lines,
+      paidRows[0]?.paidAmountCents ?? 0,
+      claimRows[0]?.claimAmountCents ?? 0,
+    )
     return { ...header, ...totals, currency: config.currency, lines }
   }
 
@@ -143,6 +162,10 @@ export function createFinanceService(db: Database, config: FinanceConfig) {
               SELECT coalesce(sum(order_line.line_total_cents), 0)
               FROM ${orderLines} AS order_line
               WHERE order_line.order_id = rental_order.id
+            ) + (
+              SELECT coalesce(sum(claim.claim_amount_cents), 0)
+              FROM ${damageClaims} AS claim
+              WHERE claim.order_id = rental_order.id AND claim.status = 'confirmed'
             ) - (
               SELECT coalesce(sum(existing_payment.amount_cents), 0)
               FROM ${payments} AS existing_payment
@@ -233,6 +256,20 @@ export function createFinanceService(db: Database, config: FinanceConfig) {
             SELECT sum(order_line.line_total_cents)
             FROM ${orderLines} AS order_line
             WHERE order_line.order_id = ${orders.id}
+          ), 0)::integer + coalesce((
+            SELECT sum(claim.claim_amount_cents)
+            FROM ${damageClaims} AS claim
+            WHERE claim.order_id = ${orders.id} AND claim.status = 'confirmed'
+          ), 0)::integer`,
+          orderValueCents: sql<number>`coalesce((
+            SELECT sum(order_line.line_total_cents)
+            FROM ${orderLines} AS order_line
+            WHERE order_line.order_id = ${orders.id}
+          ), 0)::integer`,
+          claimAmountCents: sql<number>`coalesce((
+            SELECT sum(claim.claim_amount_cents)
+            FROM ${damageClaims} AS claim
+            WHERE claim.order_id = ${orders.id} AND claim.status = 'confirmed'
           ), 0)::integer`,
           paidAmountCents: sql<number>`coalesce(sum(${payments.amountCents}), 0)::integer`,
         })

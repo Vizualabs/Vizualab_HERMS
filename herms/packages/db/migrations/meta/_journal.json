@@ -43,6 +43,13 @@
       "when": 1787529605000,
       "tag": "0005_payments_invoicing_expenses",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787529606000,
+      "tag": "0006_damage_claims_price_escalation",
+      "breakpoints": true
     }
   ]
 }

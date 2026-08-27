@@ -9,9 +9,21 @@ describe('Phase 6 invoice arithmetic', () => {
       { lineTotalCents: 10_001 },
       { lineTotalCents: 20_002 },
     ], 12_003)).toEqual({
+      orderValueCents: 30_003,
+      claimAmountCents: 0,
       invoiceValueCents: 30_003,
       paidAmountCents: 12_003,
       outstandingBalanceCents: 18_000,
+    })
+  })
+
+  test('adds confirmed damage claims without changing frozen order-line values', () => {
+    expect(calculateInvoiceTotals([{ lineTotalCents: 10_000 }], 2_500, 1_500)).toEqual({
+      orderValueCents: 10_000,
+      claimAmountCents: 1_500,
+      invoiceValueCents: 11_500,
+      paidAmountCents: 2_500,
+      outstandingBalanceCents: 9_000,
     })
   })
 

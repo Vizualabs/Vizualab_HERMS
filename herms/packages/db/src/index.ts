@@ -1,4 +1,5 @@
 export * from './client'
+export * from './claims'
 export * from './commercial'
 export * from './delivery'
 export * from './finance'

@@ -22,6 +22,7 @@ export const DISCREPANCY_TYPES = ['missing', 'damaged', 'not_accepted', 'other']
 export const DISCREPANCY_STATUSES = ['open', 'resolved', 'written_off', 'claimed'] as const
 export const RESPONSIBLE_PARTIES = ['customer', 'staff_member'] as const
 export const PAYMENT_METHODS = ['cash', 'bank_transfer', 'cheque', 'other'] as const
+export const CLAIM_STATUSES = ['drafted', 'confirmed', 'rejected'] as const
 
 export type UserRole = (typeof USER_ROLES)[number]
 export type CustomerType = (typeof CUSTOMER_TYPES)[number]
@@ -33,6 +34,7 @@ export type DiscrepancyType = (typeof DISCREPANCY_TYPES)[number]
 export type DiscrepancyStatus = (typeof DISCREPANCY_STATUSES)[number]
 export type ResponsibleParty = (typeof RESPONSIBLE_PARTIES)[number]
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number]
+export type ClaimStatus = (typeof CLAIM_STATUSES)[number]
 
 const nullableEmail = z.union([z.string().trim().email().max(254), z.literal(''), z.null()]).optional()
 const nullableText = (max: number) =>

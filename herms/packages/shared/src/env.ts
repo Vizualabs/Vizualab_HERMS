@@ -47,6 +47,11 @@ export const outboxPublisherEnvSchema = runtimeEnvSchema.extend({
   OUTBOX_LEASE_SECONDS: z.coerce.number().int().min(30).max(900).default(240),
 })
 
+export const priceEscalationEnvSchema = runtimeEnvSchema.extend({
+  PRICE_ESCALATION_EFFECTIVE_DATE: z.string().datetime({ offset: true }),
+  PRICE_ESCALATION_MODE: z.enum(['automatic', 'approval_required']).default('automatic'),
+})
+
 export const notifierEnvSchema = runtimeEnvSchema.extend({
   BUSINESS_CURRENCY: z.string().length(3).default('LKR'),
   NOTE_TOKEN_SECRET: z.string().min(32, 'NOTE_TOKEN_SECRET must contain at least 32 characters'),
@@ -73,6 +78,7 @@ export type ApiEnv = z.infer<typeof apiEnvSchema>
 export type MigrationEnv = z.infer<typeof migrationEnvSchema>
 export type SeedEnv = z.infer<typeof seedEnvSchema>
 export type OutboxPublisherEnv = z.infer<typeof outboxPublisherEnvSchema>
+export type PriceEscalationEnv = z.infer<typeof priceEscalationEnvSchema>
 export type NotifierEnv = z.infer<typeof notifierEnvSchema>
 
 export function parseRuntimeEnv(env: Record<string, string | undefined>): RuntimeEnv {
@@ -93,6 +99,12 @@ export function parseSeedEnv(env: Record<string, string | undefined>): SeedEnv {
 
 export function parseOutboxPublisherEnv(env: Record<string, string | undefined>): OutboxPublisherEnv {
   return outboxPublisherEnvSchema.parse(env)
+}
+
+export function parsePriceEscalationEnv(
+  env: Record<string, string | undefined>,
+): PriceEscalationEnv {
+  return priceEscalationEnvSchema.parse(env)
 }
 
 export function parseNotifierEnv(env: Record<string, string | undefined>): NotifierEnv {

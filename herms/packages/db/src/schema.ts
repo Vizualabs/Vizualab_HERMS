@@ -43,6 +43,7 @@ export const paymentMethod = pgEnum('payment_method', [
   'cheque',
   'other',
 ])
+export const claimStatus = pgEnum('claim_status', ['drafted', 'confirmed', 'rejected'])
 
 const timestamps = {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -138,7 +139,12 @@ export const priceHistory = pgTable(
     createdBy: uuid('created_by').references(() => users.id),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
-  (table) => [index('price_history_item_effective_idx').on(table.equipmentItemId, table.effectiveDate)],
+  (table) => [
+    index('price_history_item_effective_idx').on(table.equipmentItemId, table.effectiveDate),
+    uniqueIndex('price_history_scheduled_effective_unique')
+      .on(table.equipmentItemId, table.effectiveDate)
+      .where(sql`${table.reason} = 'scheduled_escalation'`),
+  ],
 )
 
 export const auditLogs = pgTable(
@@ -394,6 +400,29 @@ export const discrepancies = pgTable(
   ],
 )
 
+export const damageClaims = pgTable(
+  'damage_claim',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    discrepancyId: uuid('discrepancy_id').notNull().unique().references(() => discrepancies.id),
+    orderId: uuid('order_id').references(() => orders.id),
+    customerId: uuid('customer_id').notNull().references(() => customers.id),
+    equipmentItemId: uuid('equipment_item_id').notNull().references(() => equipmentItems.id),
+    quantity: integer('quantity').notNull(),
+    unitPriceCents: integer('unit_price_cents').notNull(),
+    claimAmountCents: integer('claim_amount_cents').notNull(),
+    status: claimStatus('status').default('drafted').notNull(),
+    confirmedBy: uuid('confirmed_by').references(() => users.id),
+    confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [
+    index('damage_claim_status_idx').on(table.status),
+    index('damage_claim_customer_id_idx').on(table.customerId),
+    index('damage_claim_order_id_idx').on(table.orderId),
+  ],
+)
+
 export const noteTokens = pgTable(
   'note_token',
   {
@@ -431,4 +460,5 @@ export type RetentionNote = typeof retentionNotes.$inferSelect
 export type RetentionNoteLine = typeof retentionNoteLines.$inferSelect
 export type StockLedgerEntry = typeof stockLedger.$inferSelect
 export type Discrepancy = typeof discrepancies.$inferSelect
+export type DamageClaim = typeof damageClaims.$inferSelect
 export type NoteToken = typeof noteTokens.$inferSelect
