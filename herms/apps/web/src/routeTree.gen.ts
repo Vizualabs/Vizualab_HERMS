@@ -13,6 +13,7 @@ import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedApprovalsRouteImport } from './routes/_authenticated/approvals'
+import { Route as AuthenticatedClaimsRouteImport } from './routes/_authenticated/claims'
 import { Route as AuthenticatedCustomersRouteImport } from './routes/_authenticated/customers'
 import { Route as AuthenticatedFinanceRouteImport } from './routes/_authenticated/finance'
 import { Route as AuthenticatedItemsRouteImport } from './routes/_authenticated/items'
@@ -45,6 +46,11 @@ const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
 const AuthenticatedApprovalsRoute = AuthenticatedApprovalsRouteImport.update({
   id: '/approvals',
   path: '/approvals',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedClaimsRoute = AuthenticatedClaimsRouteImport.update({
+  id: '/claims',
+  path: '/claims',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedCustomersRoute = AuthenticatedCustomersRouteImport.update({
@@ -129,6 +135,7 @@ export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/login': typeof LoginRoute
   '/approvals': typeof AuthenticatedApprovalsRouteWithChildren
+  '/claims': typeof AuthenticatedClaimsRoute
   '/customers': typeof AuthenticatedCustomersRouteWithChildren
   '/finance': typeof AuthenticatedFinanceRoute
   '/items': typeof AuthenticatedItemsRouteWithChildren
@@ -147,6 +154,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/approvals': typeof AuthenticatedApprovalsRouteWithChildren
+  '/claims': typeof AuthenticatedClaimsRoute
   '/customers': typeof AuthenticatedCustomersRouteWithChildren
   '/finance': typeof AuthenticatedFinanceRoute
   '/items': typeof AuthenticatedItemsRouteWithChildren
@@ -168,6 +176,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/login': typeof LoginRoute
   '/_authenticated/approvals': typeof AuthenticatedApprovalsRouteWithChildren
+  '/_authenticated/claims': typeof AuthenticatedClaimsRoute
   '/_authenticated/customers': typeof AuthenticatedCustomersRouteWithChildren
   '/_authenticated/finance': typeof AuthenticatedFinanceRoute
   '/_authenticated/items': typeof AuthenticatedItemsRouteWithChildren
@@ -190,6 +199,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/approvals'
+    | '/claims'
     | '/customers'
     | '/finance'
     | '/items'
@@ -208,6 +218,7 @@ export interface FileRouteTypes {
   to:
     | '/login'
     | '/approvals'
+    | '/claims'
     | '/customers'
     | '/finance'
     | '/items'
@@ -228,6 +239,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/login'
     | '/_authenticated/approvals'
+    | '/_authenticated/claims'
     | '/_authenticated/customers'
     | '/_authenticated/finance'
     | '/_authenticated/items'
@@ -279,6 +291,13 @@ declare module '@tanstack/react-router' {
       path: '/approvals'
       fullPath: '/approvals'
       preLoaderRoute: typeof AuthenticatedApprovalsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/claims': {
+      id: '/_authenticated/claims'
+      path: '/claims'
+      fullPath: '/claims'
+      preLoaderRoute: typeof AuthenticatedClaimsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/customers': {
@@ -450,6 +469,7 @@ const AuthenticatedQuotationsRouteWithChildren =
 
 interface AuthenticatedRouteChildren {
   AuthenticatedApprovalsRoute: typeof AuthenticatedApprovalsRouteWithChildren
+  AuthenticatedClaimsRoute: typeof AuthenticatedClaimsRoute
   AuthenticatedCustomersRoute: typeof AuthenticatedCustomersRouteWithChildren
   AuthenticatedFinanceRoute: typeof AuthenticatedFinanceRoute
   AuthenticatedItemsRoute: typeof AuthenticatedItemsRouteWithChildren
@@ -463,6 +483,7 @@ interface AuthenticatedRouteChildren {
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedApprovalsRoute: AuthenticatedApprovalsRouteWithChildren,
+  AuthenticatedClaimsRoute: AuthenticatedClaimsRoute,
   AuthenticatedCustomersRoute: AuthenticatedCustomersRouteWithChildren,
   AuthenticatedFinanceRoute: AuthenticatedFinanceRoute,
   AuthenticatedItemsRoute: AuthenticatedItemsRouteWithChildren,

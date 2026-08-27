@@ -28,6 +28,7 @@ export function AppShell({
   const canUseOrders = canUseSales || user.role === 'store_admin'
     || user.role === 'finance'
   const canUseFinance = user.role === 'finance' || user.role === 'business_owner'
+  const canUseClaims = user.role === 'finance' || user.role === 'business_owner'
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -37,7 +38,7 @@ export function AppShell({
             <Link to="/" className="text-xl font-bold tracking-tight text-primary-strong">
               HERMS
             </Link>
-            <p className="text-xs text-muted-foreground">Identity & master data</p>
+            <p className="text-xs text-muted-foreground">Rental operations and finance</p>
           </div>
           <nav aria-label="Primary navigation" className="flex items-center gap-2">
             {canUseCustomers && (
@@ -93,6 +94,15 @@ export function AppShell({
                 activeProps={{ className: 'bg-primary text-primary-foreground hover:bg-primary' }}
               >
                 Finance
+              </Link>
+            )}
+            {canUseClaims && (
+              <Link
+                to="/claims"
+                className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-muted"
+                activeProps={{ className: 'bg-primary text-primary-foreground hover:bg-primary' }}
+              >
+                Claims
               </Link>
             )}
           </nav>

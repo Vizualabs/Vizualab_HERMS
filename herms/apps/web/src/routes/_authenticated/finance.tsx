@@ -148,8 +148,9 @@ function FinancePage() {
                       View frozen order lines
                     </Link>
                   </div>
-                  <dl className="grid gap-3 sm:grid-cols-3">
-                    <MoneyCard label="Invoice value" value={invoice.data.invoiceValueCents} currency={invoice.data.currency} />
+                  <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <MoneyCard label="Order value" value={invoice.data.orderValueCents} currency={invoice.data.currency} />
+                    <MoneyCard label="Confirmed claims" value={invoice.data.claimAmountCents} currency={invoice.data.currency} />
                     <MoneyCard label="Paid" value={invoice.data.paidAmountCents} currency={invoice.data.currency} />
                     <MoneyCard label="Outstanding" value={invoice.data.outstandingBalanceCents} currency={invoice.data.currency} />
                   </dl>
@@ -173,7 +174,8 @@ function FinancePage() {
                     <thead>
                       <tr className="border-b border-border text-muted-foreground">
                         <th className="py-3">Order</th>
-                        <th className="text-right">Invoice</th>
+                        <th className="text-right">Total billed</th>
+                        <th className="text-right">Claims</th>
                         <th className="text-right">Paid</th>
                         <th className="text-right">Outstanding</th>
                       </tr>
@@ -183,6 +185,7 @@ function FinancePage() {
                         <tr key={order.id} className="border-b border-border">
                           <td className="py-3 font-medium">{order.orderNumber}</td>
                           <td className="text-right font-mono">{formatMoney(order.invoiceValueCents, balance.data.currency)}</td>
+                          <td className="text-right font-mono">{formatMoney(order.claimAmountCents, balance.data.currency)}</td>
                           <td className="text-right font-mono">{formatMoney(order.paidAmountCents, balance.data.currency)}</td>
                           <td className="text-right font-mono">{formatMoney(order.outstandingBalanceCents, balance.data.currency)}</td>
                         </tr>

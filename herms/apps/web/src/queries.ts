@@ -25,6 +25,8 @@ export const queryKeys = {
   invoice: (id: string) => ['finance', 'invoices', id] as const,
   customerBalance: (id: string) => ['finance', 'customers', id, 'balance'] as const,
   monthlyFinance: (month: string) => ['finance', 'monthly', month] as const,
+  claims: ['claims'] as const,
+  claimableDiscrepancies: ['discrepancies', 'claimable'] as const,
 }
 
 export const sessionQuery = queryOptions({
@@ -85,5 +87,17 @@ export const customerBalanceQuery = (id: string) => queryOptions({
 export const monthlyFinanceQuery = (month: string) => queryOptions({
   queryKey: queryKeys.monthlyFinance(month),
   queryFn: () => api.monthlyFinance(month),
+  staleTime: 5_000,
+})
+
+export const claimsQuery = queryOptions({
+  queryKey: queryKeys.claims,
+  queryFn: api.claims,
+  staleTime: 5_000,
+})
+
+export const claimableDiscrepanciesQuery = queryOptions({
+  queryKey: queryKeys.claimableDiscrepancies,
+  queryFn: api.claimableDiscrepancies,
   staleTime: 5_000,
 })

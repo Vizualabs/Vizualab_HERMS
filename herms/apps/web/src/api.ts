@@ -1,5 +1,6 @@
 import type {
   CustomerInput,
+  ClaimStatus,
   CustomerType,
   EquipmentInput,
   PriceChangeReason,
@@ -128,6 +129,8 @@ export type Invoice = {
   customerName: string
   status: OrderStatus
   createdAt: string
+  orderValueCents: number
+  claimAmountCents: number
   invoiceValueCents: number
   paidAmountCents: number
   outstandingBalanceCents: number
@@ -155,10 +158,49 @@ export type CustomerBalance = {
     id: string
     orderNumber: string
     status: OrderStatus
+    orderValueCents: number
+    claimAmountCents: number
     invoiceValueCents: number
     paidAmountCents: number
     outstandingBalanceCents: number
   }>
+}
+
+export type ClaimableDiscrepancy = {
+  id: string
+  orderId: string
+  orderNumber: string
+  customerId: string
+  customerName: string
+  equipmentItemId: string
+  equipmentName: string
+  quantity: number
+  reason: string | null
+  status: 'open' | 'written_off'
+  damageRecordedAt: string
+  unitPriceCents: number
+  claimAmountCents: number
+}
+
+export type DamageClaim = {
+  id: string
+  discrepancyId: string
+  orderId: string | null
+  orderNumber: string | null
+  customerId: string
+  customerName: string
+  equipmentItemId: string
+  equipmentName: string
+  quantity: number
+  unitPriceCents: number
+  claimAmountCents: number
+  status: ClaimStatus
+  confirmedBy: string | null
+  confirmedAt: string | null
+  damageRecordedAt: string
+  reason: string | null
+  createdAt: string
+  updatedAt: string
 }
 
 export type Expense = {
@@ -401,6 +443,17 @@ export const api = {
     request<Expense>('/api/expenses', { method: 'POST', body: JSON.stringify(input) }),
   monthlyFinance: (month: string) =>
     request<MonthlyFinance>(`/api/finance/monthly?month=${encodeURIComponent(month)}`),
+  claimableDiscrepancies: () =>
+    request<ClaimableDiscrepancy[]>('/api/discrepancies/claimable'),
+  claims: () => request<DamageClaim[]>('/api/claims'),
+  draftClaim: (discrepancyId: string) =>
+    request<DamageClaim>(`/api/discrepancies/${discrepancyId}/claim`, {
+      method: 'POST', body: '{}',
+    }),
+  confirmClaim: (id: string) =>
+    request<DamageClaim>(`/api/claims/${id}/confirm`, { method: 'POST', body: '{}' }),
+  rejectClaim: (id: string) =>
+    request<DamageClaim>(`/api/claims/${id}/reject`, { method: 'POST', body: '{}' }),
   fieldStaffRecipients: () =>
     request<FieldStaffRecipient[]>('/api/notification-recipients/field-staff'),
   deliveryNotes: (orderId: string) => request<DeliveryNoteSummary[]>(`/api/orders/${orderId}/delivery-notes`),
