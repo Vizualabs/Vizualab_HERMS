@@ -3,7 +3,6 @@ import { and, count, eq } from 'drizzle-orm'
 import {
   auditLogs,
   createDatabase,
-  createEscalationService,
   damageClaims,
   discrepancies,
   priceHistory,
@@ -193,16 +192,52 @@ const staffClaimResponse = await request(
 )
 assert(staffClaimResponse.status === 409, 'A staff-responsible discrepancy was accepted as a claim')
 
-const effectiveDate = new Date(customerDiscrepancy.createdAt.getTime() + 1_000)
-const escalationRunAt = new Date(effectiveDate.getTime() + 1_000)
-const escalation = createEscalationService(db, { effectiveDate, mode: 'automatic' })
-const firstRun = await escalation.run(escalationRunAt, `phase7/${runKey}`)
-const secondRun = await escalation.run(escalationRunAt, `phase7-retry/${runKey}`)
+const escalationPreviewResponse = await request('/api/price-escalation', ownerCookie)
+assert(escalationPreviewResponse.status === 200, 'Owner price-escalation preview failed')
+const escalationPreview = (await escalationPreviewResponse.json()) as {
+  data: Array<{ itemId: string; oldPriceCents: number; newPriceCents: number }>
+}
 assert(
-  firstRun.escalated.some((row) => row.itemId === customerItem.data.id),
+  escalationPreview.data.some((row) => row.itemId === customerItem.data.id
+    && row.oldPriceCents === 10_000
+    && row.newPriceCents === 11_000),
+  'Owner preview did not calculate the ten-percent increase',
+)
+assert((await request('/api/price-escalation', financeCookie, {
+  method: 'POST', body: '{}',
+})).status === 403, 'Finance was allowed to trigger a Business Owner price escalation')
+
+const escalationRequestId = crypto.randomUUID()
+const firstEscalationResponse = await request('/api/price-escalation', ownerCookie, {
+  method: 'POST',
+  body: '{}',
+  headers: { 'x-request-id': escalationRequestId },
+})
+assert(firstEscalationResponse.status === 200, 'Owner price escalation failed')
+const firstRun = (await firstEscalationResponse.json()) as {
+  data: {
+    effectiveDate: string
+    replayed: boolean
+    items: Array<{ itemId: string; oldPriceCents: number; newPriceCents: number }>
+  }
+}
+const secondEscalationResponse = await request('/api/price-escalation', ownerCookie, {
+  method: 'POST',
+  body: '{}',
+  headers: { 'x-request-id': escalationRequestId },
+})
+const secondRun = (await secondEscalationResponse.json()) as {
+  data: { replayed: boolean; items: Array<{ itemId: string }> }
+}
+assert(
+  firstRun.data.items.some((row) => row.itemId === customerItem.data.id),
   'The customer damage item was not escalated',
 )
-assert(secondRun.escalated.length === 0, 'A repeated escalation run created duplicate changes')
+assert(
+  secondRun.data.replayed && secondRun.data.items.length === 0,
+  'A repeated owner request created duplicate price changes',
+)
+const effectiveDate = new Date(firstRun.data.effectiveDate)
 
 const claimableResponse = await request('/api/discrepancies/claimable', financeCookie)
 assert(claimableResponse.status === 200, 'Claimable discrepancy lookup failed')
@@ -292,10 +327,10 @@ assert(
   'Confirmed claim was not integrated into the payable order balance',
 )
 
-const [scheduledCount] = await db.select({ value: count() }).from(priceHistory).where(and(
+const [ownerEscalationCount] = await db.select({ value: count() }).from(priceHistory).where(and(
   eq(priceHistory.equipmentItemId, customerItem.data.id),
   eq(priceHistory.effectiveDate, effectiveDate),
-  eq(priceHistory.reason, 'scheduled_escalation'),
+  eq(priceHistory.reason, 'owner_escalation'),
 ))
 const [claimAuditCount] = await db.select({ value: count() }).from(auditLogs).where(and(
   eq(auditLogs.action, 'damage_claim.confirm'),
@@ -305,7 +340,7 @@ const [confirmedClaimCount] = await db.select({ value: count() }).from(damageCla
   eq(damageClaims.id, draft.data.id),
   eq(damageClaims.status, 'confirmed'),
 ))
-assert(scheduledCount?.value === 1, 'Escalation idempotency key did not hold')
+assert(ownerEscalationCount?.value === 1, 'Owner escalation idempotency key did not hold')
 assert(claimAuditCount?.value === 1, 'Claim confirmation audit is missing')
 assert(confirmedClaimCount?.value === 1, 'Confirmed claim row is missing')
 
@@ -325,11 +360,15 @@ console.log(JSON.stringify({
   orderId: order.data.id,
   claimId: draft.data.id,
   damageDatePriceCents: draft.data.unitPriceCents,
-  escalatedPriceCents: firstRun.escalated.find((row) => row.itemId === customerItem.data.id)?.newPriceCents,
+  escalatedPriceCents: firstRun.data.items.find(
+    (row) => row.itemId === customerItem.data.id,
+  )?.newPriceCents,
+  ownerTriggeredEscalation: true,
+  financeEscalationRejected: true,
   staffClaimRejected: true,
   draftBalanceUnchanged: true,
   confirmedBalanceIncreaseCents: 10_000,
-  escalationRetryCreatedRows: secondRun.escalated.length,
+  escalationRetryCreatedRows: secondRun.data.items.length,
   immutablePriceHistory: true,
   claimAudited: true,
 }))
