@@ -1,8 +1,10 @@
+import { REQUEST_ID_HEADER } from '@herms/shared'
 import type {
   CustomerInput,
   ClaimStatus,
   CustomerType,
   EquipmentInput,
+  ManualPriceChangeReason,
   PriceChangeReason,
   RecurringCustomerInput,
   SessionUser,
@@ -55,6 +57,19 @@ export type EquipmentItem = {
   reorderThreshold: number | null
   createdAt: string
   updatedAt: string
+}
+
+export type PriceEscalationItem = {
+  itemId: string
+  itemName: string
+  oldPriceCents: number
+  newPriceCents: number
+}
+
+export type PriceEscalationResult = {
+  effectiveDate: string
+  replayed: boolean
+  items: PriceEscalationItem[]
 }
 
 export type PriceHistoryEntry = {
@@ -415,13 +430,21 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(input),
     }),
-  changePrice: (id: string, newPriceCents: number, reason: PriceChangeReason) =>
+  changePrice: (id: string, newPriceCents: number, reason: ManualPriceChangeReason) =>
     request<EquipmentItem>(`/api/items/${id}/price`, {
       method: 'POST',
       body: JSON.stringify({ newPriceCents, reason }),
     }),
   priceHistory: (id: string) =>
     request<PriceHistoryEntry[]>(`/api/items/${id}/price-history`),
+  priceEscalationPreview: () =>
+    request<PriceEscalationItem[]>('/api/price-escalation'),
+  applyPriceEscalation: () =>
+    request<PriceEscalationResult>('/api/price-escalation', {
+      method: 'POST',
+      headers: { [REQUEST_ID_HEADER]: crypto.randomUUID() },
+      body: '{}',
+    }),
   quotations: () => request<QuotationSummary[]>('/api/quotations'),
   quotation: (id: string) => request<QuotationDetail>(`/api/quotations/${id}`),
   createQuotation: (input: QuotationInput) =>

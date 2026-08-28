@@ -2,17 +2,34 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
 
 import { ApiError, api, formatMinorUnits } from '../../api'
-import { itemsQuery, queryKeys } from '../../queries'
+import {
+  itemsQuery,
+  priceEscalationQuery,
+  queryKeys,
+  sessionQuery,
+} from '../../queries'
 
 export const Route = createFileRoute('/_authenticated/items')({ component: ItemsPage })
 
 function ItemsPage() {
   const items = useQuery(itemsQuery)
+  const session = useQuery(sessionQuery)
+  const isOwner = session.data?.role === 'business_owner'
+  const escalation = useQuery({ ...priceEscalationQuery, enabled: isOwner })
   const queryClient = useQueryClient()
   const createItem = useMutation({
     mutationFn: api.createItem,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.items })
+    },
+  })
+  const applyEscalation = useMutation({
+    mutationFn: api.applyPriceEscalation,
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.items }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.priceEscalation }),
+      ])
     },
   })
 
@@ -84,6 +101,59 @@ function ItemsPage() {
             {createItem.isPending ? 'Creating…' : 'Create equipment'}
           </button>
         </form>
+        {isOwner && (
+          <section className="mt-6 border-t border-border pt-6">
+            <p className="text-sm font-semibold uppercase tracking-widest text-primary">
+              Owner control
+            </p>
+            <h2 className="mt-2 text-lg font-semibold">Increase all prices by 10%</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Run this only when you decide prices should increase. The change takes effect
+              immediately and is permanently recorded in price history.
+            </p>
+            {escalation.isPending && (
+              <p className="mt-4 text-sm text-muted-foreground">Checking equipment prices...</p>
+            )}
+            {escalation.data && (
+              <p className="mt-4 rounded-xl bg-muted p-3 text-sm">
+                {escalation.data.length} equipment price
+                {escalation.data.length === 1 ? '' : 's'} will be increased.
+              </p>
+            )}
+            {escalation.error && (
+              <p role="alert" className="mt-4 text-sm text-danger">
+                {escalation.error instanceof ApiError
+                  ? escalation.error.message
+                  : 'Unable to preview the price escalation'}
+              </p>
+            )}
+            {applyEscalation.data && !applyEscalation.data.replayed && (
+              <p role="status" className="mt-4 text-sm font-medium text-primary-strong">
+                Increased {applyEscalation.data.items.length} equipment prices successfully.
+              </p>
+            )}
+            {applyEscalation.error && (
+              <p role="alert" className="mt-4 text-sm text-danger">
+                {applyEscalation.error instanceof ApiError
+                  ? applyEscalation.error.message
+                  : 'Unable to increase equipment prices'}
+              </p>
+            )}
+            <button
+              type="button"
+              className="button-primary mt-4 w-full"
+              disabled={applyEscalation.isPending || !escalation.data?.length}
+              onClick={() => {
+                const confirmed = window.confirm(
+                  `Increase all ${escalation.data?.length ?? 0} equipment prices by 10% now? This price-history entry cannot be removed.`,
+                )
+                if (confirmed) applyEscalation.mutate()
+              }}
+            >
+              {applyEscalation.isPending ? 'Increasing prices...' : 'Increase prices by 10%'}
+            </button>
+          </section>
+        )}
       </aside>
     </div>
   )

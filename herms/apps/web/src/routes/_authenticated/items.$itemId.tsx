@@ -1,4 +1,4 @@
-import type { PriceChangeReason } from '@herms/shared'
+import type { ManualPriceChangeReason } from '@herms/shared'
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
 
@@ -30,7 +30,7 @@ function ItemDetailPage() {
     onSuccess: invalidateItem,
   })
   const changePrice = useMutation({
-    mutationFn: (input: { newPriceCents: number; reason: PriceChangeReason }) =>
+    mutationFn: (input: { newPriceCents: number; reason: ManualPriceChangeReason }) =>
       api.changePrice(itemId, input.newPriceCents, input.reason),
     onSuccess: invalidateItem,
   })
@@ -98,7 +98,7 @@ function ItemDetailPage() {
                   const form = new FormData(event.currentTarget)
                   changePrice.mutate({
                     newPriceCents: Number(form.get('newPriceCents')),
-                    reason: String(form.get('reason')) as PriceChangeReason,
+                    reason: String(form.get('reason')) as ManualPriceChangeReason,
                   })
                 }}
               >
@@ -113,7 +113,6 @@ function ItemDetailPage() {
                   <select name="reason" className="input mt-2">
                     <option value="negotiated">Negotiated</option>
                     <option value="correction">Correction</option>
-                    <option value="scheduled_escalation">Scheduled escalation</option>
                   </select>
                 </label>
                 {changePrice.error && <ErrorText error={changePrice.error} />}

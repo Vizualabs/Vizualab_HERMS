@@ -9,6 +9,7 @@ export const queryKeys = {
   items: ['items'] as const,
   item: (id: string) => ['items', id] as const,
   priceHistory: (id: string) => ['items', id, 'price-history'] as const,
+  priceEscalation: ['price-escalation'] as const,
   quotations: ['quotations'] as const,
   quotation: (id: string) => ['quotations', id] as const,
   orders: ['orders'] as const,
@@ -45,6 +46,12 @@ export const customersQuery = queryOptions({
 export const itemsQuery = queryOptions({
   queryKey: queryKeys.items,
   queryFn: api.items,
+  staleTime: 15_000,
+})
+
+export const priceEscalationQuery = queryOptions({
+  queryKey: queryKeys.priceEscalation,
+  queryFn: api.priceEscalationPreview,
   staleTime: 15_000,
 })
 
