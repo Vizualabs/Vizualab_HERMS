@@ -8,6 +8,7 @@ import type {
   IdentityService,
   MasterDataService,
   NotificationService,
+  PriceEscalationService,
   RetentionService,
 } from '@herms/db'
 import { REQUEST_ID_HEADER, type SessionUser, type UserRole } from '@herms/shared'
@@ -392,7 +393,36 @@ function createServices() {
     rejectClaim: async () => ({ ...damageClaim, status: 'rejected' as const }),
   } as unknown as ClaimService
 
-  return { identity, masterData, notifications, commercial, delivery, finance, retention, claims }
+  const priceEscalation = {
+    preview: async () => [{
+      itemId: quotation.lines[0]!.equipmentItemId,
+      itemName: 'Test item',
+      oldPriceCents: 2500,
+      newPriceCents: 2750,
+    }],
+    apply: async () => ({
+      effectiveDate: new Date('2026-08-28T00:00:00Z'),
+      replayed: false,
+      items: [{
+        itemId: quotation.lines[0]!.equipmentItemId,
+        itemName: 'Test item',
+        oldPriceCents: 2500,
+        newPriceCents: 2750,
+      }],
+    }),
+  } as unknown as PriceEscalationService
+
+  return {
+    identity,
+    masterData,
+    notifications,
+    commercial,
+    delivery,
+    finance,
+    retention,
+    claims,
+    priceEscalation,
+  }
 }
 
 function createTestApp(healthCheck: () => Promise<number> = async () => 12.34) {
@@ -840,6 +870,23 @@ describe('Phase 7 API', () => {
     expect((await app.request('/api/claims', { headers: { Cookie: ownerCookie } })).status).toBe(200)
     expect((await app.request('/api/claims/claim/confirm', {
       method: 'POST', headers: { Cookie: ownerCookie, 'Content-Type': 'application/json' }, body: '{}',
+    })).status).toBe(403)
+
+    expect((await app.request('/api/price-escalation', {
+      headers: { Cookie: ownerCookie },
+    })).status).toBe(200)
+    expect((await app.request('/api/price-escalation', {
+      method: 'POST', headers: { Cookie: ownerCookie, 'Content-Type': 'application/json' }, body: '{}',
+    })).status).toBe(200)
+    expect((await app.request('/api/items/item/price', {
+      method: 'POST',
+      headers: { Cookie: ownerCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ newPriceCents: 2750, reason: 'owner_escalation' }),
+    })).status).toBe(400)
+
+    const financeCookie = await sessionCookie(app, 'finance')
+    expect((await app.request('/api/price-escalation', {
+      method: 'POST', headers: { Cookie: financeCookie, 'Content-Type': 'application/json' }, body: '{}',
     })).status).toBe(403)
 
     const salesCookie = await sessionCookie(app, 'sales')

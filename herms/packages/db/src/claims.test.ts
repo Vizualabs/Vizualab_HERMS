@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { calculateEscalatedPriceCents, multiplyMinorUnits } from '@herms/shared'
 
-import { assertClaimEligibility, escalationEffectiveDates } from './claims'
+import { assertClaimEligibility } from './claims'
 
 describe('Phase 7 claim invariants', () => {
   test('rejects staff-responsible damage before claim creation', () => {
@@ -32,16 +32,5 @@ describe('Phase 7 escalation rules', () => {
   test('rounds a ten-percent increase half-up in one shared function', () => {
     expect(calculateEscalatedPriceCents(105)).toBe(116)
     expect(calculateEscalatedPriceCents(100)).toBe(110)
-  })
-
-  test('generates calendar-safe six-month effective dates', () => {
-    expect(escalationEffectiveDates(
-      new Date('2026-08-31T00:00:00Z'),
-      new Date('2027-09-01T00:00:00Z'),
-    ).map((date) => date.toISOString())).toEqual([
-      '2026-08-31T00:00:00.000Z',
-      '2027-02-28T00:00:00.000Z',
-      '2027-08-31T00:00:00.000Z',
-    ])
   })
 })

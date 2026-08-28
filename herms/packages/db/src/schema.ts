@@ -24,6 +24,7 @@ export const userRole = pgEnum('user_role', [
 export const customerType = pgEnum('customer_type', ['recurring', 'new'])
 export const priceChangeReason = pgEnum('price_change_reason', [
   'scheduled_escalation',
+  'owner_escalation',
   'negotiated',
   'correction',
 ])

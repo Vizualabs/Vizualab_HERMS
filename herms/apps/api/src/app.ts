@@ -9,6 +9,7 @@ import {
   type IdentityService,
   type MasterDataService,
   type NotificationService,
+  type PriceEscalationService,
   type RetentionService,
 } from '@herms/db'
 import {
@@ -61,6 +62,7 @@ export type AppDependencies = {
   delivery: DeliveryService
   finance: FinanceService
   claims: ClaimService
+  priceEscalation: PriceEscalationService
   retention: RetentionService
   auth: AuthConfig
   logger?: AppLogger
@@ -118,6 +120,7 @@ export function createApp({
   delivery,
   finance,
   claims,
+  priceEscalation,
   retention,
   auth,
   logger = jsonLogger,
@@ -346,6 +349,12 @@ export function createApp({
     })
 
   const claimRoutes = financeRoutes
+    .get('/api/price-escalation', requireRoles('business_owner'), async (c) =>
+      c.json({ data: await priceEscalation.preview() }),
+    )
+    .post('/api/price-escalation', requireRoles('business_owner'), async (c) =>
+      c.json({ data: await priceEscalation.apply(actor(c)) }),
+    )
     .get('/api/discrepancies/claimable', requireRoles('finance'), async (c) =>
       c.json({ data: await claims.listClaimableDiscrepancies(c.get('user')) }),
     )

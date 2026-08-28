@@ -12,16 +12,6 @@ Parameters:
     Default: 20
     MinValue: 3
     MaxValue: 25
-  PriceEscalationEffectiveDate:
-    Type: String
-    Description: ISO-8601 timestamp for the first six-month escalation occurrence
-  PriceEscalationMode:
-    Type: String
-    Default: automatic
-    AllowedValues:
-      - automatic
-      - approval_required
-    Description: D-03 feature flag; approval_required calculates due dates without changing prices
 
 Resources:
   HermsApi:
@@ -44,32 +34,6 @@ Resources:
         AuthType: NONE
         InvokeMode: BUFFERED
 
-  HermsPriceEscalation:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: herms-price-escalation
-      CodeUri: ../../apps/api/dist/
-      Handler: scheduler.handler
-      Runtime: nodejs22.x
-      Architectures:
-        - arm64
-      MemorySize: 512
-      Timeout: !Ref ApiTimeoutSeconds
-      Tracing: Active
-      Environment:
-        Variables:
-          APP_ENV: production
-          DATABASE_URL: !Ref DatabaseUrl
-          PRICE_ESCALATION_EFFECTIVE_DATE: !Ref PriceEscalationEffectiveDate
-          PRICE_ESCALATION_MODE: !Ref PriceEscalationMode
-      Events:
-        DailyEscalation:
-          Type: ScheduleV2
-          Properties:
-            ScheduleExpression: cron(15 0 * * ? *)
-            ScheduleExpressionTimezone: Asia/Colombo
-            State: ENABLED
-
 Outputs:
   ApiFunctionName:
     Value: !Ref HermsApi
@@ -77,5 +41,3 @@ Outputs:
     Value: !GetAtt HermsApiUrl.FunctionUrl
   ApiTimeoutSeconds:
     Value: !Ref ApiTimeoutSeconds
-  PriceEscalationFunctionName:
-    Value: !Ref HermsPriceEscalation

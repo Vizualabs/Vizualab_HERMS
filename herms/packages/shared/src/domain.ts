@@ -12,9 +12,11 @@ export const USER_ROLES = [
 export const CUSTOMER_TYPES = ['recurring', 'new'] as const
 export const PRICE_CHANGE_REASONS = [
   'scheduled_escalation',
+  'owner_escalation',
   'negotiated',
   'correction',
 ] as const
+export const MANUAL_PRICE_CHANGE_REASONS = ['negotiated', 'correction'] as const
 export const QUOTATION_STATUSES = ['sent', 'accepted', 'rejected', 'expired'] as const
 export const ORDER_STATUSES = ['open', 'fully_returned', 'cancelled'] as const
 export const NOTE_STATUSES = ['draft', 'submitted', 'pending_approval', 'approved', 'rejected', 'reopened'] as const
@@ -27,6 +29,7 @@ export const CLAIM_STATUSES = ['drafted', 'confirmed', 'rejected'] as const
 export type UserRole = (typeof USER_ROLES)[number]
 export type CustomerType = (typeof CUSTOMER_TYPES)[number]
 export type PriceChangeReason = (typeof PRICE_CHANGE_REASONS)[number]
+export type ManualPriceChangeReason = (typeof MANUAL_PRICE_CHANGE_REASONS)[number]
 export type QuotationStatus = (typeof QUOTATION_STATUSES)[number]
 export type OrderStatus = (typeof ORDER_STATUSES)[number]
 export type NoteStatus = (typeof NOTE_STATUSES)[number]
@@ -76,7 +79,7 @@ export const equipmentUpdateSchema = equipmentInputSchema
 
 export const priceChangeInputSchema = z.object({
   newPriceCents: z.number().int().min(0),
-  reason: z.enum(PRICE_CHANGE_REASONS),
+  reason: z.enum(MANUAL_PRICE_CHANGE_REASONS),
   effectiveDate: z.string().datetime({ offset: true }).optional(),
 })
 

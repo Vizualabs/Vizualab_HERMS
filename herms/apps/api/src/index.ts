@@ -8,6 +8,7 @@ import {
   createIdentityService,
   createMasterDataService,
   createNotificationService,
+  createPriceEscalationService,
   createRetentionService,
 } from '@herms/db'
 import { parseApiEnv } from '@herms/shared'
@@ -44,6 +45,7 @@ const app = createApp({
     currency: env.BUSINESS_CURRENCY,
   }),
   claims: createClaimService(db),
+  priceEscalation: createPriceEscalationService(db),
   retention: createRetentionService(db, {
     timezone: env.BUSINESS_TIMEZONE,
     retentionNoteNumberPrefix: env.RETENTION_NOTE_NUMBER_PREFIX,

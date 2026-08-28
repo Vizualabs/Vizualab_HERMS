@@ -50,6 +50,13 @@
       "when": 1787529606000,
       "tag": "0006_damage_claims_price_escalation",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1787529607000,
+      "tag": "0007_owner_price_escalation",
+      "breakpoints": true
     }
   ]
 }

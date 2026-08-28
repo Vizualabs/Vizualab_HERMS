@@ -5,7 +5,6 @@ import {
   parseMigrationEnv,
   parseNotifierEnv,
   parseOutboxPublisherEnv,
-  parsePriceEscalationEnv,
   parseRuntimeEnv,
   parseSeedEnv,
 } from './env'
@@ -63,16 +62,5 @@ describe('environment validation', () => {
     expect(env.OUTBOX_BATCH_SIZE).toBe(10)
     expect(env.OUTBOX_MAX_ATTEMPTS).toBe(5)
     expect(env.OUTBOX_LEASE_SECONDS).toBe(240)
-  })
-
-  test('requires an explicit escalation anchor and supports the D-03 mode flag', () => {
-    expect(() => parsePriceEscalationEnv({
-      DATABASE_URL: 'postgresql://user:password@example.test/db',
-    })).toThrow()
-    expect(parsePriceEscalationEnv({
-      DATABASE_URL: 'postgresql://user:password@example.test/db',
-      PRICE_ESCALATION_EFFECTIVE_DATE: '2027-01-01T00:00:00+05:30',
-      PRICE_ESCALATION_MODE: 'approval_required',
-    }).PRICE_ESCALATION_MODE).toBe('approval_required')
   })
 })

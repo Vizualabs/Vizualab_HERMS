@@ -1,5 +1,5 @@
 import { calculateEscalatedPriceCents, multiplyMinorUnits, type SessionUser } from '@herms/shared'
-import { and, desc, eq, lte, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, lte, sql } from 'drizzle-orm'
 
 import type { Database } from './client'
 import {
@@ -374,158 +374,102 @@ export function createClaimService(db: Database) {
 
 export type ClaimService = ReturnType<typeof createClaimService>
 
-export type EscalationConfig = {
-  effectiveDate: Date
-  mode: 'automatic' | 'approval_required'
-}
-
-function addCalendarMonths(date: Date, months: number) {
-  const target = new Date(date)
-  const day = target.getUTCDate()
-  target.setUTCDate(1)
-  target.setUTCMonth(target.getUTCMonth() + months)
-  const lastDay = new Date(Date.UTC(
-    target.getUTCFullYear(),
-    target.getUTCMonth() + 1,
-    0,
-  )).getUTCDate()
-  target.setUTCDate(Math.min(day, lastDay))
-  return target
-}
-
-export function escalationEffectiveDates(anchor: Date, through: Date) {
-  if (Number.isNaN(anchor.getTime()) || Number.isNaN(through.getTime())) {
-    throw new RangeError('Escalation dates must be valid')
+export function createPriceEscalationService(db: Database) {
+  async function preview() {
+    const rows = await db
+      .select({
+        itemId: equipmentItems.id,
+        itemName: equipmentItems.name,
+        oldPriceCents: equipmentItems.currentUnitPriceCents,
+      })
+      .from(equipmentItems)
+      .orderBy(asc(equipmentItems.name))
+    return rows.map((row) => ({
+      ...row,
+      newPriceCents: calculateEscalatedPriceCents(row.oldPriceCents),
+    }))
   }
-  const dates: Date[] = []
-  for (let occurrence = 0; ; occurrence += 1) {
-    const date = addCalendarMonths(anchor, occurrence * 6)
-    if (date > through) break
-    dates.push(date)
-    if (dates.length > 1_000) throw new RangeError('Escalation schedule is unreasonably large')
-  }
-  return dates
-}
 
-export function createEscalationService(db: Database, config: EscalationConfig) {
   return {
-    async run(runAt = new Date(), requestId = `scheduled-escalation/${runAt.toISOString()}`) {
-      const effectiveDates = escalationEffectiveDates(config.effectiveDate, runAt)
-      if (config.mode === 'approval_required') {
-        return { mode: config.mode, effectiveDates, escalated: [], skippedMissingPrice: [] }
+    preview,
+
+    async apply(actor: AuditActor, effectiveDate = new Date()) {
+      if (Number.isNaN(effectiveDate.getTime())) {
+        throw new DataConflictError('The price escalation time is invalid')
+      }
+      const proposed = await preview()
+      if (proposed.length === 0) {
+        throw new DataConflictError('No equipment prices are available to escalate')
       }
 
-      const escalated: Array<{
+      const result = await db.execute<{
         itemId: string
-        effectiveDate: Date
-        oldPriceCents: number
-        newPriceCents: number
-      }> = []
-      const skippedMissingPrice: string[] = []
-      for (const effectiveDate of effectiveDates) {
-        const candidateResult = await db.execute<{
-          id: string
-          oldPriceCents: number | string
-          currentPriceAfterCents: number | string
-        }>(sql`
-          SELECT item.id,
-            old_history.new_price_cents AS "oldPriceCents",
-            current_history.new_price_cents AS "currentPriceAfterCents"
-          FROM ${equipmentItems} item
-          INNER JOIN LATERAL (
-            SELECT history.new_price_cents
-            FROM ${priceHistory} history
-            WHERE history.equipment_item_id = item.id
-              AND history.effective_date <= ${effectiveDate}
-            ORDER BY history.effective_date DESC, history.created_at DESC
-            LIMIT 1
-          ) old_history ON true
-          INNER JOIN LATERAL (
-            SELECT history.new_price_cents
-            FROM ${priceHistory} history
-            WHERE history.equipment_item_id = item.id
-              AND history.effective_date <= ${runAt}
-            ORDER BY history.effective_date DESC, history.created_at DESC
-            LIMIT 1
-          ) current_history ON true
-          WHERE item.created_at <= ${effectiveDate}
-            AND NOT EXISTS (
-              SELECT 1 FROM ${priceHistory} history
-              WHERE history.equipment_item_id = item.id
-                AND history.effective_date = ${effectiveDate}
-                AND history.reason = 'scheduled_escalation'
-            )
-        `)
-        const candidates = candidateResult.rows
-
-        for (const candidate of candidates) {
-          if (candidate.oldPriceCents === null || candidate.oldPriceCents === undefined
-            || candidate.currentPriceAfterCents === null
-            || candidate.currentPriceAfterCents === undefined) {
-            skippedMissingPrice.push(candidate.id)
-            continue
-          }
-          const oldPriceCents = databaseInteger(candidate.oldPriceCents, 'Escalation source price')
-          const currentPriceAfterCents = databaseInteger(
-            candidate.currentPriceAfterCents,
-            'Current effective price',
+        itemName: string
+        oldPriceCents: number | string
+        newPriceCents: number | string
+      }>(sql`
+        WITH escalation_lock AS MATERIALIZED (
+          SELECT pg_advisory_xact_lock(hashtextextended('owner-price-escalation', 0))
+        ), request_gate AS MATERIALIZED (
+          SELECT 1
+          FROM escalation_lock
+          WHERE NOT EXISTS (
+            SELECT 1 FROM ${auditLogs} audit
+            WHERE audit.action = 'price.owner_escalation'
+              AND audit.request_id = ${actor.requestId}
           )
-          const newPriceCents = calculateEscalatedPriceCents(oldPriceCents)
-          const result = await db.execute<{ id: string }>(sql`
-            WITH inserted AS (
-              INSERT INTO ${priceHistory} (
-                equipment_item_id, old_price_cents, new_price_cents,
-                effective_date, reason, created_by
-              ) VALUES (
-                ${candidate.id}::uuid, ${oldPriceCents}, ${newPriceCents},
-                ${effectiveDate}, 'scheduled_escalation'::price_change_reason, NULL
-              )
-              ON CONFLICT (equipment_item_id, effective_date)
-                WHERE reason = 'scheduled_escalation'
-              DO NOTHING
-              RETURNING *
-            ), updated AS (
-              UPDATE ${equipmentItems} item
-              SET current_unit_price_cents = CASE
-                    WHEN ${effectiveDate} >= (
-                      SELECT max(history.effective_date)
-                      FROM ${priceHistory} history
-                      WHERE history.equipment_item_id = item.id
-                        AND history.effective_date <= ${runAt}
-                    ) THEN ${newPriceCents}::integer
-                    ELSE ${currentPriceAfterCents}::integer
-                  END,
-                  updated_at = ${runAt}
-              FROM inserted
-              WHERE item.id = inserted.equipment_item_id
-              RETURNING item.id
-            ), audited AS (
-              INSERT INTO ${auditLogs} (
-                actor_type, actor_id, action, entity_type, entity_id,
-                before, after, request_id
-              )
-              SELECT 'user'::audit_actor_type, NULL, 'price.scheduled_escalation',
-                'price_history', inserted.id,
-                jsonb_build_object('unitPriceCents', inserted.old_price_cents),
-                to_jsonb(inserted.*), ${requestId}
-              FROM inserted INNER JOIN updated ON updated.id = inserted.equipment_item_id
-            )
-            SELECT inserted.id FROM inserted INNER JOIN updated
-              ON updated.id = inserted.equipment_item_id
-          `)
-          if (result.rows[0]) {
-            escalated.push({
-              itemId: candidate.id,
-              effectiveDate,
-              oldPriceCents,
-              newPriceCents,
-            })
-          }
-        }
+        ), inserted AS (
+          INSERT INTO ${priceHistory} (
+            equipment_item_id, old_price_cents, new_price_cents,
+            effective_date, reason, created_by
+          )
+          SELECT item.id, item.current_unit_price_cents,
+            ((item.current_unit_price_cents::bigint * 110 + 50) / 100)::integer,
+            ${effectiveDate}, 'owner_escalation'::price_change_reason, ${actor.id}::uuid
+          FROM ${equipmentItems} item, request_gate
+          RETURNING *
+        ), updated AS (
+          UPDATE ${equipmentItems} item
+          SET current_unit_price_cents = inserted.new_price_cents,
+            updated_at = ${effectiveDate}
+          FROM inserted
+          WHERE item.id = inserted.equipment_item_id
+          RETURNING item.id
+        ), audited AS (
+          INSERT INTO ${auditLogs} (
+            actor_type, actor_id, action, entity_type, entity_id,
+            before, after, request_id
+          )
+          SELECT 'user'::audit_actor_type, ${actor.id}::uuid, 'price.owner_escalation',
+            'price_history', inserted.id,
+            jsonb_build_object('unitPriceCents', inserted.old_price_cents),
+            to_jsonb(inserted.*), ${actor.requestId}
+          FROM inserted INNER JOIN updated ON updated.id = inserted.equipment_item_id
+          RETURNING entity_id
+        )
+        SELECT inserted.equipment_item_id AS "itemId",
+          item.name AS "itemName",
+          inserted.old_price_cents AS "oldPriceCents",
+          inserted.new_price_cents AS "newPriceCents"
+        FROM inserted
+        INNER JOIN updated ON updated.id = inserted.equipment_item_id
+        INNER JOIN audited ON audited.entity_id = inserted.id
+        INNER JOIN ${equipmentItems} item ON item.id = inserted.equipment_item_id
+        ORDER BY item.name ASC
+      `)
+
+      return {
+        effectiveDate,
+        replayed: result.rows.length === 0,
+        items: result.rows.map((row) => ({
+          itemId: row.itemId,
+          itemName: row.itemName,
+          oldPriceCents: databaseInteger(row.oldPriceCents, 'Previous price'),
+          newPriceCents: databaseInteger(row.newPriceCents, 'Escalated price'),
+        })),
       }
-      return { mode: config.mode, effectiveDates, escalated, skippedMissingPrice }
     },
   }
 }
 
-export type EscalationService = ReturnType<typeof createEscalationService>
+export type PriceEscalationService = ReturnType<typeof createPriceEscalationService>
