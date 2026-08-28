@@ -13,6 +13,7 @@
     "@aws-sdk/client-sqs": "^3.1118.0",
     "@herms/db": "workspace:*",
     "@herms/shared": "workspace:*",
+    "exceljs": "4.4.0",
     "hono": "^4.13.3",
     "pdf-lib": "^1.17.1",
     "zod": "^4.1.5"

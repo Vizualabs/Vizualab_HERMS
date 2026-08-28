@@ -1,4 +1,5 @@
 import { queryOptions } from '@tanstack/react-query'
+import type { DashboardFilters } from '@herms/shared'
 
 import { api } from './api'
 
@@ -28,6 +29,17 @@ export const queryKeys = {
   monthlyFinance: (month: string) => ['finance', 'monthly', month] as const,
   claims: ['claims'] as const,
   claimableDiscrepancies: ['discrepancies', 'claimable'] as const,
+  dashboard: ['dashboard'] as const,
+  dashboardFilterOptions: ['dashboard', 'filter-options'] as const,
+  dashboardStock: ['dashboard', 'stock'] as const,
+  dashboardPayments: (month: string) => ['dashboard', 'payments', month] as const,
+  dashboardIncomeExpenses: (month: string) =>
+    ['dashboard', 'income-expenses', month] as const,
+  dashboardDiscrepancies: (filters: DashboardFilters) =>
+    ['dashboard', 'discrepancies', filters] as const,
+  dashboardRankings: (filters: DashboardFilters) =>
+    ['dashboard', 'rankings', filters] as const,
+  dashboardEscalations: ['dashboard', 'escalations'] as const,
 }
 
 export const sessionQuery = queryOptions({
@@ -107,4 +119,46 @@ export const claimableDiscrepanciesQuery = queryOptions({
   queryKey: queryKeys.claimableDiscrepancies,
   queryFn: api.claimableDiscrepancies,
   staleTime: 5_000,
+})
+
+export const dashboardFilterOptionsQuery = queryOptions({
+  queryKey: queryKeys.dashboardFilterOptions,
+  queryFn: api.dashboardFilterOptions,
+  staleTime: 60_000,
+})
+
+export const dashboardStockQuery = queryOptions({
+  queryKey: queryKeys.dashboardStock,
+  queryFn: api.dashboardStock,
+  staleTime: 15_000,
+})
+
+export const dashboardPaymentsQuery = (month: string) => queryOptions({
+  queryKey: queryKeys.dashboardPayments(month),
+  queryFn: () => api.dashboardPayments(month),
+  staleTime: 15_000,
+})
+
+export const dashboardIncomeExpensesQuery = (month: string) => queryOptions({
+  queryKey: queryKeys.dashboardIncomeExpenses(month),
+  queryFn: () => api.dashboardIncomeExpenses(month),
+  staleTime: 15_000,
+})
+
+export const dashboardDiscrepanciesQuery = (filters: DashboardFilters) => queryOptions({
+  queryKey: queryKeys.dashboardDiscrepancies(filters),
+  queryFn: () => api.dashboardDiscrepancies(filters),
+  staleTime: 15_000,
+})
+
+export const dashboardRankingsQuery = (filters: DashboardFilters) => queryOptions({
+  queryKey: queryKeys.dashboardRankings(filters),
+  queryFn: () => api.dashboardRankings(filters),
+  staleTime: 15_000,
+})
+
+export const dashboardEscalationsQuery = queryOptions({
+  queryKey: queryKeys.dashboardEscalations,
+  queryFn: api.dashboardEscalations,
+  staleTime: 15_000,
 })

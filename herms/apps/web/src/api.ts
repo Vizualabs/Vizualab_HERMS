@@ -22,6 +22,14 @@ import type {
   RetentionNoteCreate,
   RetentionNoteSubmission,
   RetentionNoteCount,
+  DashboardDiscrepancies,
+  DashboardEscalations,
+  DashboardFilterOptions,
+  DashboardFilters,
+  DashboardIncomeExpenses,
+  DashboardPayments,
+  DashboardRankings,
+  DashboardStock,
 } from '@herms/shared'
 
 export type Customer = {
@@ -395,6 +403,39 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return payload.data as T
 }
 
+function dashboardQuery(filters: DashboardFilters = {}) {
+  const query = new URLSearchParams()
+  for (const [key, value] of Object.entries(filters)) {
+    if (value) query.set(key, value)
+  }
+  return query.toString()
+}
+
+async function downloadDashboardExport(
+  format: 'pdf' | 'xlsx',
+  filters: DashboardFilters,
+) {
+  const query = dashboardQuery({ ...filters })
+  const response = await fetch(
+    `/api/dashboard/export?format=${format}${query ? `&${query}` : ''}`,
+    { credentials: 'same-origin' },
+  )
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as {
+      error?: { code?: string; message?: string }
+    } | null
+    throw new ApiError(
+      payload?.error?.message ?? 'The report could not be downloaded',
+      response.status,
+      payload?.error?.code ?? 'EXPORT_FAILED',
+    )
+  }
+  const disposition = response.headers.get('content-disposition') ?? ''
+  const filename = disposition.match(/filename="([^"]+)"/)?.[1]
+    ?? `herms-management-report.${format}`
+  return { blob: await response.blob(), filename }
+}
+
 export const api = {
   login: (email: string, password: string) =>
     request<SessionUser>('/api/auth/login', {
@@ -512,6 +553,26 @@ export const api = {
   closeOrder: (id: string) => request<{ order: OrderDetail; reconciliation: ReconciliationLine[] }>(`/api/orders/${id}/close`, { method: 'POST', body: '{}' }),
   reverseWriteOff: (id: string, reason: string) => request<{ discrepancy: { id: string; status: string }; reversalLedgerId: string }>(`/api/discrepancies/${id}/write-off-reverse`, { method: 'POST', body: JSON.stringify({ reason }) }),
   stock: () => request<StockItem[]>('/api/stock'),
+  dashboardFilterOptions: () =>
+    request<DashboardFilterOptions>('/api/dashboard/filter-options'),
+  dashboardStock: () => request<DashboardStock>('/api/dashboard/stock'),
+  dashboardPayments: (month?: string) =>
+    request<DashboardPayments>(
+      `/api/dashboard/payments${month ? `?month=${encodeURIComponent(month)}` : ''}`,
+    ),
+  dashboardIncomeExpenses: (month?: string) =>
+    request<DashboardIncomeExpenses>(
+      `/api/dashboard/income-expenses${month ? `?month=${encodeURIComponent(month)}` : ''}`,
+    ),
+  dashboardDiscrepancies: (filters: DashboardFilters) =>
+    request<DashboardDiscrepancies>(
+      `/api/dashboard/discrepancies?${dashboardQuery(filters)}`,
+    ),
+  dashboardRankings: (filters: DashboardFilters) =>
+    request<DashboardRankings>(`/api/dashboard/rankings?${dashboardQuery(filters)}`),
+  dashboardEscalations: () =>
+    request<DashboardEscalations>('/api/dashboard/escalations'),
+  downloadDashboardExport,
 }
 
 export function formatMinorUnits(value: number) {

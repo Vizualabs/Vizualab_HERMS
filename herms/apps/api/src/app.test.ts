@@ -3,6 +3,7 @@ import { describe, expect, test } from 'bun:test'
 import type {
   CommercialService,
   ClaimService,
+  DashboardService,
   DeliveryService,
   FinanceService,
   IdentityService,
@@ -412,6 +413,114 @@ function createServices() {
     }),
   } as unknown as PriceEscalationService
 
+  const dashboardStock = {
+    asOf: '2026-08-28T00:00:00.000Z',
+    currency: 'LKR',
+    totalQuantity: 2,
+    totalValueCents: 5000,
+    items: [{
+      equipmentItemId: quotation.lines[0]!.equipmentItemId,
+      equipmentName: 'Test item',
+      category: 'Access',
+      unitOfMeasure: 'unit',
+      quantity: 2,
+      currentUnitPriceCents: 2500,
+      valueCents: 5000,
+    }],
+  }
+  const dashboardPayments = {
+    currency: 'LKR',
+    timezone: 'Asia/Colombo',
+    current: { month: '2026-08', pendingAmountCents: 2000, receivedAmountCents: 500 },
+    previous: { month: '2026-07', pendingAmountCents: 2500, receivedAmountCents: 0 },
+  }
+  const dashboardIncomeExpenses = {
+    currency: 'LKR',
+    timezone: 'Asia/Colombo',
+    current: { month: '2026-08', incomeCents: 500, expenseCents: 200, netPositionCents: 300 },
+    previous: { month: '2026-07', incomeCents: 0, expenseCents: 100, netPositionCents: -100 },
+  }
+  const dashboardDiscrepancies = {
+    currency: 'LKR',
+    filters: {
+      month: '2026-08',
+      from: '2026-08-01',
+      to: '2026-08-31',
+      customerId: null,
+      itemId: null,
+    },
+    openCount: 1,
+    totalQuantity: 1,
+    totalValueCents: 2500,
+    rows: [{
+      id: damageClaim.discrepancyId,
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      customerId: order.customerId,
+      customerName: order.customerName,
+      equipmentItemId: damageClaim.equipmentItemId,
+      equipmentName: damageClaim.equipmentName,
+      discrepancyType: 'damaged' as const,
+      status: 'open' as const,
+      responsibleParty: 'customer' as const,
+      quantity: 1,
+      unitPriceCents: 2500,
+      valueCents: 2500,
+      reason: damageClaim.reason,
+      recordedAt: damageClaim.damageRecordedAt.toISOString(),
+      approvedAt: '2026-08-24T03:00:00.000Z',
+    }],
+  }
+  const dashboardRankings = {
+    currency: 'LKR',
+    limit: 10 as const,
+    items: [{ id: damageClaim.equipmentItemId, name: 'Test item', caseCount: 1, quantity: 1, valueCents: 2500 }],
+    customers: [{ id: order.customerId, name: order.customerName, caseCount: 1, quantity: 1, valueCents: 2500 }],
+  }
+  const dashboardEscalations = {
+    currency: 'LKR',
+    percentage: 10 as const,
+    lastEscalation: {
+      effectiveDate: '2026-08-28T00:00:00.000Z',
+      ownerId: user('business_owner').id,
+      ownerName: user('business_owner').name,
+      itemCount: 1,
+      previousValueCents: 2500,
+      escalatedValueCents: 2750,
+    },
+    history: [{
+      effectiveDate: '2026-08-28T00:00:00.000Z',
+      ownerId: user('business_owner').id,
+      ownerName: user('business_owner').name,
+      itemCount: 1,
+      previousValueCents: 2500,
+      escalatedValueCents: 2750,
+    }],
+    preview: { itemCount: 1, currentValueCents: 2750, escalatedValueCents: 3025 },
+  }
+  const dashboard = {
+    getFilterOptions: async () => ({
+      customers: [{ id: order.customerId, name: order.customerName }],
+      items: [{ id: damageClaim.equipmentItemId, name: damageClaim.equipmentName }],
+    }),
+    getStock: async () => dashboardStock,
+    getPayments: async () => dashboardPayments,
+    getIncomeExpenses: async () => dashboardIncomeExpenses,
+    getDiscrepancies: async () => dashboardDiscrepancies,
+    getRankings: async () => dashboardRankings,
+    getEscalations: async () => dashboardEscalations,
+    getReport: async (_input: unknown, includeEscalations: boolean) => ({
+      generatedAt: '2026-08-28T00:00:00.000Z',
+      filters: dashboardDiscrepancies.filters,
+      stock: dashboardStock,
+      payments: dashboardPayments,
+      incomeExpenses: dashboardIncomeExpenses,
+      discrepancies: dashboardDiscrepancies,
+      rankings: dashboardRankings,
+      escalations: includeEscalations ? dashboardEscalations : null,
+    }),
+  } as unknown as DashboardService
+
   return {
     identity,
     masterData,
@@ -422,6 +531,7 @@ function createServices() {
     retention,
     claims,
     priceEscalation,
+    dashboard,
   }
 }
 
@@ -891,5 +1001,69 @@ describe('Phase 7 API', () => {
 
     const salesCookie = await sessionCookie(app, 'sales')
     expect((await app.request('/api/claims', { headers: { Cookie: salesCookie } })).status).toBe(403)
+  })
+})
+
+describe('Phase 8 API', () => {
+  test('gives Business Owner and Finance access to reconciled dashboard reports', async () => {
+    const app = createTestApp()
+    for (const role of ['business_owner', 'finance'] as const) {
+      const cookie = await sessionCookie(app, role)
+      for (const path of [
+        '/api/dashboard/filter-options',
+        '/api/dashboard/stock',
+        '/api/dashboard/payments?month=2026-08',
+        '/api/dashboard/income-expenses?month=2026-08',
+        '/api/dashboard/discrepancies?month=2026-08',
+        '/api/dashboard/rankings?month=2026-08',
+      ]) {
+        expect((await app.request(path, { headers: { Cookie: cookie } })).status).toBe(200)
+      }
+    }
+  })
+
+  test('keeps escalation reporting owner-only and rejects invalid report filters', async () => {
+    const app = createTestApp()
+    const ownerCookie = await sessionCookie(app, 'business_owner')
+    const financeCookie = await sessionCookie(app, 'finance')
+    const salesCookie = await sessionCookie(app, 'sales')
+    expect((await app.request('/api/dashboard/escalations', {
+      headers: { Cookie: ownerCookie },
+    })).status).toBe(200)
+    expect((await app.request('/api/dashboard/escalations', {
+      headers: { Cookie: financeCookie },
+    })).status).toBe(403)
+    expect((await app.request('/api/dashboard/stock', {
+      headers: { Cookie: salesCookie },
+    })).status).toBe(403)
+    expect((await app.request('/api/dashboard/discrepancies?from=2026-08-31&to=2026-08-01', {
+      headers: { Cookie: ownerCookie },
+    })).status).toBe(400)
+    expect((await app.request('/api/dashboard/payments?month=2026-13', {
+      headers: { Cookie: financeCookie },
+    })).status).toBe(400)
+  })
+
+  test('downloads PDF and Excel directly with correct file signatures', async () => {
+    const app = createTestApp()
+    const ownerCookie = await sessionCookie(app, 'business_owner')
+    const pdf = await app.request('/api/dashboard/export?format=pdf&month=2026-08', {
+      headers: { Cookie: ownerCookie },
+    })
+    expect(pdf.status).toBe(200)
+    expect(pdf.headers.get('content-type')).toContain('application/pdf')
+    expect(pdf.headers.get('content-disposition')).toContain('herms-management-2026-08.pdf')
+    expect(new TextDecoder().decode((await pdf.arrayBuffer()).slice(0, 4))).toBe('%PDF')
+
+    const financeCookie = await sessionCookie(app, 'finance')
+    const xlsx = await app.request('/api/dashboard/export?format=xlsx&month=2026-08', {
+      headers: { Cookie: financeCookie },
+    })
+    expect(xlsx.status).toBe(200)
+    expect(xlsx.headers.get('content-type')).toContain(
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+    expect(xlsx.headers.get('content-disposition')).toContain('herms-management-2026-08.xlsx')
+    expect(Array.from(new Uint8Array(await xlsx.arrayBuffer()).slice(0, 2))).toEqual([0x50, 0x4b])
   })
 })

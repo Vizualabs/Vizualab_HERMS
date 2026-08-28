@@ -1,5 +1,7 @@
 import {
+  bigint,
   boolean,
+  date,
   index,
   integer,
   jsonb,
@@ -424,6 +426,53 @@ export const damageClaims = pgTable(
   ],
 )
 
+export const dashboardStockRollups = pgTable('dashboard_stock_rollup', {
+  equipmentItemId: uuid('equipment_item_id')
+    .primaryKey()
+    .references(() => equipmentItems.id, { onDelete: 'cascade' }),
+  quantity: bigint('quantity', { mode: 'number' }).default(0).notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+})
+
+export const dashboardMonthlyRollups = pgTable('dashboard_monthly_rollup', {
+  monthStart: date('month_start').primaryKey(),
+  invoicedAmountCents: bigint('invoiced_amount_cents', { mode: 'number' }).default(0).notNull(),
+  confirmedClaimAmountCents: bigint('confirmed_claim_amount_cents', { mode: 'number' }).default(0).notNull(),
+  receivedPaymentAmountCents: bigint('received_payment_amount_cents', { mode: 'number' }).default(0).notNull(),
+  expenseAmountCents: bigint('expense_amount_cents', { mode: 'number' }).default(0).notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+})
+
+export const dashboardDiscrepancyRollups = pgTable(
+  'dashboard_discrepancy_rollup',
+  {
+    discrepancyId: uuid('discrepancy_id')
+      .primaryKey()
+      .references(() => discrepancies.id, { onDelete: 'cascade' }),
+    orderId: uuid('order_id').references(() => orders.id),
+    customerId: uuid('customer_id').references(() => customers.id),
+    equipmentItemId: uuid('equipment_item_id').notNull().references(() => equipmentItems.id),
+    discrepancyType: discrepancyType('discrepancy_type').notNull(),
+    status: discrepancyStatus('status').notNull(),
+    responsibleParty: responsibleParty('responsible_party'),
+    quantity: integer('quantity').notNull(),
+    unitPriceCents: integer('unit_price_cents').notNull(),
+    valueCents: bigint('value_cents', { mode: 'number' }).notNull(),
+    reason: text('reason'),
+    sourceType: text('source_type').notNull(),
+    sourceNoteId: uuid('source_note_id').notNull(),
+    recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull(),
+    approvedAt: timestamp('approved_at', { withTimezone: true }).notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index('dashboard_discrepancy_recorded_idx').on(table.recordedAt),
+    index('dashboard_discrepancy_customer_recorded_idx').on(table.customerId, table.recordedAt),
+    index('dashboard_discrepancy_item_recorded_idx').on(table.equipmentItemId, table.recordedAt),
+    index('dashboard_discrepancy_status_type_idx').on(table.status, table.discrepancyType),
+  ],
+)
+
 export const noteTokens = pgTable(
   'note_token',
   {
@@ -462,4 +511,7 @@ export type RetentionNoteLine = typeof retentionNoteLines.$inferSelect
 export type StockLedgerEntry = typeof stockLedger.$inferSelect
 export type Discrepancy = typeof discrepancies.$inferSelect
 export type DamageClaim = typeof damageClaims.$inferSelect
+export type DashboardStockRollup = typeof dashboardStockRollups.$inferSelect
+export type DashboardMonthlyRollup = typeof dashboardMonthlyRollups.$inferSelect
+export type DashboardDiscrepancyRollup = typeof dashboardDiscrepancyRollups.$inferSelect
 export type NoteToken = typeof noteTokens.$inferSelect

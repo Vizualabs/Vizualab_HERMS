@@ -40,6 +40,7 @@ function ItemDetailPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.item(itemId) }),
       queryClient.invalidateQueries({ queryKey: queryKeys.priceHistory(itemId) }),
       queryClient.invalidateQueries({ queryKey: queryKeys.items }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard }),
     ])
   }
 

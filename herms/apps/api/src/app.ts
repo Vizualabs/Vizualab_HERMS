@@ -5,6 +5,7 @@ import {
   type ClaimService,
   type CommercialService,
   type DeliveryService,
+  type DashboardService,
   type FinanceService,
   type IdentityService,
   type MasterDataService,
@@ -15,6 +16,9 @@ import {
 import {
   customerInputSchema,
   customerUpdateSchema,
+  dashboardExportQuerySchema,
+  dashboardFilterQuerySchema,
+  dashboardMonthQuerySchema,
   equipmentInputSchema,
   equipmentUpdateSchema,
   expenseInputSchema,
@@ -52,6 +56,7 @@ import {
 import { jsonLogger, type AppLogger } from './logger'
 import { requestContext, type AppEnv } from './request-context'
 import { createQuotationPdf } from './quotation-pdf'
+import { createDashboardPdf, createDashboardXlsx } from './dashboard-export'
 
 export type AppDependencies = {
   healthCheck: DbHealthCheck
@@ -60,6 +65,7 @@ export type AppDependencies = {
   notifications: NotificationService
   commercial: CommercialService
   delivery: DeliveryService
+  dashboard: DashboardService
   finance: FinanceService
   claims: ClaimService
   priceEscalation: PriceEscalationService
@@ -118,6 +124,7 @@ export function createApp({
   notifications,
   commercial,
   delivery,
+  dashboard,
   finance,
   claims,
   priceEscalation,
@@ -135,7 +142,7 @@ export function createApp({
     .get('/', (c) =>
       c.json({
         name: 'HERMS API',
-        phase: 7,
+        phase: 8,
         health: '/api/health',
       }),
     )
@@ -371,7 +378,94 @@ export function createApp({
       c.json({ data: await claims.rejectClaim(c.req.param('id'), actor(c)) }),
     )
 
-  const deliveryRoutes = claimRoutes
+  const dashboardRoutes = claimRoutes
+    .get('/api/dashboard/filter-options', requireRoles('business_owner', 'finance'), async (c) =>
+      c.json({ data: await dashboard.getFilterOptions() }),
+    )
+    .get('/api/dashboard/stock', requireRoles('business_owner', 'finance'), async (c) =>
+      c.json({ data: await dashboard.getStock() }),
+    )
+    .get('/api/dashboard/payments', requireRoles('business_owner', 'finance'), async (c) => {
+      const parsed = dashboardMonthQuerySchema.safeParse(c.req.query())
+      if (!parsed.success) {
+        return errorResponse(c, 400, 'VALIDATION_ERROR', 'The request contains invalid data',
+          parsed.error.issues.map((issue) => ({
+            field: issue.path.join('.') || 'query',
+            code: issue.code,
+            message: issue.message,
+          })))
+      }
+      return c.json({ data: await dashboard.getPayments(parsed.data.month) })
+    })
+    .get('/api/dashboard/income-expenses', requireRoles('business_owner', 'finance'), async (c) => {
+      const parsed = dashboardMonthQuerySchema.safeParse(c.req.query())
+      if (!parsed.success) {
+        return errorResponse(c, 400, 'VALIDATION_ERROR', 'The request contains invalid data',
+          parsed.error.issues.map((issue) => ({
+            field: issue.path.join('.') || 'query',
+            code: issue.code,
+            message: issue.message,
+          })))
+      }
+      return c.json({ data: await dashboard.getIncomeExpenses(parsed.data.month) })
+    })
+    .get('/api/dashboard/discrepancies', requireRoles('business_owner', 'finance'), async (c) => {
+      const parsed = dashboardFilterQuerySchema.safeParse(c.req.query())
+      if (!parsed.success) {
+        return errorResponse(c, 400, 'VALIDATION_ERROR', 'The request contains invalid data',
+          parsed.error.issues.map((issue) => ({
+            field: issue.path.join('.') || 'query',
+            code: issue.code,
+            message: issue.message,
+          })))
+      }
+      return c.json({ data: await dashboard.getDiscrepancies(parsed.data) })
+    })
+    .get('/api/dashboard/rankings', requireRoles('business_owner', 'finance'), async (c) => {
+      const parsed = dashboardFilterQuerySchema.safeParse(c.req.query())
+      if (!parsed.success) {
+        return errorResponse(c, 400, 'VALIDATION_ERROR', 'The request contains invalid data',
+          parsed.error.issues.map((issue) => ({
+            field: issue.path.join('.') || 'query',
+            code: issue.code,
+            message: issue.message,
+          })))
+      }
+      return c.json({ data: await dashboard.getRankings(parsed.data) })
+    })
+    .get('/api/dashboard/escalations', requireRoles('business_owner'), async (c) =>
+      c.json({ data: await dashboard.getEscalations() }),
+    )
+    .get('/api/dashboard/export', requireRoles('business_owner', 'finance'), async (c) => {
+      const parsed = dashboardExportQuerySchema.safeParse(c.req.query())
+      if (!parsed.success) {
+        return errorResponse(c, 400, 'VALIDATION_ERROR', 'The request contains invalid data',
+          parsed.error.issues.map((issue) => ({
+            field: issue.path.join('.') || 'query',
+            code: issue.code,
+            message: issue.message,
+          })))
+      }
+      const report = await dashboard.getReport(
+        parsed.data,
+        c.get('user').role === 'business_owner',
+      )
+      const isPdf = parsed.data.format === 'pdf'
+      const body = isPdf
+        ? await createDashboardPdf(report)
+        : await createDashboardXlsx(report)
+      const download = Uint8Array.from(body)
+      const extension = isPdf ? 'pdf' : 'xlsx'
+      return c.body(download, 200, {
+        'Content-Type': isPdf
+          ? 'application/pdf'
+          : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'Content-Disposition': `attachment; filename="herms-management-${report.filters.month}.${extension}"`,
+        'Cache-Control': 'private, no-store',
+      })
+    })
+
+  const deliveryRoutes = dashboardRoutes
     .get('/api/notification-recipients/field-staff', requireRoles('sales', 'store_admin'), async (c) =>
       c.json({ data: await notifications.listFieldStaff(c.get('user')) }),
     )

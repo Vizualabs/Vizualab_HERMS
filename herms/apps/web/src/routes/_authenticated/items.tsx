@@ -20,7 +20,10 @@ function ItemsPage() {
   const createItem = useMutation({
     mutationFn: api.createItem,
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.items })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.items }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboard }),
+      ])
     },
   })
   const applyEscalation = useMutation({
@@ -29,6 +32,7 @@ function ItemsPage() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.items }),
         queryClient.invalidateQueries({ queryKey: queryKeys.priceEscalation }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboard }),
       ])
     },
   })

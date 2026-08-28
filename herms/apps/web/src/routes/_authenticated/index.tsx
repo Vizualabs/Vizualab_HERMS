@@ -7,7 +7,10 @@ export const Route = createFileRoute('/_authenticated/')({ component: WorkspaceH
 
 function WorkspaceHome() {
   const { data: user } = useQuery(sessionQuery)
-  if (user?.role === 'business_owner' || user?.role === 'sales') {
+  if (user?.role === 'business_owner' || user?.role === 'finance') {
+    return <Navigate to="/dashboard" />
+  }
+  if (user?.role === 'sales') {
     return <Navigate to="/customers" />
   }
   if (user?.role === 'system_admin') return <Navigate to="/items" />

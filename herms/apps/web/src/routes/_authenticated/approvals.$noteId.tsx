@@ -20,6 +20,7 @@ function ApprovalDetailPage() {
       client.invalidateQueries({ queryKey: queryKeys.approvalNote(noteId) }),
       client.invalidateQueries({ queryKey: queryKeys.approvals }),
       client.invalidateQueries({ queryKey: queryKeys.stock }),
+      client.invalidateQueries({ queryKey: queryKeys.dashboard }),
     ])
   }
   const countDelivery = useMutation({

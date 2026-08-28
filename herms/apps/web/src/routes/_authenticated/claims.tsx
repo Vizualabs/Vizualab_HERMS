@@ -25,6 +25,7 @@ function ClaimsPage() {
     const invalidations: Array<Promise<unknown>> = [
       queryClient.invalidateQueries({ queryKey: queryKeys.claims }),
       queryClient.invalidateQueries({ queryKey: queryKeys.claimableDiscrepancies }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard }),
     ]
     if (claim) {
       invalidations.push(

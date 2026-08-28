@@ -12,7 +12,7 @@ function QuotationDetailPage() {
   const navigate = useNavigate()
   const quotation = useQuery(queryOptions({ queryKey: queryKeys.quotation(quotationId), queryFn: () => api.quotation(quotationId) }))
   const refresh = async () => { await Promise.all([queryClient.invalidateQueries({ queryKey: queryKeys.quotation(quotationId) }), queryClient.invalidateQueries({ queryKey: queryKeys.quotations })]) }
-  const accept = useMutation({ mutationFn: () => api.acceptQuotation(quotationId), onSuccess: async (order) => { await refresh(); await queryClient.invalidateQueries({ queryKey: queryKeys.orders }); await navigate({ to: '/orders/$orderId', params: { orderId: order.id } }) } })
+  const accept = useMutation({ mutationFn: () => api.acceptQuotation(quotationId), onSuccess: async (order) => { await refresh(); await Promise.all([queryClient.invalidateQueries({ queryKey: queryKeys.orders }), queryClient.invalidateQueries({ queryKey: queryKeys.dashboard })]); await navigate({ to: '/orders/$orderId', params: { orderId: order.id } }) } })
   const reject = useMutation({ mutationFn: () => api.rejectQuotation(quotationId), onSuccess: refresh })
   const expire = useMutation({ mutationFn: () => api.expireQuotation(quotationId), onSuccess: refresh })
 

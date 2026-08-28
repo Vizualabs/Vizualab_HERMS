@@ -51,13 +51,17 @@ function FinancePage() {
             })
           : Promise.resolve(),
         queryClient.invalidateQueries({ queryKey: queryKeys.monthlyFinance(month) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboard }),
       ])
     },
   })
   const expense = useMutation({
     mutationFn: (input: ExpenseInput) => api.recordExpense(input),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.monthlyFinance(month) })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.monthlyFinance(month) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboard }),
+      ])
     },
   })
 

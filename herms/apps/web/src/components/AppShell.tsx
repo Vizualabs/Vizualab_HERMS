@@ -29,22 +29,38 @@ export function AppShell({
     || user.role === 'finance'
   const canUseFinance = user.role === 'finance' || user.role === 'business_owner'
   const canUseClaims = user.role === 'finance' || user.role === 'business_owner'
+  const canViewDashboard = user.role === 'finance' || user.role === 'business_owner'
 
   return (
     <div className="min-h-screen bg-background text-foreground">
+      <a
+        href="#main-content"
+        className="sr-only z-50 rounded-lg bg-card px-4 py-2 text-sm font-semibold text-primary-strong shadow focus:not-sr-only focus:fixed focus:left-4 focus:top-4"
+      >
+        Skip to main content
+      </a>
       <header className="border-b border-border bg-card/95 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-5 py-4 sm:px-8">
+        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-5 py-4 sm:px-8 xl:flex-row xl:items-center xl:justify-between">
           <div>
             <Link to="/" className="text-xl font-bold tracking-tight text-primary-strong">
               HERMS
             </Link>
             <p className="text-xs text-muted-foreground">Rental operations and finance</p>
           </div>
-          <nav aria-label="Primary navigation" className="flex items-center gap-2">
+          <nav aria-label="Primary navigation" className="flex flex-wrap items-center gap-2">
+            {canViewDashboard && (
+              <Link
+                to="/dashboard"
+                className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                activeProps={{ className: 'bg-primary text-primary-foreground hover:bg-primary' }}
+              >
+                Dashboard
+              </Link>
+            )}
             {canUseCustomers && (
               <Link
                 to="/customers"
-                className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-muted"
+                className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 activeProps={{ className: 'bg-primary text-primary-foreground hover:bg-primary' }}
               >
                 Customers
@@ -53,7 +69,7 @@ export function AppShell({
             {canUseItems && (
               <Link
                 to="/items"
-                className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-muted"
+                className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 activeProps={{ className: 'bg-primary text-primary-foreground hover:bg-primary' }}
               >
                 Equipment
@@ -62,26 +78,26 @@ export function AppShell({
             {canUseSales && (
               <Link
                 to="/quotations"
-                className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-muted"
+                className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 activeProps={{ className: 'bg-primary text-primary-foreground hover:bg-primary' }}
               >
                 Quotations
               </Link>
             )}
             {canApprove && (
-              <Link to="/approvals" className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-muted" activeProps={{ className: 'bg-primary text-primary-foreground hover:bg-primary' }}>
+              <Link to="/approvals" className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" activeProps={{ className: 'bg-primary text-primary-foreground hover:bg-primary' }}>
                 Approvals
               </Link>
             )}
             {canApprove && (
-              <Link to="/stock" className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-muted" activeProps={{ className: 'bg-primary text-primary-foreground hover:bg-primary' }}>
+              <Link to="/stock" className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" activeProps={{ className: 'bg-primary text-primary-foreground hover:bg-primary' }}>
                 Stock
               </Link>
             )}
             {canUseOrders && (
               <Link
                 to="/orders"
-                className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-muted"
+                className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 activeProps={{ className: 'bg-primary text-primary-foreground hover:bg-primary' }}
               >
                 Orders
@@ -90,7 +106,7 @@ export function AppShell({
             {canUseFinance && (
               <Link
                 to="/finance"
-                className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-muted"
+                className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 activeProps={{ className: 'bg-primary text-primary-foreground hover:bg-primary' }}
               >
                 Finance
@@ -99,14 +115,14 @@ export function AppShell({
             {canUseClaims && (
               <Link
                 to="/claims"
-                className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-muted"
+                className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 activeProps={{ className: 'bg-primary text-primary-foreground hover:bg-primary' }}
               >
                 Claims
               </Link>
             )}
           </nav>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 xl:ml-auto">
             <div className="hidden text-right sm:block">
               <p className="text-sm font-medium">{user.name}</p>
               <p className="text-xs text-muted-foreground">{user.role.replaceAll('_', ' ')}</p>
@@ -122,7 +138,9 @@ export function AppShell({
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-7xl px-5 py-8 sm:px-8">{children}</main>
+      <main id="main-content" className="mx-auto max-w-7xl px-5 py-8 sm:px-8">
+        {children}
+      </main>
     </div>
   )
 }

@@ -223,6 +223,34 @@ export const financeMonthSchema = z.object({
   month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Month must use YYYY-MM'),
 })
 
+const dashboardMonth = z.string().regex(
+  /^\d{4}-(0[1-9]|1[0-2])$/,
+  'Month must use YYYY-MM',
+)
+const dashboardDate = z.string().regex(
+  /^\d{4}-(0[1-9]|1[0-2])-([0-2]\d|3[01])$/,
+  'Date must use YYYY-MM-DD',
+)
+
+export const dashboardMonthQuerySchema = z.object({
+  month: dashboardMonth.optional(),
+})
+
+export const dashboardFilterQuerySchema = z.object({
+  month: dashboardMonth.optional(),
+  from: dashboardDate.optional(),
+  to: dashboardDate.optional(),
+  customerId: z.string().uuid().optional(),
+  itemId: z.string().uuid().optional(),
+}).refine(
+  (value) => !value.from || !value.to || value.from <= value.to,
+  { path: ['to'], message: 'End date must not be before start date' },
+)
+
+export const dashboardExportQuerySchema = dashboardFilterQuerySchema.and(z.object({
+  format: z.enum(['pdf', 'xlsx']),
+}))
+
 export type LoginInput = z.infer<typeof loginInputSchema>
 export type CustomerInput = z.infer<typeof customerInputSchema>
 export type CustomerUpdate = z.infer<typeof customerUpdateSchema>
@@ -241,6 +269,9 @@ export type WriteOffReversal = z.infer<typeof writeOffReversalSchema>
 export type PaymentInput = z.infer<typeof paymentInputSchema>
 export type ExpenseInput = z.infer<typeof expenseInputSchema>
 export type FinanceMonth = z.infer<typeof financeMonthSchema>
+export type DashboardMonthQuery = z.infer<typeof dashboardMonthQuerySchema>
+export type DashboardFilters = z.infer<typeof dashboardFilterQuerySchema>
+export type DashboardExportQuery = z.infer<typeof dashboardExportQuerySchema>
 export type NoteLinkRecipient = z.infer<typeof noteLinkRecipientSchema>
 
 export type SessionUser = {
@@ -250,4 +281,123 @@ export type SessionUser = {
   role: UserRole
   isDeputyAdmin: boolean
   email: string | null
+}
+
+export type DashboardStockItem = {
+  equipmentItemId: string
+  equipmentName: string
+  category: string
+  unitOfMeasure: string
+  quantity: number
+  currentUnitPriceCents: number
+  valueCents: number
+}
+
+export type DashboardStock = {
+  asOf: string
+  currency: string
+  totalQuantity: number
+  totalValueCents: number
+  items: DashboardStockItem[]
+}
+
+export type DashboardPaymentsPeriod = {
+  month: string
+  pendingAmountCents: number
+  receivedAmountCents: number
+}
+
+export type DashboardPayments = {
+  currency: string
+  timezone: string
+  current: DashboardPaymentsPeriod
+  previous: DashboardPaymentsPeriod
+}
+
+export type DashboardIncomeExpensesPeriod = {
+  month: string
+  incomeCents: number
+  expenseCents: number
+  netPositionCents: number
+}
+
+export type DashboardIncomeExpenses = {
+  currency: string
+  timezone: string
+  current: DashboardIncomeExpensesPeriod
+  previous: DashboardIncomeExpensesPeriod
+}
+
+export type DashboardDiscrepancy = {
+  id: string
+  orderId: string | null
+  orderNumber: string | null
+  customerId: string | null
+  customerName: string | null
+  equipmentItemId: string
+  equipmentName: string
+  discrepancyType: 'missing' | 'damaged'
+  status: DiscrepancyStatus
+  responsibleParty: ResponsibleParty | null
+  quantity: number
+  unitPriceCents: number
+  valueCents: number
+  reason: string | null
+  recordedAt: string
+  approvedAt: string
+}
+
+export type DashboardDiscrepancies = {
+  currency: string
+  filters: {
+    from: string
+    to: string
+    customerId: string | null
+    itemId: string | null
+  }
+  openCount: number
+  totalQuantity: number
+  totalValueCents: number
+  rows: DashboardDiscrepancy[]
+}
+
+export type DashboardRanking = {
+  id: string
+  name: string
+  caseCount: number
+  quantity: number
+  valueCents: number
+}
+
+export type DashboardRankings = {
+  currency: string
+  limit: 10
+  items: DashboardRanking[]
+  customers: DashboardRanking[]
+}
+
+export type DashboardFilterOptions = {
+  customers: Array<{ id: string; name: string }>
+  items: Array<{ id: string; name: string }>
+}
+
+export type DashboardEscalationHistory = {
+  effectiveDate: string
+  ownerId: string | null
+  ownerName: string
+  itemCount: number
+  previousValueCents: number
+  escalatedValueCents: number
+}
+
+export type DashboardEscalations = {
+  currency: string
+  percentage: 10
+  lastEscalation: DashboardEscalationHistory | null
+  history: DashboardEscalationHistory[]
+  preview: {
+    itemCount: number
+    currentValueCents: number
+    escalatedValueCents: number
+  }
 }
