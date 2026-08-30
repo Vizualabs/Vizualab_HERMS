@@ -168,10 +168,15 @@ function createServices() {
     orderNumber: order.orderNumber,
     customerId: order.customerId,
     customerName: order.customerName,
+    customerAddress: '1 Test Road',
     storeId: '10000000-0000-4000-8000-000000000001',
+    storeName: 'HERMS Test Store',
+    storeAddress: '2 Store Road',
     status: 'pending_approval' as const,
     submittedBy: null,
+    submittedByName: 'Field Staff',
     approvedBy: null,
+    approvedByName: null,
     submittedAt: new Date('2026-08-24T01:00:00Z'),
     approvedAt: null,
     createdAt: new Date('2026-08-24T00:30:00Z'),
@@ -209,11 +214,17 @@ function createServices() {
     orderNumber: order.orderNumber,
     customerId: order.customerId,
     customerName: order.customerName,
-    deliveryNoteId: null,
+    customerAddress: '1 Test Road',
+    deliveryNoteId: deliveryNote.id,
+    deliveryNoteNumber: deliveryNote.dnNumber,
     storeId: '10000000-0000-4000-8000-000000000001',
+    storeName: 'HERMS Test Store',
+    storeAddress: '2 Store Road',
     status: 'pending_approval' as const,
     submittedBy: null,
+    submittedByName: 'Field Staff',
     approvedBy: null,
+    approvedByName: null,
     submittedAt: new Date('2026-08-24T02:00:00Z'),
     approvedAt: null,
     createdAt: new Date('2026-08-24T01:30:00Z'),
@@ -1065,5 +1076,41 @@ describe('Phase 8 API', () => {
     )
     expect(xlsx.headers.get('content-disposition')).toContain('herms-management-2026-08.xlsx')
     expect(Array.from(new Uint8Array(await xlsx.arrayBuffer()).slice(0, 2))).toEqual([0x50, 0x4b])
+  })
+})
+
+describe('Phase 9 API', () => {
+  test('downloads authenticated delivery and retention paper-form PDFs', async () => {
+    const app = createTestApp()
+    const cookie = await sessionCookie(app, 'sales')
+    const deliveryPdf = await app.request(
+      '/api/delivery-notes/70000000-0000-4000-8000-000000000001/pdf',
+      { headers: { Cookie: cookie } },
+    )
+    expect(deliveryPdf.status).toBe(200)
+    expect(deliveryPdf.headers.get('content-type')).toContain('application/pdf')
+    expect(deliveryPdf.headers.get('content-disposition')).toContain('DN-2026-000001.pdf')
+    expect(deliveryPdf.headers.get('cache-control')).toBe('private, no-store')
+    expect(new TextDecoder().decode((await deliveryPdf.arrayBuffer()).slice(0, 4))).toBe('%PDF')
+
+    const retentionPdf = await app.request(
+      '/api/retention-notes/90000000-0000-4000-8000-000000000001/pdf',
+      { headers: { Cookie: cookie } },
+    )
+    expect(retentionPdf.status).toBe(200)
+    expect(retentionPdf.headers.get('content-type')).toContain('application/pdf')
+    expect(retentionPdf.headers.get('content-disposition')).toContain('RN-2026-000001.pdf')
+    expect(new TextDecoder().decode((await retentionPdf.arrayBuffer()).slice(0, 4))).toBe('%PDF')
+
+    const fieldCookie = await sessionCookie(app, 'field_staff')
+    expect((await app.request(
+      '/api/delivery-notes/70000000-0000-4000-8000-000000000001/pdf',
+      { headers: { Cookie: fieldCookie } },
+    )).status).toBe(403)
+  })
+
+  test('exposes response timing for storage-neutral SLO monitoring', async () => {
+    const response = await createTestApp().request('/api/health')
+    expect(response.headers.get('server-timing')).toMatch(/^app;dur=\d/)
   })
 })

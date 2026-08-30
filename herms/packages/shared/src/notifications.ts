@@ -10,6 +10,7 @@ export const NOTIFICATION_EVENT_TYPES = [
   'retention_note_pending_approval',
   'delivery_note_approved',
   'retention_note_approved',
+  'reorder_threshold_breached',
 ] as const
 
 export const notificationEventTypeSchema = z.enum(NOTIFICATION_EVENT_TYPES)
@@ -31,6 +32,7 @@ export const WHATSAPP_TEMPLATE_KEYS = [
   'note_link',
   'note_pending_approval',
   'note_approved',
+  'reorder_threshold',
 ] as const
 
 export const whatsAppNotificationSchema = z.object({

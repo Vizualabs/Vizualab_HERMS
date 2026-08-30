@@ -57,6 +57,7 @@ import { jsonLogger, type AppLogger } from './logger'
 import { requestContext, type AppEnv } from './request-context'
 import { createQuotationPdf } from './quotation-pdf'
 import { createDashboardPdf, createDashboardXlsx } from './dashboard-export'
+import { createDeliveryNotePdf, createRetentionNotePdf } from './note-pdf'
 
 export type AppDependencies = {
   healthCheck: DbHealthCheck
@@ -142,7 +143,7 @@ export function createApp({
     .get('/', (c) =>
       c.json({
         name: 'HERMS API',
-        phase: 8,
+        phase: 9,
         health: '/api/health',
       }),
     )
@@ -487,6 +488,15 @@ export function createApp({
     .get('/api/orders/:id/retention-notes', requireRoles('sales'), async (c) =>
       c.json({ data: await retention.listForOrder(c.req.param('id'), c.get('user')) }),
     )
+    .get('/api/delivery-notes/:id/pdf', requireDeliveryLinkAccess(), async (c) => {
+      const note = await delivery.getDeliveryNote(c.req.param('id'), c.get('user'))
+      const body = await createDeliveryNotePdf(note)
+      return c.body(Uint8Array.from(body), 200, {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="${note.dnNumber}.pdf"`,
+        'Cache-Control': 'private, no-store',
+      })
+    })
     .get('/api/delivery-notes/:id', requireDeliveryLinkAccess(), async (c) =>
       c.json({ data: await delivery.getDeliveryNote(c.req.param('id'), c.get('user')) }),
     )
@@ -497,6 +507,15 @@ export function createApp({
       const parsed = await validatedJson(c, noteLinkRecipientSchema)
       if ('response' in parsed) return parsed.response
       return c.json({ data: await delivery.regenerateLink(c.req.param('id'), parsed.data, actor(c)) })
+    })
+    .get('/api/retention-notes/:id/pdf', requireDeliveryLinkAccess(), async (c) => {
+      const note = await retention.getRetentionNote(c.req.param('id'), c.get('user'))
+      const body = await createRetentionNotePdf(note)
+      return c.body(Uint8Array.from(body), 200, {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="${note.rnNumber}.pdf"`,
+        'Cache-Control': 'private, no-store',
+      })
     })
     .get('/api/retention-notes/:id', requireDeliveryLinkAccess(), async (c) =>
       c.json({ data: await retention.getRetentionNote(c.req.param('id'), c.get('user')) }),

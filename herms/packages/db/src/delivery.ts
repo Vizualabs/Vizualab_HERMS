@@ -21,9 +21,13 @@ import {
   orderLines,
   orders,
   outboxEvents,
+  reorderAlerts,
   stockLedger,
+  stores,
+  users,
 } from './schema'
 import { requireActiveFieldStaff, resolveFieldStaffRecipient } from './notifications'
+import { reconcileReorderAlertsForLedger } from './reorder'
 import { DataConflictError, DataNotFoundError, type AuditActor } from './services'
 
 export type DeliveryConfig = {
@@ -104,10 +108,15 @@ export function createDeliveryService(db: Database, config: DeliveryConfig) {
         orderNumber: orders.orderNumber,
         customerId: orders.customerId,
         customerName: customers.name,
+        customerAddress: customers.address,
         storeId: deliveryNotes.storeId,
+        storeName: sql<string | null>`(SELECT name FROM ${stores} WHERE id = ${deliveryNotes.storeId})`,
+        storeAddress: sql<string | null>`(SELECT address FROM ${stores} WHERE id = ${deliveryNotes.storeId})`,
         status: deliveryNotes.status,
         submittedBy: deliveryNotes.submittedBy,
+        submittedByName: sql<string | null>`(SELECT name FROM ${users} WHERE id = ${deliveryNotes.submittedBy})`,
         approvedBy: deliveryNotes.approvedBy,
+        approvedByName: sql<string | null>`(SELECT name FROM ${users} WHERE id = ${deliveryNotes.approvedBy})`,
         submittedAt: deliveryNotes.submittedAt,
         approvedAt: deliveryNotes.approvedAt,
         createdAt: deliveryNotes.createdAt,
@@ -501,6 +510,7 @@ export function createDeliveryService(db: Database, config: DeliveryConfig) {
         db.update(deliveryNotes).set({ status: 'approved', approvedBy: actor.id, approvedAt: now, updatedAt: now })
           .where(and(eq(deliveryNotes.id, id), eq(deliveryNotes.storeId, requireStore(actor)), eq(deliveryNotes.status, 'pending_approval'), sql`NOT EXISTS (SELECT 1 FROM ${deliveryNoteLines} WHERE delivery_note_id = ${id}::uuid AND counted_qty IS NULL)`)).returning(),
         ledgerInsert,
+        db.execute(reconcileReorderAlertsForLedger('delivery_note', id, now, actor)),
         db.execute(sql`INSERT INTO ${auditLogs} (actor_type, actor_id, action, entity_type, entity_id, before, after, request_id)
           SELECT 'user'::audit_actor_type, ${actor.id}::uuid, 'stock_ledger.post', 'stock_ledger', ledger.id,
           NULL, to_jsonb(ledger.*), ${actor.requestId} FROM ${stockLedger} ledger
@@ -574,10 +584,20 @@ export function createDeliveryService(db: Database, config: DeliveryConfig) {
         equipmentName: equipmentItems.name,
         unitOfMeasure: equipmentItems.unitOfMeasure,
         quantity: sql<number>`COALESCE(SUM(${stockLedger.quantityDelta}), 0)::int`,
+        reorderThreshold: equipmentItems.reorderThreshold,
+        reorderAlertId: reorderAlerts.id,
+        reorderAlertOpenedAt: reorderAlerts.openedAt,
+        isBelowReorderThreshold: sql<boolean>`COALESCE(${reorderAlerts.id} IS NOT NULL, false)`,
         currentUnitPriceCents: equipmentItems.currentUnitPriceCents,
         valueCents: sql<number>`(COALESCE(SUM(${stockLedger.quantityDelta}), 0) * ${equipmentItems.currentUnitPriceCents})::int`,
-      }).from(equipmentItems).leftJoin(stockLedger, and(eq(stockLedger.equipmentItemId, equipmentItems.id), eq(stockLedger.storeId, storeId)))
-        .groupBy(equipmentItems.id).orderBy(equipmentItems.name)
+      }).from(equipmentItems)
+        .leftJoin(stockLedger, and(eq(stockLedger.equipmentItemId, equipmentItems.id), eq(stockLedger.storeId, storeId)))
+        .leftJoin(reorderAlerts, and(
+          eq(reorderAlerts.equipmentItemId, equipmentItems.id),
+          eq(reorderAlerts.storeId, storeId),
+          eq(reorderAlerts.status, 'open'),
+        ))
+        .groupBy(equipmentItems.id, reorderAlerts.id).orderBy(equipmentItems.name)
     },
   }
 }

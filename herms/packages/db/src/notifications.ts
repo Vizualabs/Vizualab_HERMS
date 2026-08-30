@@ -44,6 +44,14 @@ function requiredPayloadString(message: NotificationQueueMessage, key: string) {
   return value
 }
 
+function requiredPayloadNumber(message: NotificationQueueMessage, key: string) {
+  const value = message.payload[key]
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new DataConflictError('Notification payload is missing ' + key)
+  }
+  return value
+}
+
 async function signToken(secret: string, value: string) {
   const key = await crypto.subtle.importKey(
     'raw',
@@ -246,6 +254,46 @@ export function createNotificationService(db: Database, config: NotificationConf
     }] : [])
   }
 
+  async function resolveReorderAlert(
+    message: NotificationQueueMessage,
+  ): Promise<WhatsAppNotification[]> {
+    const storeId = requiredPayloadString(message, 'storeId')
+    const equipmentName = requiredPayloadString(message, 'equipmentName')
+    const currentQuantity = requiredPayloadNumber(message, 'currentQuantity')
+    const threshold = requiredPayloadNumber(message, 'threshold')
+    const recipients = await db
+      .select({ id: users.id, name: users.name, phone: users.phone })
+      .from(users)
+      .where(and(
+        eq(users.storeId, storeId),
+        eq(users.active, true),
+        isNotNull(users.phone),
+        or(eq(users.role, 'store_admin'), eq(users.isDeputyAdmin, true)),
+      ))
+    if (recipients.length === 0) {
+      throw new DataConflictError('No active Store Admin or deputy has a WhatsApp phone number')
+    }
+    const stockUrl = config.publicAppUrl.replace(/\/$/, '') + '/stock'
+    return recipients.flatMap((recipient) => recipient.phone ? [{
+      idempotencyKey: message.idempotencyKey + ':' + recipient.id,
+      requestId: message.requestId,
+      recipient: {
+        kind: 'user' as const,
+        id: recipient.id,
+        name: recipient.name,
+        phone: recipient.phone,
+      },
+      templateKey: 'reorder_threshold' as const,
+      text: equipmentName + ' is below its reorder threshold (' + currentQuantity + '/' + threshold + '). Review stock: ' + stockUrl,
+      variables: {
+        equipmentName,
+        currentQuantity: String(currentQuantity),
+        threshold: String(threshold),
+        stockUrl,
+      },
+    }] : [])
+  }
+
   return {
     async listFieldStaff(actor: SessionUser): Promise<FieldStaffRecipient[]> {
       if (!actor.storeId) throw new DataConflictError('A store-scoped Sales user is required')
@@ -272,6 +320,7 @@ export function createNotificationService(db: Database, config: NotificationConf
 
     async resolve(message: NotificationQueueMessage): Promise<WhatsAppNotification[]> {
       if (message.eventType === 'quotation_created') return resolveQuotation(message)
+      if (message.eventType === 'reorder_threshold_breached') return resolveReorderAlert(message)
       if (message.eventType.endsWith('_link_created') || message.eventType.endsWith('_link_regenerated')) {
         return resolveNoteLink(message)
       }

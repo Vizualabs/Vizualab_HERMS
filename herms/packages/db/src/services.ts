@@ -10,6 +10,7 @@ import type {
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 
 import type { Database } from './client'
+import { reconcileReorderAlertsForItem } from './reorder'
 import {
   auditLogs,
   customerPrices,
@@ -261,6 +262,7 @@ export function createMasterDataService(db: Database) {
         db
           .insert(auditLogs)
           .values(auditValues(actor, 'equipment_item.create', 'equipment_item', created.id, null, created)),
+        db.execute(reconcileReorderAlertsForItem(created.id, actor, now)),
       ])
       return created
     },
@@ -290,6 +292,7 @@ export function createMasterDataService(db: Database) {
           WHERE ${equipmentItems.id} = ${id}::uuid
             AND ${equipmentItems.updatedAt} = ${updatedAt}
         `),
+        db.execute(reconcileReorderAlertsForItem(id, actor, updatedAt)),
       ])
       if (!updatedResult[0]) throw new DataConflictError('The equipment item changed concurrently; retry')
       return updated

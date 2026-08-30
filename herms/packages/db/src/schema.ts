@@ -376,6 +376,30 @@ export const stockLedger = pgTable(
   ],
 )
 
+export const reorderAlerts = pgTable(
+  'reorder_alert',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    storeId: uuid('store_id').notNull().references(() => stores.id),
+    equipmentItemId: uuid('equipment_item_id').notNull().references(() => equipmentItems.id),
+    openedLedgerId: uuid('opened_ledger_id').references(() => stockLedger.id),
+    resolvedLedgerId: uuid('resolved_ledger_id').references(() => stockLedger.id),
+    threshold: integer('threshold').notNull(),
+    openedQuantity: integer('opened_quantity').notNull(),
+    resolvedQuantity: integer('resolved_quantity'),
+    status: text('status', { enum: ['open', 'resolved'] }).default('open').notNull(),
+    openedAt: timestamp('opened_at', { withTimezone: true }).defaultNow().notNull(),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex('reorder_alert_one_open_per_store_item')
+      .on(table.storeId, table.equipmentItemId)
+      .where(sql`${table.status} = 'open'`),
+    index('reorder_alert_store_status_idx').on(table.storeId, table.status, table.openedAt),
+    index('reorder_alert_item_idx').on(table.equipmentItemId, table.openedAt),
+  ],
+)
+
 export const discrepancies = pgTable(
   'discrepancy',
   {
@@ -509,6 +533,7 @@ export type DeliveryNoteLine = typeof deliveryNoteLines.$inferSelect
 export type RetentionNote = typeof retentionNotes.$inferSelect
 export type RetentionNoteLine = typeof retentionNoteLines.$inferSelect
 export type StockLedgerEntry = typeof stockLedger.$inferSelect
+export type ReorderAlert = typeof reorderAlerts.$inferSelect
 export type Discrepancy = typeof discrepancies.$inferSelect
 export type DamageClaim = typeof damageClaims.$inferSelect
 export type DashboardStockRollup = typeof dashboardStockRollups.$inferSelect

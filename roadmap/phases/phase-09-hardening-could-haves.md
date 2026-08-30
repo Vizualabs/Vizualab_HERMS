@@ -6,7 +6,7 @@ tags:
   - roadmap
   - hardening
   - nfr
-status: draft
+status: implementation-complete-deployment-validation-pending
 ---
 
 # Phase 9: Hardening and Could-haves
@@ -26,7 +26,9 @@ Verify non-functional requirements, ship low-priority features, and rehearse ope
 - Load test against the 3-second dashboard and 2-minute mobile-form NFRs (§6.1, §6.4).
 - Audit-trail completeness review: every stock movement, price change, discrepancy, and payment traceable to a source document and user (§6.6).
 - Uptime instrumentation against the 99.5% target (§6.3).
-- Backup/restore rehearsal on Neon with documented RPO/RTO.
+- Database-resident backup/restore is excluded by the product owner while the project uses
+  limited Neon free-tier storage. No backup tables, snapshots, or copied transaction data are
+  implemented in Phase 9.
 
 ## Explicitly Out of Scope for v1 (§10.1)
 
@@ -39,7 +41,19 @@ Keep the schema multi-store-ready (§6.5) without building it.
 
 ## Outputs (Handoff to Phase 10)
 
-- A hardened, measured, backed-up system ready for launch and for optional agentic assistance.
+- A hardened and measurable system ready for deployment validation and optional agentic assistance.
+
+## Implementation status (2026-08-30)
+
+- Reorder thresholds, deduplicated low-stock episodes, stock UI indicators, audit events, and
+  Store Admin/deputy notification outbox events are implemented.
+- SRS-based DN/RN PDF layouts and authenticated downloads are implemented. Exact coordinate
+  matching remains a presentation-only deployment follow-up when client paper samples exist.
+- Audit completeness and read-only dashboard load verifiers are implemented.
+- Storage-neutral request SLO logs and CloudWatch 99.5% availability / dashboard p95 alarms are
+  implemented in infrastructure code.
+- Staging load results, representative-user mobile timing, alarm delivery, and production
+  deployment are pending the separate deployment phase requested by the product owner.
 
 ## Delivery Priority
 

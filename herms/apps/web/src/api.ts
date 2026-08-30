@@ -276,8 +276,13 @@ export type DeliveryNoteDetail = DeliveryNoteSummary & {
   orderNumber: string
   customerId: string
   customerName: string
+  customerAddress: string | null
+  storeName: string | null
+  storeAddress: string | null
   submittedBy: string | null
+  submittedByName: string | null
   approvedBy: string | null
+  approvedByName: string | null
   updatedAt: string
   lines: DeliveryNoteLine[]
   submissionLink?: string
@@ -322,8 +327,14 @@ export type RetentionNoteDetail = RetentionNoteSummary & {
   customerId: string
   customerName: string
   deliveryNoteId: string | null
+  deliveryNoteNumber: string | null
+  customerAddress: string | null
+  storeName: string | null
+  storeAddress: string | null
   submittedBy: string | null
+  submittedByName: string | null
   approvedBy: string | null
+  approvedByName: string | null
   updatedAt: string
   lines: RetentionNoteLine[]
   submissionLink?: string
@@ -366,6 +377,10 @@ export type StockItem = {
   equipmentName: string
   unitOfMeasure: string
   quantity: number
+  reorderThreshold: number | null
+  reorderAlertId: string | null
+  reorderAlertOpenedAt: string | null
+  isBelowReorderThreshold: boolean
   currentUnitPriceCents: number
   valueCents: number
 }

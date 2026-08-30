@@ -24,8 +24,11 @@ import {
   retentionNoteLines,
   retentionNotes,
   stockLedger,
+  stores,
+  users,
 } from './schema'
 import { requireActiveFieldStaff, resolveFieldStaffRecipient } from './notifications'
+import { reconcileReorderAlertsForLedger } from './reorder'
 import { DataConflictError, DataNotFoundError, type AuditActor } from './services'
 
 export type RetentionConfig = {
@@ -129,11 +132,17 @@ export function createRetentionService(db: Database, config: RetentionConfig) {
         orderNumber: orders.orderNumber,
         customerId: orders.customerId,
         customerName: customers.name,
+        customerAddress: customers.address,
         deliveryNoteId: retentionNotes.deliveryNoteId,
+        deliveryNoteNumber: sql<string | null>`(SELECT dn_number FROM ${deliveryNotes} WHERE id = ${retentionNotes.deliveryNoteId})`,
         storeId: retentionNotes.storeId,
+        storeName: sql<string | null>`(SELECT name FROM ${stores} WHERE id = ${retentionNotes.storeId})`,
+        storeAddress: sql<string | null>`(SELECT address FROM ${stores} WHERE id = ${retentionNotes.storeId})`,
         status: retentionNotes.status,
         submittedBy: retentionNotes.submittedBy,
+        submittedByName: sql<string | null>`(SELECT name FROM ${users} WHERE id = ${retentionNotes.submittedBy})`,
         approvedBy: retentionNotes.approvedBy,
+        approvedByName: sql<string | null>`(SELECT name FROM ${users} WHERE id = ${retentionNotes.approvedBy})`,
         submittedAt: retentionNotes.submittedAt,
         approvedAt: retentionNotes.approvedAt,
         createdAt: retentionNotes.createdAt,
@@ -723,6 +732,7 @@ export function createRetentionService(db: Database, config: RetentionConfig) {
           JOIN ${retentionNotes} note ON note.id = line.retention_note_id
           WHERE note.id = ${id}::uuid AND note.status = 'approved'
             AND note.updated_at = ${now} AND line.missing_damaged_qty > 0`),
+        db.execute(reconcileReorderAlertsForLedger('retention_note', id, now, actor)),
         db.execute(sql`UPDATE ${discrepancies}
           SET status = 'written_off', resolved_at = ${now}, updated_at = ${now}
           WHERE source_type = 'retention_note' AND source_note_id = ${id}::uuid
@@ -994,6 +1004,7 @@ export function createRetentionService(db: Database, config: RetentionConfig) {
       `)
       const [mutation] = await db.batch([
         mutationQuery,
+        db.execute(reconcileReorderAlertsForLedger('write_off_reversal', discrepancyId, now, actor)),
         db.execute(sql`INSERT INTO ${auditLogs} (
             actor_type, actor_id, action, entity_type, entity_id,
             before, after, request_id

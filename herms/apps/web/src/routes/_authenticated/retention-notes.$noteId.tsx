@@ -43,9 +43,14 @@ function RetentionNotePage() {
           <h1 className="mt-1 text-3xl font-semibold">{data.rnNumber}</h1>
           <p className="mt-2 text-muted-foreground">{data.customerName} · {data.orderNumber}</p>
         </div>
-        <span className="rounded-full bg-primary-soft px-3 py-1 text-sm font-semibold capitalize text-primary-strong">
-          {data.status.replaceAll('_', ' ')}
-        </span>
+        <div className="flex flex-col items-end gap-3">
+          <span className="rounded-full bg-primary-soft px-3 py-1 text-sm font-semibold capitalize text-primary-strong">
+            {data.status.replaceAll('_', ' ')}
+          </span>
+          <a className="button-secondary" href={`/api/retention-notes/${noteId}/pdf`}>
+            Download PDF
+          </a>
+        </div>
       </div>
       <div className="mt-6 overflow-x-auto">
         <table className="w-full text-left text-sm">

@@ -20,15 +20,22 @@ export function requestContext(logger: AppLogger) {
     try {
       await next()
     } finally {
+      const durationMs = Math.round((performance.now() - startedAt) * 100) / 100
+      const path = c.req.path.replace(/(\/api\/notes\/token\/)[^/]+/g, '$1[REDACTED]')
+      const sloName = path.startsWith('/api/dashboard') ? 'dashboard_response' : 'api_availability'
+      const sloTargetMs = sloName === 'dashboard_response' ? 3_000 : undefined
       c.header(REQUEST_ID_HEADER, requestId)
+      c.header('Server-Timing', `app;dur=${durationMs}`)
       logger({
-        level: 'info',
+        level: c.res.status >= 500 ? 'error' : 'info',
         event: 'request_completed',
         requestId,
         method: c.req.method,
-        path: c.req.path.replace(/(\/api\/notes\/token\/)[^/]+/g, '$1[REDACTED]'),
+        path,
         status: c.res.status,
-        durationMs: Math.round((performance.now() - startedAt) * 100) / 100,
+        durationMs,
+        sloName,
+        ...(sloTargetMs ? { sloTargetMs, sloBreached: durationMs > sloTargetMs } : {}),
       })
     }
   })

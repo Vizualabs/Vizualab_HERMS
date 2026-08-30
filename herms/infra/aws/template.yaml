@@ -12,6 +12,13 @@ Parameters:
     Default: 20
     MinValue: 3
     MaxValue: 25
+  AlarmTopicArn:
+    Type: String
+    Default: ''
+    Description: Optional SNS topic ARN for Phase 9 availability and latency alarms
+
+Conditions:
+  HasAlarmTopic: !Not [!Equals [!Ref AlarmTopicArn, '']]
 
 Resources:
   HermsApi:
@@ -26,6 +33,8 @@ Resources:
       MemorySize: 512
       Timeout: !Ref ApiTimeoutSeconds
       Tracing: Active
+      LoggingConfig:
+        LogGroup: !Ref HermsApiLogGroup
       Environment:
         Variables:
           APP_ENV: production
@@ -34,6 +43,95 @@ Resources:
         AuthType: NONE
         InvokeMode: BUFFERED
 
+  HermsApiLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/herms-api
+      RetentionInDays: 14
+
+  HermsApiRequestMetric:
+    Type: AWS::Logs::MetricFilter
+    DependsOn: HermsApiLogGroup
+    Properties:
+      LogGroupName: !Ref HermsApiLogGroup
+      FilterPattern: '{ $.event = "request_completed" }'
+      MetricTransformations:
+        - MetricNamespace: HERMS/ServiceLevel
+          MetricName: ApiRequestCount
+          MetricValue: '1'
+          DefaultValue: 0
+
+  HermsApiFailureMetric:
+    Type: AWS::Logs::MetricFilter
+    DependsOn: HermsApiLogGroup
+    Properties:
+      LogGroupName: !Ref HermsApiLogGroup
+      FilterPattern: '{ $.event = "request_completed" && $.status >= 500 }'
+      MetricTransformations:
+        - MetricNamespace: HERMS/ServiceLevel
+          MetricName: ApiFailureCount
+          MetricValue: '1'
+          DefaultValue: 0
+
+  HermsDashboardDurationMetric:
+    Type: AWS::Logs::MetricFilter
+    DependsOn: HermsApiLogGroup
+    Properties:
+      LogGroupName: !Ref HermsApiLogGroup
+      FilterPattern: '{ $.event = "request_completed" && $.sloName = "dashboard_response" }'
+      MetricTransformations:
+        - MetricNamespace: HERMS/ServiceLevel
+          MetricName: DashboardDurationMs
+          MetricValue: $.durationMs
+          Unit: Milliseconds
+
+  HermsApiAvailabilityAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: HERMS API availability is below the 99.5 percent Phase 9 target
+      ComparisonOperator: LessThanThreshold
+      Threshold: 99.5
+      EvaluationPeriods: 12
+      DatapointsToAlarm: 3
+      TreatMissingData: notBreaching
+      Metrics:
+        - Id: requests
+          ReturnData: false
+          MetricStat:
+            Metric:
+              Namespace: HERMS/ServiceLevel
+              MetricName: ApiRequestCount
+            Period: 300
+            Stat: Sum
+        - Id: failures
+          ReturnData: false
+          MetricStat:
+            Metric:
+              Namespace: HERMS/ServiceLevel
+              MetricName: ApiFailureCount
+            Period: 300
+            Stat: Sum
+        - Id: availability
+          Label: AvailabilityPercent
+          ReturnData: true
+          Expression: IF(requests>0,100*(1-failures/requests),100)
+      AlarmActions: !If [HasAlarmTopic, [!Ref AlarmTopicArn], []]
+
+  HermsDashboardLatencyAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: HERMS dashboard p95 response time exceeds the 3 second Phase 9 target
+      Namespace: HERMS/ServiceLevel
+      MetricName: DashboardDurationMs
+      ExtendedStatistic: p95
+      Period: 300
+      EvaluationPeriods: 3
+      DatapointsToAlarm: 2
+      Threshold: 3000
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [HasAlarmTopic, [!Ref AlarmTopicArn], []]
+
 Outputs:
   ApiFunctionName:
     Value: !Ref HermsApi
@@ -41,3 +139,7 @@ Outputs:
     Value: !GetAtt HermsApiUrl.FunctionUrl
   ApiTimeoutSeconds:
     Value: !Ref ApiTimeoutSeconds
+  AvailabilityAlarmName:
+    Value: !Ref HermsApiAvailabilityAlarm
+  DashboardLatencyAlarmName:
+    Value: !Ref HermsDashboardLatencyAlarm

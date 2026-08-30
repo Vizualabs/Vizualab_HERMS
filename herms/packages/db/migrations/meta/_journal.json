@@ -64,6 +64,13 @@
       "when": 1787529608000,
       "tag": "0008_dashboard_reporting",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1787529609000,
+      "tag": "0009_phase_9_hardening",
+      "breakpoints": true
     }
   ]
 }

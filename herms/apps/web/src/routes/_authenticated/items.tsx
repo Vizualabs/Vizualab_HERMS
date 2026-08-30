@@ -22,6 +22,7 @@ function ItemsPage() {
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.items }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.stock }),
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboard }),
       ])
     },
@@ -83,12 +84,13 @@ function ItemsPage() {
           onSubmit={(event) => {
             event.preventDefault()
             const form = new FormData(event.currentTarget)
+            const reorderThreshold = String(form.get('reorderThreshold') ?? '').trim()
             createItem.mutate({
               name: String(form.get('name') ?? ''),
               category: String(form.get('category') ?? ''),
               unitOfMeasure: String(form.get('unitOfMeasure') ?? 'unit'),
               currentUnitPriceCents: Number(form.get('currentUnitPriceCents')),
-              reorderThreshold: null,
+              reorderThreshold: reorderThreshold === '' ? null : Number(reorderThreshold),
             })
           }}
         >
@@ -96,6 +98,10 @@ function ItemsPage() {
           <ItemField label="Category" name="category" required />
           <ItemField label="Unit of measure" name="unitOfMeasure" defaultValue="unit" required />
           <ItemField label="Opening price (minor units)" name="currentUnitPriceCents" type="number" required />
+          <ItemField label="Reorder threshold (optional)" name="reorderThreshold" type="number" />
+          <p className="text-xs text-muted-foreground">
+            Store administrators are alerted when available stock drops below this quantity.
+          </p>
           {createItem.error && (
             <p role="alert" className="text-sm text-danger">
               {createItem.error instanceof ApiError ? createItem.error.message : 'Unable to create equipment'}

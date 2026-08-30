@@ -25,7 +25,7 @@ function ItemDetailPage() {
     }),
   )
   const update = useMutation({
-    mutationFn: (input: { name: string; category: string; unitOfMeasure: string }) =>
+    mutationFn: (input: { name: string; category: string; unitOfMeasure: string; reorderThreshold: number | null }) =>
       api.updateItem(itemId, input),
     onSuccess: invalidateItem,
   })
@@ -41,6 +41,7 @@ function ItemDetailPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.priceHistory(itemId) }),
       queryClient.invalidateQueries({ queryKey: queryKeys.items }),
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.stock }),
     ])
   }
 
@@ -72,16 +73,25 @@ function ItemDetailPage() {
               onSubmit={(event) => {
                 event.preventDefault()
                 const form = new FormData(event.currentTarget)
+                const reorderThreshold = String(form.get('reorderThreshold') ?? '').trim()
                 update.mutate({
                   name: String(form.get('name') ?? ''),
                   category: String(form.get('category') ?? ''),
                   unitOfMeasure: String(form.get('unitOfMeasure') ?? ''),
+                  reorderThreshold: reorderThreshold === '' ? null : Number(reorderThreshold),
                 })
               }}
             >
               <Edit label="Name" name="name" defaultValue={item.data.name} />
               <Edit label="Category" name="category" defaultValue={item.data.category} />
               <Edit label="Unit" name="unitOfMeasure" defaultValue={item.data.unitOfMeasure} />
+              <Edit
+                label="Reorder threshold (optional)"
+                name="reorderThreshold"
+                type="number"
+                defaultValue={item.data.reorderThreshold === null ? '' : String(item.data.reorderThreshold)}
+                required={false}
+              />
               {update.error && <ErrorText error={update.error} />}
               <button type="submit" disabled={update.isPending} className="button-secondary w-full">
                 {update.isPending ? 'Saving…' : 'Save equipment'}
@@ -164,11 +174,13 @@ function Edit({
   name,
   defaultValue,
   type = 'text',
+  required = true,
 }: {
   label: string
   name: string
   defaultValue: string
   type?: string
+  required?: boolean
 }) {
   return (
     <label className="block text-sm font-medium">
@@ -180,7 +192,7 @@ function Edit({
         min={type === 'number' ? 0 : undefined}
         step={type === 'number' ? 1 : undefined}
         defaultValue={defaultValue}
-        required
+        required={required}
       />
     </label>
   )

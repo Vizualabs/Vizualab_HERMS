@@ -34,6 +34,8 @@
     "verify:phase6": "bun run scripts/verify-phase6.ts",
     "verify:phase7": "bun run scripts/verify-phase7.ts",
     "verify:phase8": "bun run scripts/verify-phase8.ts",
+    "verify:phase9:audit": "bun run scripts/verify-phase9-audit.ts",
+    "load:phase9": "bun run scripts/load-phase9.ts",
     "test:e2e:phase8": "bun --env-file=.env run --cwd apps/web test:e2e"
   },
   "devDependencies": {
