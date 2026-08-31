@@ -3,6 +3,44 @@
 Hotel Equipment Rental Management System. The repository uses Bun workspaces and
 implements the roadmap one approval-gated phase at a time.
 
+## Quick start
+
+From the `herms` directory, bootstrap a fresh checkout:
+
+```sh
+bun run bootstrap
+```
+
+This installs the locked dependencies and creates `.env` from `.env.example` when
+needed. Existing `.env` files are preserved. Open `.env` and set valid
+`DATABASE_URL` and `MIGRATION_DATABASE_URL` values, then initialize the database:
+
+```sh
+bun run bootstrap --with-db
+```
+
+Database initialization is opt-in because it runs the migration and seed commands
+against the database configured in `.env`.
+
+Start the backend and frontend together:
+
+```sh
+bun run dev
+```
+
+The web app is available at `http://localhost:3000`, and the API listens at
+`http://localhost:3001`. Press `Ctrl+C` to stop both services.
+
+To run them in separate terminals instead:
+
+```sh
+# Terminal 1: backend
+bun run dev:api
+
+# Terminal 2: frontend
+bun run dev:web
+```
+
 ## Phase 1 commands
 
 ```sh
