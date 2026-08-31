@@ -9,7 +9,12 @@ import tailwindcss from '@tailwindcss/vite'
 const config = defineConfig({
   resolve: { tsconfigPaths: true },
   plugins: [
-    devtools(),
+    devtools({
+      // Bidirectional console piping can echo a client warning back through the
+      // server until Vite becomes unresponsive. Keep the devtools enabled, but
+      // let each runtime own its console output.
+      consolePiping: { enabled: false },
+    }),
     tailwindcss(),
     tanstackStart({
       spa: {

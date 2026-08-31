@@ -146,17 +146,12 @@ function DashboardPage() {
   ].find(Boolean)
 
   return (
-    <section className="space-y-8">
-      <header className="rounded-3xl bg-primary-strong px-6 py-7 text-primary-foreground shadow-[0_18px_50px_-28px_var(--color-shadow)] sm:px-8">
+    <section className="space-y-6">
+      <header className="border-b border-border pb-5">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-primary-soft">
-              Management reporting
-            </p>
-            <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
-              Business dashboard
-            </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-primary-soft">
+            <h1>Dashboard</h1>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
               Reconciled stock, receivables, cash movement, and approved equipment issues.
               Periods use Asia/Colombo time.
             </p>
@@ -297,6 +292,7 @@ function DashboardPage() {
               previousMonth={payments.data.previous.month}
               inverse
             />}
+            tone="warning"
           />
           <MetricCard
             eyebrow="Cash received"
@@ -307,6 +303,7 @@ function DashboardPage() {
               previous={payments.data.previous.receivedAmountCents}
               previousMonth={payments.data.previous.month}
             />}
+            tone="success"
           />
           <MetricCard
             eyebrow="Income"
@@ -317,6 +314,7 @@ function DashboardPage() {
               previous={incomeExpenses.data.previous.incomeCents}
               previousMonth={incomeExpenses.data.previous.month}
             />}
+            tone="success"
           />
           <MetricCard
             eyebrow="Expenses"
@@ -610,19 +608,20 @@ function MetricCard({
   label: string
   value: string
   detail: React.ReactNode
-  tone?: 'default' | 'success' | 'danger'
+  tone?: 'default' | 'success' | 'warning' | 'danger'
 }) {
-  const toneClass = tone === 'danger'
-    ? 'border-danger/30 bg-danger-soft'
+  const valueClass = tone === 'danger'
+    ? 'text-danger'
     : tone === 'success'
-      ? 'border-success/30 bg-success-soft'
-      : 'border-border bg-card'
+      ? 'text-success'
+      : tone === 'warning'
+        ? 'text-warning'
+        : 'text-foreground'
   return (
-    <article className={`rounded-2xl border p-5 shadow-[0_12px_35px_-30px_var(--color-shadow)] ${toneClass}`}>
-      <p className="text-xs font-semibold uppercase tracking-widest text-primary">{eyebrow}</p>
-      <h2 className="mt-2 text-sm font-medium text-muted-foreground">{label}</h2>
-      <p className="mt-3 break-words font-mono text-2xl font-semibold tracking-tight">{value}</p>
-      <div className="mt-3 text-xs text-muted-foreground">{detail}</div>
+    <article aria-label={`${eyebrow}: ${label}`} className="rounded-xl border border-border bg-card p-4">
+      <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</h2>
+      <p className={`mt-2 break-words text-2xl font-semibold tracking-tight ${valueClass}`}>{value}</p>
+      <div className="mt-1.5 text-xs text-muted-foreground">{detail}</div>
     </article>
   )
 }
@@ -683,7 +682,7 @@ function RankingPanel({
             </div>
             <div className="mt-2 h-2 overflow-hidden rounded-full bg-muted" aria-hidden="true">
               <div
-                className="h-full rounded-full bg-primary"
+                className={`h-full rounded-full ${eyebrow.includes('equipment') ? 'bg-danger' : 'bg-primary-strong'}`}
                 style={{ width: `${Math.max((row.caseCount / maximum) * 100, 4)}%` }}
               />
             </div>

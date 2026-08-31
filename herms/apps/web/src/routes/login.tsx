@@ -27,15 +27,23 @@ function LoginPage() {
   if (session.data) return <Navigate to="/" />
 
   return (
-    <main className="grid min-h-screen place-items-center px-5 py-12">
-      <section className="w-full max-w-md rounded-3xl border border-border bg-card p-8 shadow-xl shadow-shadow/10">
-        <p className="text-sm font-bold uppercase tracking-[0.22em] text-primary">HERMS</p>
-        <h1 className="mt-3 text-3xl font-semibold tracking-tight">Welcome back</h1>
-        <p className="mt-2 text-sm leading-6 text-muted-foreground">
+    <main className="grid min-h-screen place-items-center bg-background px-5 py-12">
+      <section className="w-full max-w-sm rounded-xl border border-border bg-card p-7 shadow-[0_1px_2px_oklch(22%_0.02_220/8%)] sm:p-8">
+        <div className="flex items-center gap-3">
+          <div className="flex size-10 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">
+            H
+          </div>
+          <div>
+            <p className="text-sm font-semibold leading-4">HERMS</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">Equipment Rental</p>
+          </div>
+        </div>
+        <h1 className="mt-7 text-2xl font-semibold tracking-tight">Welcome back</h1>
+        <p className="mt-1.5 text-sm leading-6 text-muted-foreground">
           Sign in with an active HERMS staff account.
         </p>
         <form
-          className="mt-8 space-y-5"
+          className="mt-7 space-y-5"
           onSubmit={(event) => {
             event.preventDefault()
             setError('')
@@ -53,7 +61,7 @@ function LoginPage() {
               type="email"
               autoComplete="username"
               required
-              className="mt-2 w-full rounded-xl border border-border bg-background px-4 py-3 outline-none focus:ring-2 focus:ring-ring"
+              className="input mt-2"
             />
           </label>
           <label className="block text-sm font-medium">
@@ -63,19 +71,15 @@ function LoginPage() {
               type="password"
               autoComplete="current-password"
               required
-              className="mt-2 w-full rounded-xl border border-border bg-background px-4 py-3 outline-none focus:ring-2 focus:ring-ring"
+              className="input mt-2"
             />
           </label>
           {error && (
-            <p role="alert" className="rounded-xl bg-danger-soft px-4 py-3 text-sm text-danger">
+            <p role="alert" className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger">
               {error}
             </p>
           )}
-          <button
-            type="submit"
-            disabled={login.isPending}
-            className="w-full rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground hover:bg-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
+          <button type="submit" disabled={login.isPending} className="button-primary w-full">
             {login.isPending ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
