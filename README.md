@@ -2,6 +2,26 @@
 
 Documentation and implementation plan for the Hotel Equipment Rental Management System (HERMS).
 
+## Bootstrap and run
+
+From the repository root:
+
+```sh
+cd herms
+bun run bootstrap
+bun run dev
+```
+
+The frontend starts at `http://localhost:3000` and the backend at
+`http://localhost:3001`. To migrate and seed a configured database, run:
+
+```sh
+cd herms
+bun run bootstrap --with-db
+```
+
+See [the application README](herms/README.md) for the complete setup instructions.
+
 ## Start Here
 
 1. [Project Initialization](PROJECT_INITIALIZATION.md)
