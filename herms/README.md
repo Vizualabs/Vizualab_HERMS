@@ -44,6 +44,41 @@ To run them in separate terminals instead:
 .\herms.bat dev-web
 ```
 
+## Super-user test account
+
+After running `.\herms.bat bootstrap-db`, provision a test super user:
+
+```powershell
+$env:SUPER_USER_EMAIL = "admin@herms.local"
+$env:SUPER_USER_PASSWORD = "ReplaceWithAStrongPassword123!"
+$env:SUPER_USER_NAME = "HERMS Super User"
+
+bun run db:create-super-user
+```
+
+`SUPER_USER_PASSWORD` must contain at least 16 characters. The command creates
+or updates the account identified by the email, activates it, assigns the
+`super_user` role, uses the first seeded store, and records an audit event.
+
+To use a specific existing store, set this optional value before provisioning:
+
+```powershell
+$env:SUPER_USER_STORE_ID = "<existing-store-uuid>"
+```
+
+Remove the temporary variables after provisioning:
+
+```powershell
+Remove-Item Env:SUPER_USER_EMAIL -ErrorAction SilentlyContinue
+Remove-Item Env:SUPER_USER_PASSWORD -ErrorAction SilentlyContinue
+Remove-Item Env:SUPER_USER_NAME -ErrorAction SilentlyContinue
+Remove-Item Env:SUPER_USER_STORE_ID -ErrorAction SilentlyContinue
+```
+
+Start the application with `.\herms.bat dev`, then sign in at
+`http://localhost:3000/login` using the selected email and password. Never
+commit real super-user credentials to the repository.
+
 ## Phase 1 commands
 
 ```sh
