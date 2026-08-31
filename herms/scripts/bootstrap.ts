@@ -6,6 +6,10 @@ const envFile = Bun.file(new URL('../.env', import.meta.url))
 const envExampleFile = Bun.file(new URL('../.env.example', import.meta.url))
 const withDatabase = process.argv.includes('--with-db')
 const bunExecutable = process.execPath
+const bootstrapDatabaseCommand =
+  process.platform === 'win32' ? '.\\herms.bat bootstrap-db' : 'bun run bootstrap --with-db'
+const startCommand =
+  process.platform === 'win32' ? '.\\herms.bat dev' : 'bun run dev'
 
 function randomSecret(bytes: number) {
   return Buffer.from(crypto.getRandomValues(new Uint8Array(bytes))).toString('base64url')
@@ -71,6 +75,6 @@ if (withDatabase) {
 console.log('\nBootstrap complete.')
 if (!withDatabase) {
   console.log('Set DATABASE_URL and MIGRATION_DATABASE_URL in .env if they are not configured yet.')
-  console.log('Then run `bun run bootstrap --with-db` once to migrate and seed the database.')
+  console.log('Then run ' + bootstrapDatabaseCommand + ' once to migrate and seed the database.')
 }
-console.log('Start the frontend and backend with `bun run dev`.')
+console.log('Start the frontend and backend with ' + startCommand + '.')

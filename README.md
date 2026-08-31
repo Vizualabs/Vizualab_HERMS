@@ -8,8 +8,8 @@ From the repository root:
 
 ```sh
 cd herms
-bun run bootstrap
-bun run dev
+.\herms.bat bootstrap
+.\herms.bat dev
 ```
 
 The frontend starts at `http://localhost:3000` and the backend at
@@ -17,8 +17,11 @@ The frontend starts at `http://localhost:3000` and the backend at
 
 ```sh
 cd herms
-bun run bootstrap --with-db
+.\herms.bat bootstrap-db
 ```
+
+The batch file is the Windows entry point. The equivalent Bun commands remain
+available for non-Windows environments.
 
 See [the application README](herms/README.md) for the complete setup instructions.
 
