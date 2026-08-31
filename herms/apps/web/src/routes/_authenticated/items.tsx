@@ -14,7 +14,7 @@ export const Route = createFileRoute('/_authenticated/items')({ component: Items
 function ItemsPage() {
   const items = useQuery(itemsQuery)
   const session = useQuery(sessionQuery)
-  const isOwner = session.data?.role === 'business_owner'
+  const isOwner = session.data?.role === 'business_owner' || session.data?.role === 'super_user'
   const escalation = useQuery({ ...priceEscalationQuery, enabled: isOwner })
   const queryClient = useQueryClient()
   const createItem = useMutation({

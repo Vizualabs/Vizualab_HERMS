@@ -37,4 +37,12 @@ describe('Phase 4 retention invariants', () => {
     expect(migration).toContain("actor_role NOT IN ('store_admin', 'system_admin')")
     expect(migration).toContain('write-off reversal must exactly offset its original ledger row')
   })
+
+  test('permits Super User write-off reversals without weakening ledger checks', async () => {
+    const migration = await Bun.file(fileURLToPath(
+      new URL('../migrations/0010_super_user.sql', import.meta.url),
+    )).text()
+    expect(migration).toContain("'store_admin', 'system_admin', 'super_user'")
+    expect(migration).toContain('write-off reversal must exactly offset its original ledger row')
+  })
 })

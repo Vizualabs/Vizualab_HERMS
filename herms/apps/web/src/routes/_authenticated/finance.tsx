@@ -26,7 +26,7 @@ function localDateTimeValue() {
 function FinancePage() {
   const queryClient = useQueryClient()
   const session = useQuery(sessionQuery)
-  const isFinance = session.data?.role === 'finance'
+  const isFinance = session.data?.role === 'finance' || session.data?.role === 'super_user'
   const canView = isFinance || session.data?.role === 'business_owner'
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7))
   const [orderId, setOrderId] = useState('')

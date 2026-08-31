@@ -7,6 +7,7 @@ export const USER_ROLES = [
   'store_admin',
   'finance',
   'system_admin',
+  'super_user',
 ] as const
 
 export const CUSTOMER_TYPES = ['recurring', 'new'] as const
@@ -27,6 +28,10 @@ export const PAYMENT_METHODS = ['cash', 'bank_transfer', 'cheque', 'other'] as c
 export const CLAIM_STATUSES = ['drafted', 'confirmed', 'rejected'] as const
 
 export type UserRole = (typeof USER_ROLES)[number]
+
+export function isSuperUser(role: UserRole | null | undefined): role is 'super_user' {
+  return role === 'super_user'
+}
 export type CustomerType = (typeof CUSTOMER_TYPES)[number]
 export type PriceChangeReason = (typeof PRICE_CHANGE_REASONS)[number]
 export type ManualPriceChangeReason = (typeof MANUAL_PRICE_CHANGE_REASONS)[number]

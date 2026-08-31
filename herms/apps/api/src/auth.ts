@@ -1,4 +1,4 @@
-import type { SessionUser, UserRole } from '@herms/shared'
+import { isSuperUser, type SessionUser, type UserRole } from '@herms/shared'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import type { Context, MiddlewareHandler } from 'hono'
 import { createMiddleware } from 'hono/factory'
@@ -99,7 +99,7 @@ export function authenticate(identity: IdentityService, config: AuthConfig): Mid
 export function requireRoles(...allowed: UserRole[]): MiddlewareHandler<AppEnv> {
   return createMiddleware<AppEnv>(async (c, next) => {
     const user = c.get('user')
-    if (!allowed.includes(user.role)) {
+    if (!isSuperUser(user.role) && !allowed.includes(user.role)) {
       return c.json(
         {
           error: {
@@ -118,7 +118,8 @@ export function requireRoles(...allowed: UserRole[]): MiddlewareHandler<AppEnv> 
 export function requireStoreApprover(): MiddlewareHandler<AppEnv> {
   return createMiddleware<AppEnv>(async (c, next) => {
     const user = c.get('user')
-    if ((user.role !== 'store_admin' && !user.isDeputyAdmin) || !user.storeId) {
+    if (!isSuperUser(user.role)
+      && ((user.role !== 'store_admin' && !user.isDeputyAdmin) || !user.storeId)) {
       return c.json({ error: { code: 'FORBIDDEN', message: 'Store Admin or Deputy access is required', request_id: c.get('requestId') } }, 403)
     }
     await next()
@@ -128,7 +129,8 @@ export function requireStoreApprover(): MiddlewareHandler<AppEnv> {
 export function requireDeliveryLinkAccess(): MiddlewareHandler<AppEnv> {
   return createMiddleware<AppEnv>(async (c, next) => {
     const user = c.get('user')
-    if (user.role !== 'sales' && user.role !== 'store_admin' && !user.isDeputyAdmin) {
+    if (!isSuperUser(user.role)
+      && user.role !== 'sales' && user.role !== 'store_admin' && !user.isDeputyAdmin) {
       return c.json({ error: { code: 'FORBIDDEN', message: 'Sales, Store Admin, or Deputy access is required', request_id: c.get('requestId') } }, 403)
     }
     await next()

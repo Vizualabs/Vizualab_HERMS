@@ -18,13 +18,13 @@ CREATE TABLE "reorder_alert" (
     ("status" = 'resolved' AND "resolved_at" IS NOT NULL AND "resolved_quantity" IS NOT NULL)
   )
 );
-
+--> statement-breakpoint
 CREATE UNIQUE INDEX "reorder_alert_one_open_per_store_item"
   ON "reorder_alert" ("store_id", "equipment_item_id")
   WHERE "status" = 'open';
-
+--> statement-breakpoint
 CREATE INDEX "reorder_alert_store_status_idx"
   ON "reorder_alert" ("store_id", "status", "opened_at");
-
+--> statement-breakpoint
 CREATE INDEX "reorder_alert_item_idx"
   ON "reorder_alert" ("equipment_item_id", "opened_at");

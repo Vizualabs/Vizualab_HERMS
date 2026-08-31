@@ -16,7 +16,7 @@ export const Route = createFileRoute('/_authenticated/claims')({
 function ClaimsPage() {
   const queryClient = useQueryClient()
   const session = useQuery(sessionQuery)
-  const isFinance = session.data?.role === 'finance'
+  const isFinance = session.data?.role === 'finance' || session.data?.role === 'super_user'
   const canView = isFinance || session.data?.role === 'business_owner'
   const claims = useQuery({ ...claimsQuery, enabled: canView })
   const claimable = useQuery({ ...claimableDiscrepanciesQuery, enabled: isFinance })

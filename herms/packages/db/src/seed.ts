@@ -23,7 +23,7 @@ const storeId = '10000000-0000-4000-8000-000000000001'
 const systemAdminId = '20000000-0000-4000-8000-000000000006'
 const seededAt = new Date('2026-08-24T00:00:00.000Z')
 
-const seedUsers = USER_ROLES.map((role, index) => {
+const seedUsers = USER_ROLES.filter((role) => role !== 'super_user').map((role, index) => {
   const localPart = {
     business_owner: 'owner',
     sales: 'sales',

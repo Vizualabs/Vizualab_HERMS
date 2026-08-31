@@ -1,4 +1,4 @@
-import type { SessionUser } from '@herms/shared'
+import { isSuperUser, type SessionUser } from '@herms/shared'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 
@@ -20,16 +20,17 @@ export function AppShell({
       await navigate({ to: '/login' })
     },
   })
-  const canUseCustomers = user.role === 'business_owner' || user.role === 'sales'
+  const hasFullAccess = isSuperUser(user.role)
+  const canUseCustomers = hasFullAccess || user.role === 'business_owner' || user.role === 'sales'
   const canUseItems =
-    user.role === 'business_owner' || user.role === 'sales' || user.role === 'system_admin'
-  const canUseSales = user.role === 'sales'
-  const canApprove = user.role === 'store_admin' || user.isDeputyAdmin
+    hasFullAccess || user.role === 'business_owner' || user.role === 'sales' || user.role === 'system_admin'
+  const canUseSales = hasFullAccess || user.role === 'sales'
+  const canApprove = hasFullAccess || user.role === 'store_admin' || user.isDeputyAdmin
   const canUseOrders = canUseSales || user.role === 'store_admin'
     || user.role === 'finance'
-  const canUseFinance = user.role === 'finance' || user.role === 'business_owner'
-  const canUseClaims = user.role === 'finance' || user.role === 'business_owner'
-  const canViewDashboard = user.role === 'finance' || user.role === 'business_owner'
+  const canUseFinance = hasFullAccess || user.role === 'finance' || user.role === 'business_owner'
+  const canUseClaims = hasFullAccess || user.role === 'finance' || user.role === 'business_owner'
+  const canViewDashboard = hasFullAccess || user.role === 'finance' || user.role === 'business_owner'
 
   return (
     <div className="min-h-screen bg-background text-foreground">

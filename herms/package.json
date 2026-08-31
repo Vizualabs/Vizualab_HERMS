@@ -18,6 +18,7 @@
     "db:check": "bun run packages/db/src/check-migrations.ts",
     "db:migrate": "bun run packages/db/src/migrate.ts",
     "db:seed": "bun run packages/db/src/seed.ts",
+    "db:create-super-user": "bun run packages/db/src/create-super-user.ts",
     "config:phase1": "bun run scripts/configure-phase1-env.ts",
     "verify:phase1": "bun run scripts/verify-phase1.ts",
     "config:phase2": "bun run scripts/configure-phase2-env.ts",

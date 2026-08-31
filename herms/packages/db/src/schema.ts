@@ -22,6 +22,7 @@ export const userRole = pgEnum('user_role', [
   'store_admin',
   'finance',
   'system_admin',
+  'super_user',
 ])
 export const customerType = pgEnum('customer_type', ['recurring', 'new'])
 export const priceChangeReason = pgEnum('price_change_reason', [

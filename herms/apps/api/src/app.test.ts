@@ -57,6 +57,7 @@ function createServices() {
         'store_admin',
         'finance',
         'system_admin',
+        'super_user',
       ] as const
     ).map((role) => [role, user(role)]),
   )
@@ -676,6 +677,28 @@ describe('Phase 1 API', () => {
     expect((await app.request('/api/items', { headers: { Cookie: cookie } })).status).toBe(200)
     expect((await app.request('/api/customers', { headers: { Cookie: cookie } })).status).toBe(403)
     expect((await app.request('/api/audit-logs', { headers: { Cookie: cookie } })).status).toBe(200)
+  })
+
+  test('allows Super User to access every protected feature area', async () => {
+    const app = createTestApp()
+    const cookie = await sessionCookie(app, 'super_user')
+    const headers = { Cookie: cookie }
+    const checks = [
+      '/api/customers',
+      '/api/items',
+      '/api/quotations',
+      '/api/orders',
+      '/api/approvals',
+      '/api/stock',
+      '/api/finance/monthly?month=2026-08',
+      '/api/claims',
+      '/api/dashboard/stock',
+      '/api/dashboard/escalations',
+      '/api/audit-logs',
+    ]
+    for (const path of checks) {
+      expect((await app.request(path, { headers })).status).toBe(200)
+    }
   })
 })
 

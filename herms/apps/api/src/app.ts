@@ -23,6 +23,7 @@ import {
   equipmentUpdateSchema,
   expenseInputSchema,
   financeMonthSchema,
+  isSuperUser,
   loginInputSchema,
   noteLinkRecipientSchema,
   priceChangeInputSchema,
@@ -449,7 +450,7 @@ export function createApp({
       }
       const report = await dashboard.getReport(
         parsed.data,
-        c.get('user').role === 'business_owner',
+        c.get('user').role === 'business_owner' || isSuperUser(c.get('user').role),
       )
       const isPdf = parsed.data.format === 'pdf'
       const body = isPdf

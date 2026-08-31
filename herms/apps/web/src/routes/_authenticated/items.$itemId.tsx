@@ -13,7 +13,9 @@ function ItemDetailPage() {
   const { itemId } = Route.useParams()
   const queryClient = useQueryClient()
   const session = useQuery(sessionQuery)
-  const canChangePrice = session.data?.role === 'business_owner' || session.data?.role === 'sales'
+  const canChangePrice = session.data?.role === 'business_owner'
+    || session.data?.role === 'sales'
+    || session.data?.role === 'super_user'
   const item = useQuery(
     queryOptions({ queryKey: queryKeys.item(itemId), queryFn: () => api.item(itemId) }),
   )

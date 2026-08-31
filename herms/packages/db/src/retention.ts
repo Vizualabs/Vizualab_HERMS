@@ -1,12 +1,13 @@
 import { Buffer } from 'node:buffer'
 
-import type {
-  RetentionNoteCount,
-  RetentionNoteCreate,
-  RetentionNoteSubmission,
-  NoteLinkRecipient,
-  SessionUser,
-  WriteOffReversal,
+import {
+  isSuperUser,
+  type RetentionNoteCount,
+  type RetentionNoteCreate,
+  type RetentionNoteSubmission,
+  type NoteLinkRecipient,
+  type SessionUser,
+  type WriteOffReversal,
 } from '@herms/shared'
 import { and, desc, eq, inArray, sql } from 'drizzle-orm'
 
@@ -944,7 +945,7 @@ export function createRetentionService(db: Database, config: RetentionConfig) {
       input: WriteOffReversal,
       actor: AuditActor,
     ) {
-      if (!['store_admin', 'system_admin'].includes(actor.role)) {
+      if (!['store_admin', 'system_admin', 'super_user'].includes(actor.role)) {
         throw new DataConflictError('This role cannot reverse a write-off')
       }
       if (actor.role === 'store_admin' && !actor.storeId) {
@@ -977,7 +978,7 @@ export function createRetentionService(db: Database, config: RetentionConfig) {
       if (record.discrepancy.status !== 'written_off') {
         throw new DataConflictError('Only a written-off discrepancy may be reversed')
       }
-      if (actor.role !== 'system_admin'
+      if (actor.role !== 'system_admin' && !isSuperUser(actor.role)
         && Date.now() > record.ledgerCreatedAt.getTime() + 7 * 86_400_000) {
         throw new DataConflictError('The seven-day Store Admin reversal window has expired')
       }

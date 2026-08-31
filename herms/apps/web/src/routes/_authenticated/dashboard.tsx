@@ -74,8 +74,10 @@ function DashboardPage() {
   const search = Route.useSearch()
   const navigate = useNavigate({ from: Route.fullPath })
   const session = useQuery(sessionQuery)
-  const canView = session.data?.role === 'business_owner' || session.data?.role === 'finance'
-  const isOwner = session.data?.role === 'business_owner'
+  const canView = session.data?.role === 'business_owner'
+    || session.data?.role === 'finance'
+    || session.data?.role === 'super_user'
+  const isOwner = session.data?.role === 'business_owner' || session.data?.role === 'super_user'
   const month = search.month ?? currentColomboMonth()
   const filters: DashboardFilters = {
     month,

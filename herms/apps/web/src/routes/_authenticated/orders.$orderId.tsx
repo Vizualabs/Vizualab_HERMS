@@ -14,8 +14,8 @@ function OrderDetailPage() {
   const queryClient = useQueryClient()
   const [newLink, setNewLink] = useState<{ type: 'delivery' | 'return'; url: string } | null>(null)
   const session = useQuery(sessionQuery)
-  const canUseSales = session.data?.role === 'sales'
-  const canClose = session.data?.role === 'store_admin'
+  const canUseSales = session.data?.role === 'sales' || session.data?.role === 'super_user'
+  const canClose = session.data?.role === 'store_admin' || session.data?.role === 'super_user'
   const order = useQuery(queryOptions({
     queryKey: queryKeys.order(orderId),
     queryFn: () => api.order(orderId),
