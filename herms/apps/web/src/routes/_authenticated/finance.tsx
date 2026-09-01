@@ -624,16 +624,24 @@ function OutstandingBalances({ report }: { report: MonthlyFinance }) {
     <section className="overflow-hidden rounded-xl border border-border bg-card" aria-labelledby="outstanding-title">
       <div className="border-b border-border px-5 py-4">
         <h2 id="outstanding-title">Outstanding balances</h2>
-        <p className="mt-0.5 text-xs text-muted-foreground">Includes confirmed damage claims</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          Includes confirmed damage claims
+          {report.outstandingBalances.length > 5 && ' · Scroll inside the table to view all customers'}
+        </p>
       </div>
-      <div className="overflow-x-auto px-5 py-3">
+      <div
+        role="region"
+        aria-label="Outstanding balances table"
+        tabIndex={report.outstandingBalances.length > 5 ? 0 : undefined}
+        className="max-h-[20.5rem] overflow-auto overscroll-contain px-5 pb-3 [scrollbar-gutter:stable] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+      >
         <table className="w-full min-w-[760px] text-left">
           <caption className="sr-only">Customers with outstanding balances</caption>
-          <thead><tr className="border-b border-border"><th className="py-3">Customer</th><th>Open orders</th><th className="text-right">Invoiced</th><th className="text-right">Paid</th><th className="text-right">Outstanding</th></tr></thead>
+          <thead className="sticky top-0 z-10 bg-card"><tr className="h-12 border-b border-border"><th>Customer</th><th>Open orders</th><th className="text-right">Invoiced</th><th className="text-right">Paid</th><th className="text-right">Outstanding</th></tr></thead>
           <tbody>
             {report.outstandingBalances.map((balance) => (
-              <tr key={balance.id} className="border-b border-border last:border-0">
-                <td className="py-3 font-medium">{balance.customerName}</td>
+              <tr key={balance.id} className="h-14 border-b border-border last:border-0">
+                <td className="whitespace-nowrap font-medium">{balance.customerName}</td>
                 <td className="font-mono text-muted-foreground">{balance.openOrders}</td>
                 <td className="text-right font-mono">{formatMoney(balance.invoicedCents, report.currency)}</td>
                 <td className="text-right font-mono">{formatMoney(balance.paidCents, report.currency)}</td>

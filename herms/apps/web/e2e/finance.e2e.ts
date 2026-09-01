@@ -31,6 +31,14 @@ test.describe('Payments & Finance report', () => {
     await expect(page.getByRole('heading', { name: 'Payments received' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Expenses', exact: true })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Outstanding balances' })).toBeVisible()
+    const outstandingTable = page.getByRole('region', { name: 'Outstanding balances table' })
+    await expect(outstandingTable).toBeVisible()
+    const outstandingScroll = await outstandingTable.evaluate((element) => ({
+      clientHeight: element.clientHeight,
+      scrollHeight: element.scrollHeight,
+    }))
+    expect(outstandingScroll.clientHeight).toBeLessThanOrEqual(340)
+    expect(outstandingScroll.scrollHeight).toBeGreaterThan(outstandingScroll.clientHeight)
     await expect(page.getByRole('heading', { name: 'Record payments & expenses' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Order invoice & balance' })).toBeVisible()
 
