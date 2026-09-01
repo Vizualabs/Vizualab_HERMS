@@ -240,9 +240,38 @@ export type MonthlyFinance = {
   month: string
   incomeCents: number
   expenseCents: number
+  outstandingCents: number
   netPositionCents: number
   currency: string
   timezone: string
+  history: Array<{
+    month: string
+    incomeCents: number
+    expenseCents: number
+  }>
+  recentPayments: Array<{
+    id: string
+    paymentDate: string
+    customerName: string
+    orderNumber: string
+    method: PaymentMethod
+    amountCents: number
+  }>
+  recentExpenses: Array<{
+    id: string
+    expenseDate: string
+    category: string
+    description: string | null
+    amountCents: number
+  }>
+  outstandingBalances: Array<{
+    id: string
+    customerName: string
+    openOrders: number
+    invoicedCents: number
+    paidCents: number
+    outstandingCents: number
+  }>
 }
 
 export type DeliveryNoteLine = {

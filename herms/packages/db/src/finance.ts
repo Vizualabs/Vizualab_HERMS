@@ -3,7 +3,7 @@ import type {
   PaymentInput,
   SessionUser,
 } from '@herms/shared'
-import { and, asc, eq, ne, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, ne, sql } from 'drizzle-orm'
 
 import type { Database } from './client'
 import {
@@ -28,6 +28,14 @@ function assertSafeMoney(value: number, label: string) {
     throw new DataConflictError(`${label} is outside the supported integer money range`)
   }
   return value
+}
+
+function databaseInteger(value: number | string | null | undefined, label: string) {
+  const parsed = Number(value ?? 0)
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+    throw new DataConflictError(`${label} is outside the supported integer range`)
+  }
+  return parsed
 }
 
 function storeCondition(actor: SessionUser) {
@@ -327,35 +335,164 @@ export function createFinanceService(db: Database, config: FinanceConfig) {
 
     async getMonthly(month: string) {
       const monthStart = `${month}-01`
-      const [incomeRows, expenseRows] = await Promise.all([
-        db
-          .select({
-            value: sql<number>`coalesce(sum(${payments.amountCents}), 0)::integer`,
-          })
-          .from(payments)
-          .where(sql`
-            ${payments.paymentDate} >= ${monthStart}::date::timestamp AT TIME ZONE ${config.timezone}
-            AND ${payments.paymentDate} < (${monthStart}::date + interval '1 month')::timestamp AT TIME ZONE ${config.timezone}
+      const [historyResult, outstandingRows, recentPayments, recentExpenses, balanceResult] =
+        await Promise.all([
+          db.execute<{
+            month: string
+            incomeCents: number | string
+            expenseCents: number | string
+          }>(sql`
+            WITH report_month AS (
+              SELECT generate_series(
+                ${monthStart}::date - interval '5 months',
+                ${monthStart}::date,
+                interval '1 month'
+              )::date AS month_start
+            )
+            SELECT
+              to_char(report_month.month_start, 'YYYY-MM') AS month,
+              coalesce((
+                SELECT sum(payment.amount_cents)
+                FROM ${payments} AS payment
+                WHERE payment.payment_date >= report_month.month_start::timestamp AT TIME ZONE ${config.timezone}
+                  AND payment.payment_date < (report_month.month_start + interval '1 month')::timestamp AT TIME ZONE ${config.timezone}
+              ), 0)::bigint AS "incomeCents",
+              coalesce((
+                SELECT sum(expense.amount_cents)
+                FROM ${expenses} AS expense
+                WHERE expense.expense_date >= report_month.month_start::timestamp AT TIME ZONE ${config.timezone}
+                  AND expense.expense_date < (report_month.month_start + interval '1 month')::timestamp AT TIME ZONE ${config.timezone}
+              ), 0)::bigint AS "expenseCents"
+            FROM report_month
+            ORDER BY report_month.month_start
           `),
-        db
-          .select({
-            value: sql<number>`coalesce(sum(${expenses.amountCents}), 0)::integer`,
-          })
-          .from(expenses)
-          .where(sql`
-            ${expenses.expenseDate} >= ${monthStart}::date::timestamp AT TIME ZONE ${config.timezone}
-            AND ${expenses.expenseDate} < (${monthStart}::date + interval '1 month')::timestamp AT TIME ZONE ${config.timezone}
+          db
+            .select({
+              value: sql<number>`coalesce(sum(${customers.outstandingBalanceCents}), 0)::bigint`,
+            })
+            .from(customers),
+          db
+            .select({
+              id: payments.id,
+              paymentDate: payments.paymentDate,
+              customerName: customers.name,
+              orderNumber: orders.orderNumber,
+              method: payments.method,
+              amountCents: payments.amountCents,
+            })
+            .from(payments)
+            .innerJoin(customers, eq(payments.customerId, customers.id))
+            .innerJoin(orders, eq(payments.orderId, orders.id))
+            .orderBy(desc(payments.paymentDate), desc(payments.createdAt))
+            .limit(8),
+          db
+            .select({
+              id: expenses.id,
+              expenseDate: expenses.expenseDate,
+              category: expenses.category,
+              description: expenses.description,
+              amountCents: expenses.amountCents,
+            })
+            .from(expenses)
+            .orderBy(desc(expenses.expenseDate), desc(expenses.createdAt))
+            .limit(8),
+          db.execute<{
+            id: string
+            customerName: string
+            openOrders: number | string
+            invoicedCents: number | string
+            paidCents: number | string
+            outstandingCents: number | string
+          }>(sql`
+            WITH order_totals AS (
+              SELECT
+                rental_order.id,
+                rental_order.customer_id,
+                coalesce((
+                  SELECT sum(order_line.line_total_cents)
+                  FROM ${orderLines} AS order_line
+                  WHERE order_line.order_id = rental_order.id
+                ), 0)::bigint + coalesce((
+                  SELECT sum(claim.claim_amount_cents)
+                  FROM ${damageClaims} AS claim
+                  WHERE claim.order_id = rental_order.id
+                    AND claim.status = 'confirmed'
+                ), 0)::bigint AS invoiced_cents,
+                coalesce((
+                  SELECT sum(payment.amount_cents)
+                  FROM ${payments} AS payment
+                  WHERE payment.order_id = rental_order.id
+                ), 0)::bigint AS paid_cents
+              FROM ${orders} AS rental_order
+              WHERE rental_order.status <> 'cancelled'
+            ), customer_totals AS (
+              SELECT
+                customer.id,
+                customer.name AS customer_name,
+                count(*) FILTER (
+                  WHERE order_totals.invoiced_cents > order_totals.paid_cents
+                )::integer AS open_orders,
+                coalesce(sum(order_totals.invoiced_cents), 0)::bigint AS invoiced_cents,
+                coalesce(sum(order_totals.paid_cents), 0)::bigint AS paid_cents
+              FROM ${customers} AS customer
+              INNER JOIN order_totals ON order_totals.customer_id = customer.id
+              GROUP BY customer.id, customer.name
+            )
+            SELECT
+              customer_totals.id,
+              customer_totals.customer_name AS "customerName",
+              customer_totals.open_orders AS "openOrders",
+              customer_totals.invoiced_cents AS "invoicedCents",
+              customer_totals.paid_cents AS "paidCents",
+              customer_totals.invoiced_cents - customer_totals.paid_cents AS "outstandingCents"
+            FROM customer_totals
+            WHERE customer_totals.invoiced_cents > customer_totals.paid_cents
+            ORDER BY "outstandingCents" DESC, "customerName"
+            LIMIT 50
           `),
-      ])
-      const incomeCents = assertSafeMoney(incomeRows[0]?.value ?? 0, 'Monthly income')
-      const expenseCents = assertSafeMoney(expenseRows[0]?.value ?? 0, 'Monthly expenses')
+        ])
+
+      const history = historyResult.rows.map((row) => ({
+        month: row.month,
+        incomeCents: databaseInteger(row.incomeCents, 'Monthly income'),
+        expenseCents: databaseInteger(row.expenseCents, 'Monthly expenses'),
+      }))
+      const current = history.at(-1) ?? { month, incomeCents: 0, expenseCents: 0 }
+      const incomeCents = current.incomeCents
+      const expenseCents = current.expenseCents
+      const outstandingCents = databaseInteger(
+        outstandingRows[0]?.value,
+        'Outstanding customer balance',
+      )
+
       return {
         month,
         incomeCents,
         expenseCents,
+        outstandingCents,
         netPositionCents: incomeCents - expenseCents,
         currency: config.currency,
         timezone: config.timezone,
+        history,
+        recentPayments: recentPayments.map((payment) => ({
+          ...payment,
+          paymentDate: payment.paymentDate.toISOString(),
+        })),
+        recentExpenses: recentExpenses.map((expense) => ({
+          ...expense,
+          expenseDate: expense.expenseDate.toISOString(),
+        })),
+        outstandingBalances: balanceResult.rows.map((row) => ({
+          id: row.id,
+          customerName: row.customerName,
+          openOrders: databaseInteger(row.openOrders, 'Open order count'),
+          invoicedCents: databaseInteger(row.invoicedCents, 'Customer invoiced amount'),
+          paidCents: databaseInteger(row.paidCents, 'Customer paid amount'),
+          outstandingCents: databaseInteger(
+            row.outstandingCents,
+            'Customer outstanding amount',
+          ),
+        })),
       }
     },
   }

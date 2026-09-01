@@ -352,9 +352,34 @@ function createServices() {
       month,
       incomeCents: 500,
       expenseCents: 200,
+      outstandingCents: 2000,
       netPositionCents: 300,
       currency: 'LKR',
       timezone: 'Asia/Colombo',
+      history: [{ month, incomeCents: 500, expenseCents: 200 }],
+      recentPayments: [{
+        id: '92000000-0000-4000-8000-000000000001',
+        paymentDate: '2026-08-27T04:30:00.000Z',
+        customerName: order.customerName,
+        orderNumber: order.orderNumber,
+        method: 'bank_transfer' as const,
+        amountCents: 500,
+      }],
+      recentExpenses: [{
+        id: '93000000-0000-4000-8000-000000000001',
+        expenseDate: '2026-08-27T05:30:00.000Z',
+        category: 'Transport',
+        description: 'Delivery fuel',
+        amountCents: 200,
+      }],
+      outstandingBalances: [{
+        id: order.customerId,
+        customerName: order.customerName,
+        openOrders: 1,
+        invoicedCents: 2500,
+        paidCents: 500,
+        outstandingCents: 2000,
+      }],
     }),
   } as unknown as FinanceService
 
@@ -971,9 +996,24 @@ describe('Phase 6 API', () => {
       '/api/customers/20000000-0000-4000-8000-000000000001/balance',
       { headers: { Cookie: financeCookie } },
     )).status).toBe(200)
-    expect((await app.request('/api/finance/monthly?month=2026-08', {
+    const monthlyResponse = await app.request('/api/finance/monthly?month=2026-08', {
       headers: { Cookie: financeCookie },
-    })).status).toBe(200)
+    })
+    expect(monthlyResponse.status).toBe(200)
+    const monthlyPayload = (await monthlyResponse.json()) as {
+      data: {
+        outstandingCents: number
+        history: unknown[]
+        recentPayments: unknown[]
+        recentExpenses: unknown[]
+        outstandingBalances: unknown[]
+      }
+    }
+    expect(monthlyPayload.data.outstandingCents).toBe(2000)
+    expect(monthlyPayload.data.history).toHaveLength(1)
+    expect(monthlyPayload.data.recentPayments).toHaveLength(1)
+    expect(monthlyPayload.data.recentExpenses).toHaveLength(1)
+    expect(monthlyPayload.data.outstandingBalances).toHaveLength(1)
     expect((await app.request('/api/finance/monthly?month=2026-13', {
       headers: { Cookie: financeCookie },
     })).status).toBe(400)
