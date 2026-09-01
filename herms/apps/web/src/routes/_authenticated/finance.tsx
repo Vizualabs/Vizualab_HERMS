@@ -533,17 +533,17 @@ function FinanceChart({ rows, currency }: { rows: MonthlyFinance['history']; cur
             <div className="absolute inset-x-0 bottom-8 top-0 flex flex-col justify-between" aria-hidden="true">
               {ticks.map((tick) => <div key={tick} className="border-t border-dashed border-border" />)}
             </div>
-            <div className="absolute inset-x-0 bottom-8 top-0 flex items-end gap-5 px-3">
+            <div className="absolute inset-x-0 bottom-8 top-0 flex items-end gap-3 px-3">
               {rows.map((row) => (
-                <div key={row.month} className="flex h-full min-w-0 flex-1 items-end justify-center gap-1.5">
+                <div key={row.month} className="flex h-full min-w-0 flex-1 items-end justify-center gap-1">
                   <div
-                    className="w-full max-w-12 rounded-t bg-[oklch(52%_0.11_194)]"
+                    className="w-full max-w-[4.5rem] rounded-t bg-[oklch(52%_0.11_194)]"
                     style={{ height: `${Math.max((row.incomeCents / chartMaximum) * 100, row.incomeCents ? 1 : 0)}%` }}
                     title={`${formatMonth(row.month)} income: ${formatMoney(row.incomeCents, currency)}`}
                     aria-hidden="true"
                   />
                   <div
-                    className="w-full max-w-12 rounded-t bg-[oklch(72%_0.15_75)]"
+                    className="w-full max-w-[4.5rem] rounded-t bg-[oklch(72%_0.15_75)]"
                     style={{ height: `${Math.max((row.expenseCents / chartMaximum) * 100, row.expenseCents ? 1 : 0)}%` }}
                     title={`${formatMonth(row.month)} expenses: ${formatMoney(row.expenseCents, currency)}`}
                     aria-hidden="true"
@@ -554,7 +554,7 @@ function FinanceChart({ rows, currency }: { rows: MonthlyFinance['history']; cur
                 </div>
               ))}
             </div>
-            <div className="absolute inset-x-0 bottom-0 flex gap-5 px-3 text-center text-xs text-muted-foreground" aria-hidden="true">
+            <div className="absolute inset-x-0 bottom-0 flex gap-3 px-3 text-center text-xs text-muted-foreground" aria-hidden="true">
               {rows.map((row) => <span key={row.month} className="min-w-0 flex-1">{formatMonth(row.month, 'short')}</span>)}
             </div>
           </div>
