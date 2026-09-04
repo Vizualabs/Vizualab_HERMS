@@ -401,6 +401,10 @@ export type ReconciliationLine = {
 
 export type TokenNote = DeliveryNoteDetail | RetentionNoteDetail
 
+export type SubmittedTokenNote = TokenNote & {
+  approvalPath: '/approvals'
+}
+
 export type NoteLink = { submissionLink: string; expiresAt: string }
 export type FieldStaffRecipient = {
   id: string
@@ -592,7 +596,7 @@ export const api = {
       body: '{}',
     }),
   tokenNote: (token: string) => request<TokenNote>(`/api/notes/token/${encodeURIComponent(token)}`),
-  submitTokenNote: (token: string, input: DeliveryNoteSubmission | RetentionNoteSubmission) => request<TokenNote>(`/api/notes/token/${encodeURIComponent(token)}/submit`, { method: 'POST', body: JSON.stringify(input) }),
+  submitTokenNote: (token: string, input: DeliveryNoteSubmission | RetentionNoteSubmission) => request<SubmittedTokenNote>(`/api/notes/token/${encodeURIComponent(token)}/submit`, { method: 'POST', body: JSON.stringify(input) }),
   retentionNotes: (orderId: string) => request<RetentionNoteSummary[]>(`/api/orders/${orderId}/retention-notes`),
   createRetentionNote: (orderId: string, input: RetentionNoteCreate) => request<RetentionNoteDetail>(`/api/orders/${orderId}/retention-notes`, { method: 'POST', body: JSON.stringify(input) }),
   retentionNote: (id: string) => request<RetentionNoteDetail>(`/api/retention-notes/${id}`),

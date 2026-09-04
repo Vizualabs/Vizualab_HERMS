@@ -191,14 +191,16 @@ export function createApp({
       if (noteType === 'retention_note') {
         const parsed = await validatedJson(c, retentionNoteSubmissionSchema)
         if ('response' in parsed) return parsed.response
+        const note = await retention.submitByToken(token, parsed.data, requestId)
         return c.json({
-          data: await retention.submitByToken(token, parsed.data, requestId),
+          data: { ...note, approvalPath: '/approvals' as const },
         })
       }
       const parsed = await validatedJson(c, deliveryNoteSubmissionSchema)
       if ('response' in parsed) return parsed.response
+      const note = await delivery.submitByToken(token, parsed.data, requestId)
       return c.json({
-        data: await delivery.submitByToken(token, parsed.data, requestId),
+        data: { ...note, approvalPath: '/approvals' as const },
       })
     })
 

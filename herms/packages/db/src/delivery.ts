@@ -357,7 +357,7 @@ export function createDeliveryService(db: Database, config: DeliveryConfig) {
         actorType: 'token', actorId: token.id, action: 'note_token.read', entityType: 'delivery_note',
         entityId: note.id, before: null, after: { status: note.status }, requestId,
       })
-      return note
+      return { ...note, tokenExpiresAt: token.expiresAt }
     },
 
     async submitByToken(raw: string, input: DeliveryNoteSubmission, requestId: string) {

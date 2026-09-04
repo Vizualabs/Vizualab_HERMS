@@ -42,8 +42,12 @@ function OrderDetailPage() {
       lines: Array<{ equipmentItemId: string; issuedQty: number }>
     }) => api.createDeliveryNote(orderId, input),
     onSuccess: async (note) => {
-      if (note.submissionLink) setNewLink({ type: 'delivery', url: note.submissionLink })
       await queryClient.invalidateQueries({ queryKey: queryKeys.deliveryNotes(orderId) })
+      if (note.submissionLink) {
+        window.location.assign(note.submissionLink)
+      } else {
+        setNewLink({ type: 'delivery', url: `/delivery-notes/${note.id}` })
+      }
     },
   })
   const createRetention = useMutation({
@@ -53,8 +57,12 @@ function OrderDetailPage() {
         lines: input.equipmentItemIds.map((equipmentItemId) => ({ equipmentItemId })),
       }),
     onSuccess: async (note) => {
-      if (note.submissionLink) setNewLink({ type: 'return', url: note.submissionLink })
       await queryClient.invalidateQueries({ queryKey: queryKeys.retentionNotes(orderId) })
+      if (note.submissionLink) {
+        window.location.assign(note.submissionLink)
+      } else {
+        setNewLink({ type: 'return', url: `/retention-notes/${note.id}` })
+      }
     },
   })
   const close = useMutation({
@@ -127,7 +135,7 @@ function OrderDetailPage() {
       </section>
 
       {canUseSales && <aside className="flex h-fit flex-col gap-6">
-        <section className="rounded-2xl border border-border bg-card p-6">
+        <section id="create-delivery-note" className="scroll-mt-6 rounded-2xl border border-border bg-card p-6">
           <h2 className="text-lg font-semibold">Create delivery note</h2>
           <p className="mt-2 text-sm text-muted-foreground">Enter the quantity issued now. Use zero to omit an item.</p>
           <form className="mt-4 flex flex-col gap-3" onSubmit={(event) => {
@@ -157,7 +165,7 @@ function OrderDetailPage() {
               <input className="input" name={`delivery-${line.equipmentItemId}`} type="number" min="0" max={line.quantity} step="1" defaultValue={line.quantity} />
             </label>)}
             <button className="button-primary w-full text-sm" disabled={createDelivery.isPending || data.status !== 'open'}>
-              {createDelivery.isPending ? 'Creating...' : 'Create delivery note'}
+              {createDelivery.isPending ? 'Creating...' : 'Create & open delivery note'}
             </button>
           </form>
           <h3 className="mt-6 font-semibold">Delivery notes</h3>
@@ -171,7 +179,7 @@ function OrderDetailPage() {
           </ul>
         </section>
 
-        <section className="rounded-2xl border border-border bg-card p-6">
+        <section id="create-retention-note" className="scroll-mt-6 rounded-2xl border border-border bg-card p-6">
           <h2 className="text-lg font-semibold">Create retention note</h2>
           <p className="mt-2 text-sm text-muted-foreground">
             Select items already delivered. The secure return form records returned, balance, and shortfall quantities.
@@ -200,7 +208,7 @@ function OrderDetailPage() {
               <span>{line.equipmentName}</span>
             </label>)}
             <button className="button-primary w-full text-sm" disabled={createRetention.isPending || data.status !== 'open'}>
-              {createRetention.isPending ? 'Creating...' : 'Create retention note'}
+              {createRetention.isPending ? 'Creating...' : 'Create & open retention note'}
             </button>
           </form>
           <h3 className="mt-6 font-semibold">Retention notes</h3>

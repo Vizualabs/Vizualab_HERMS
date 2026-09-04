@@ -464,7 +464,7 @@ export function createRetentionService(db: Database, config: RetentionConfig) {
         entityType: 'retention_note', entityId: note.id, before: null,
         after: { status: note.status }, requestId,
       })
-      return note
+      return { ...note, tokenExpiresAt: token.expiresAt }
     },
 
     async submitByToken(raw: string, input: RetentionNoteSubmission, requestId: string) {

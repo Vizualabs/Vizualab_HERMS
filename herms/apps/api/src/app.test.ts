@@ -801,6 +801,104 @@ describe('Phase 3 API', () => {
     expect(response.status).toBe(400)
   })
 
+  test('moves submitted delivery and retention notes into the shared approval queue', async () => {
+    const { logger } = createTestLogger()
+    const services = createServices()
+    const originalDelivery = services.delivery
+    const originalRetention = services.retention
+    let deliverySubmitted = false
+    let retentionSubmitted = false
+
+    const delivery = {
+      ...originalDelivery,
+      resolveTokenType: async (token: string) => token === 'retention-token'
+        ? 'retention_note' as const
+        : 'delivery_note' as const,
+      submitByToken: async () => {
+        deliverySubmitted = true
+        return {
+          ...await originalDelivery.getDeliveryNote('delivery-note', user('store_admin')),
+          noteType: 'delivery_note' as const,
+        }
+      },
+      listApprovals: async (actor: SessionUser) => deliverySubmitted
+        ? [await originalDelivery.getDeliveryNote('delivery-note', actor)]
+        : [],
+    } as DeliveryService
+    const retention = {
+      ...originalRetention,
+      submitByToken: async () => {
+        retentionSubmitted = true
+        return originalRetention.getRetentionNote('retention-note', user('store_admin'))
+      },
+      listApprovals: async (actor: SessionUser) => retentionSubmitted
+        ? [await originalRetention.getRetentionNote('retention-note', actor)]
+        : [],
+    } as RetentionService
+    const app = createApp({
+      healthCheck: async () => 1,
+      ...services,
+      delivery,
+      retention,
+      auth: TEST_AUTH,
+      logger,
+    })
+
+    const deliveryResponse = await app.request('/api/notes/token/delivery-token/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        lines: [{
+          lineId: '80000000-0000-4000-8000-000000000001',
+          handedOverQty: 1,
+          mismatchReason: null,
+          mismatchDetail: null,
+        }],
+      }),
+    })
+    expect(deliveryResponse.status).toBe(200)
+    const deliveryBody = await deliveryResponse.json() as { data: Record<string, unknown> }
+    expect(deliveryBody.data).toMatchObject({
+      noteType: 'delivery_note',
+      status: 'pending_approval',
+      approvalPath: '/approvals',
+    })
+
+    const retentionResponse = await app.request('/api/notes/token/retention-token/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        lines: [{
+          lineId: '91000000-0000-4000-8000-000000000001',
+          returnedQty: 1,
+          balanceQty: 0,
+          missingDamagedQty: 0,
+          mismatchReason: null,
+          responsibleParty: null,
+          reasonDetail: null,
+        }],
+      }),
+    })
+    expect(retentionResponse.status).toBe(200)
+    const retentionBody = await retentionResponse.json() as { data: Record<string, unknown> }
+    expect(retentionBody.data).toMatchObject({
+      noteType: 'retention_note',
+      status: 'pending_approval',
+      approvalPath: '/approvals',
+    })
+
+    const storeCookie = await sessionCookie(app, 'store_admin')
+    const approvalsResponse = await app.request('/api/approvals', {
+      headers: { Cookie: storeCookie },
+    })
+    expect(approvalsResponse.status).toBe(200)
+    const approvalsBody = await approvalsResponse.json() as { data: Array<Record<string, unknown>> }
+    expect(approvalsBody.data).toEqual(expect.arrayContaining([
+      expect.objectContaining({ noteType: 'delivery_note', dnNumber: 'DN-2026-000001' }),
+      expect.objectContaining({ noteType: 'retention_note', rnNumber: 'RN-2026-000001' }),
+    ]))
+  })
+
   test('allows Sales to create delivery notes but denies Field Staff', async () => {
     const app = createTestApp()
     const salesCookie = await sessionCookie(app, 'sales')
