@@ -21,8 +21,10 @@ export const queryKeys = {
   retentionNotes: (orderId: string) => ['orders', orderId, 'retention-notes'] as const,
   retentionNote: (id: string) => ['retention-notes', id] as const,
   approvals: ['approvals'] as const,
+  approvalMetrics: ['approvals', 'metrics'] as const,
   approvalNote: (id: string) => ['approvals', id] as const,
   stock: ['stock'] as const,
+  stockMovements: ['stock', 'movements'] as const,
   finance: ['finance'] as const,
   invoice: (id: string) => ['finance', 'invoices', id] as const,
   customerBalance: (id: string) => ['finance', 'customers', id, 'balance'] as const,
@@ -85,9 +87,21 @@ export const approvalsQuery = queryOptions({
   staleTime: 5_000,
 })
 
+export const approvalMetricsQuery = queryOptions({
+  queryKey: queryKeys.approvalMetrics,
+  queryFn: api.approvalMetrics,
+  staleTime: 5_000,
+})
+
 export const stockQuery = queryOptions({
   queryKey: queryKeys.stock,
   queryFn: api.stock,
+  staleTime: 10_000,
+})
+
+export const stockMovementsQuery = queryOptions({
+  queryKey: queryKeys.stockMovements,
+  queryFn: api.stockMovements,
   staleTime: 10_000,
 })
 

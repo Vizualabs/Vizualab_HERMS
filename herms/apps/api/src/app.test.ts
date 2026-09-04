@@ -200,6 +200,11 @@ function createServices() {
     readByToken: async () => deliveryNote,
     submitByToken: async () => deliveryNote,
     listApprovals: async () => [deliveryNote],
+    approvalMetrics: async () => ({
+      pendingApproval: 1,
+      approvedToday: 2,
+      mismatchesFlagged: 1,
+    }),
     countNote: async () => ({ ...deliveryNote, lines: deliveryNote.lines.map((line) => ({ ...line, countedQty: 1, countDifference: 0 })) }),
     approveNote: async () => ({ ...deliveryNote, status: 'approved' as const }),
     rejectNote: async () => ({ ...deliveryNote, status: 'rejected' as const }),
@@ -272,6 +277,11 @@ function createServices() {
     readByToken: async () => retentionNote,
     submitByToken: async () => retentionNote,
     listApprovals: async () => [retentionNote],
+    approvalMetrics: async () => ({
+      pendingApproval: 1,
+      approvedToday: 3,
+      mismatchesFlagged: 2,
+    }),
     countNote: async () => ({
       ...retentionNote,
       lines: retentionNote.lines.map((line) => ({
@@ -818,6 +828,22 @@ describe('Phase 3 API', () => {
     })).status).toBe(200)
     const salesCookie = await sessionCookie(app, 'sales')
     expect((await app.request('/api/approvals', { headers: { Cookie: salesCookie } })).status).toBe(403)
+  })
+
+  test('summarizes the store-scoped approval queue for the approval dashboard', async () => {
+    const app = createTestApp()
+    const storeCookie = await sessionCookie(app, 'store_admin')
+    const response = await app.request('/api/approvals/metrics', {
+      headers: { Cookie: storeCookie },
+    })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      data: {
+        pendingApproval: 2,
+        approvedToday: 5,
+        mismatchesFlagged: 3,
+      },
+    })
   })
 })
 

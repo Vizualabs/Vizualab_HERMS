@@ -542,6 +542,20 @@ export function createApp({
         - new Date(left.submittedAt ?? left.createdAt).getTime())
       return c.json({ data })
     })
+    .get('/api/approvals/metrics', requireStoreApprover(), async (c) => {
+      const [deliveryMetrics, retentionMetrics] = await Promise.all([
+        delivery.approvalMetrics(c.get('user')),
+        retention.approvalMetrics(c.get('user')),
+      ])
+      return c.json({
+        data: {
+          pendingApproval: deliveryMetrics.pendingApproval + retentionMetrics.pendingApproval,
+          approvedToday: deliveryMetrics.approvedToday + retentionMetrics.approvedToday,
+          mismatchesFlagged:
+            deliveryMetrics.mismatchesFlagged + retentionMetrics.mismatchesFlagged,
+        },
+      })
+    })
     .get('/api/approvals/:noteId', requireStoreApprover(), async (c) => {
       const noteId = c.req.param('noteId')
       const data = await retention.ownsNote(noteId, c.get('user'))
@@ -596,6 +610,9 @@ export function createApp({
         data: await retention.reverseWriteOff(c.req.param('id'), parsed.data, actor(c)),
       })
     })
+    .get('/api/stock/movements', requireStoreApprover(), async (c) =>
+      c.json({ data: await delivery.listStockMovements(c.get('user')) }),
+    )
     .get('/api/stock', requireStoreApprover(), async (c) =>
       c.json({ data: await delivery.listStock(c.get('user')) }),
     )

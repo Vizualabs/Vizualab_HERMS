@@ -383,6 +383,12 @@ export type ApprovalSummary = {
   createdAt: string
 }
 
+export type ApprovalMetrics = {
+  pendingApproval: number
+  approvedToday: number
+  mismatchesFlagged: number
+}
+
 export type ReconciliationLine = {
   equipmentItemId: string
   equipmentName: string
@@ -404,14 +410,26 @@ export type FieldStaffRecipient = {
 export type StockItem = {
   equipmentItemId: string
   equipmentName: string
+  category: string
   unitOfMeasure: string
   quantity: number
+  onRentQuantity: number
   reorderThreshold: number | null
   reorderAlertId: string | null
   reorderAlertOpenedAt: string | null
   isBelowReorderThreshold: boolean
   currentUnitPriceCents: number
   valueCents: number
+}
+
+export type StockMovement = {
+  id: string
+  equipmentItemId: string
+  equipmentName: string
+  direction: 'in' | 'out' | 'write_off'
+  quantityDelta: number
+  createdAt: string
+  source: string
 }
 
 export class ApiError extends Error {
@@ -585,6 +603,7 @@ export const api = {
       body: '{}',
     }),
   approvals: () => request<ApprovalSummary[]>('/api/approvals'),
+  approvalMetrics: () => request<ApprovalMetrics>('/api/approvals/metrics'),
   approvalNote: (id: string) => request<TokenNote>(`/api/approvals/${id}`),
   countDeliveryNote: (id: string, input: DeliveryNoteCount) => request<DeliveryNoteDetail>(`/api/approvals/${id}/count`, { method: 'POST', body: JSON.stringify(input) }),
   approveDeliveryNote: (id: string) => request<DeliveryNoteDetail>(`/api/approvals/${id}/approve`, { method: 'POST', body: '{}' }),
@@ -597,6 +616,7 @@ export const api = {
   closeOrder: (id: string) => request<{ order: OrderDetail; reconciliation: ReconciliationLine[] }>(`/api/orders/${id}/close`, { method: 'POST', body: '{}' }),
   reverseWriteOff: (id: string, reason: string) => request<{ discrepancy: { id: string; status: string }; reversalLedgerId: string }>(`/api/discrepancies/${id}/write-off-reverse`, { method: 'POST', body: JSON.stringify({ reason }) }),
   stock: () => request<StockItem[]>('/api/stock'),
+  stockMovements: () => request<StockMovement[]>('/api/stock/movements'),
   dashboardFilterOptions: () =>
     request<DashboardFilterOptions>('/api/dashboard/filter-options'),
   dashboardStock: () => request<DashboardStock>('/api/dashboard/stock'),

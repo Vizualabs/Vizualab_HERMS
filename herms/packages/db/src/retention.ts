@@ -644,6 +644,28 @@ export function createRetentionService(db: Database, config: RetentionConfig) {
       return rows.map((row) => ({ ...row, noteType: 'retention_note' as const }))
     },
 
+    async approvalMetrics(actor: SessionUser) {
+      const storeId = requireStore(actor)
+      const [metrics] = await db.select({
+        pendingApproval: sql<number>`COUNT(DISTINCT ${retentionNotes.id}) FILTER (
+          WHERE ${retentionNotes.status} = 'pending_approval'
+        )::int`,
+        approvedToday: sql<number>`COUNT(DISTINCT ${retentionNotes.id}) FILTER (
+          WHERE ${retentionNotes.status} = 'approved'
+            AND (${retentionNotes.approvedAt} AT TIME ZONE ${config.timezone})::date
+              = (CURRENT_TIMESTAMP AT TIME ZONE ${config.timezone})::date
+        )::int`,
+        mismatchesFlagged: sql<number>`COUNT(${retentionNoteLines.id}) FILTER (
+          WHERE ${retentionNotes.status} = 'pending_approval'
+            AND ${retentionNoteLines.missingDamagedQty} > 0
+        )::int`,
+      })
+        .from(retentionNotes)
+        .leftJoin(retentionNoteLines, eq(retentionNoteLines.retentionNoteId, retentionNotes.id))
+        .where(eq(retentionNotes.storeId, storeId))
+      return metrics ?? { pendingApproval: 0, approvedToday: 0, mismatchesFlagged: 0 }
+    },
+
     async countNote(id: string, input: RetentionNoteCount, actor: AuditActor) {
       const before = await noteDetail(id, actor)
       if (before.status !== 'pending_approval') {

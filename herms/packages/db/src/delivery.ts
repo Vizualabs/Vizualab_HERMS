@@ -22,6 +22,7 @@ import {
   orders,
   outboxEvents,
   reorderAlerts,
+  retentionNotes,
   stockLedger,
   stores,
   users,
@@ -463,6 +464,28 @@ export function createDeliveryService(db: Database, config: DeliveryConfig) {
         .orderBy(desc(deliveryNotes.submittedAt), desc(deliveryNotes.createdAt))
     },
 
+    async approvalMetrics(actor: SessionUser) {
+      const storeId = requireStore(actor)
+      const [metrics] = await db.select({
+        pendingApproval: sql<number>`COUNT(DISTINCT ${deliveryNotes.id}) FILTER (
+          WHERE ${deliveryNotes.status} = 'pending_approval'
+        )::int`,
+        approvedToday: sql<number>`COUNT(DISTINCT ${deliveryNotes.id}) FILTER (
+          WHERE ${deliveryNotes.status} = 'approved'
+            AND (${deliveryNotes.approvedAt} AT TIME ZONE ${config.timezone})::date
+              = (CURRENT_TIMESTAMP AT TIME ZONE ${config.timezone})::date
+        )::int`,
+        mismatchesFlagged: sql<number>`COUNT(${deliveryNoteLines.id}) FILTER (
+          WHERE ${deliveryNotes.status} = 'pending_approval'
+            AND ${deliveryNoteLines.issuedQty} <> ${deliveryNoteLines.handedOverQty}
+        )::int`,
+      })
+        .from(deliveryNotes)
+        .leftJoin(deliveryNoteLines, eq(deliveryNoteLines.deliveryNoteId, deliveryNotes.id))
+        .where(eq(deliveryNotes.storeId, storeId))
+      return metrics ?? { pendingApproval: 0, approvedToday: 0, mismatchesFlagged: 0 }
+    },
+
     async countNote(id: string, input: DeliveryNoteCount, actor: AuditActor) {
       const before = await noteDetail(id, actor)
       if (before.status !== 'pending_approval') throw new DataConflictError('Only a pending delivery note may be counted')
@@ -582,8 +605,18 @@ export function createDeliveryService(db: Database, config: DeliveryConfig) {
       return db.select({
         equipmentItemId: equipmentItems.id,
         equipmentName: equipmentItems.name,
+        category: equipmentItems.category,
         unitOfMeasure: equipmentItems.unitOfMeasure,
         quantity: sql<number>`COALESCE(SUM(${stockLedger.quantityDelta}), 0)::int`,
+        onRentQuantity: sql<number>`GREATEST(COALESCE(SUM(
+          CASE
+            WHEN ${stockLedger.direction} = 'out' THEN -${stockLedger.quantityDelta}
+            WHEN ${stockLedger.sourceType} = 'retention_note'
+              AND ${stockLedger.direction} = 'in' THEN -${stockLedger.quantityDelta}
+            WHEN ${stockLedger.direction} = 'write_off' THEN ${stockLedger.quantityDelta}
+            ELSE 0
+          END
+        ), 0), 0)::int`,
         reorderThreshold: equipmentItems.reorderThreshold,
         reorderAlertId: reorderAlerts.id,
         reorderAlertOpenedAt: reorderAlerts.openedAt,
@@ -598,6 +631,47 @@ export function createDeliveryService(db: Database, config: DeliveryConfig) {
           eq(reorderAlerts.status, 'open'),
         ))
         .groupBy(equipmentItems.id, reorderAlerts.id).orderBy(equipmentItems.name)
+    },
+
+    async listStockMovements(actor: SessionUser) {
+      const storeId = requireStore(actor)
+      const movements = await db.select({
+        id: stockLedger.id,
+        equipmentItemId: equipmentItems.id,
+        equipmentName: equipmentItems.name,
+        direction: stockLedger.direction,
+        quantityDelta: stockLedger.quantityDelta,
+        createdAt: stockLedger.createdAt,
+        sourceType: stockLedger.sourceType,
+        sourceNoteId: stockLedger.sourceNoteId,
+        deliveryNoteNumber: deliveryNotes.dnNumber,
+        retentionNoteNumber: retentionNotes.rnNumber,
+      })
+        .from(stockLedger)
+        .innerJoin(equipmentItems, eq(stockLedger.equipmentItemId, equipmentItems.id))
+        .leftJoin(deliveryNotes, and(
+          eq(stockLedger.sourceType, 'delivery_note'),
+          eq(stockLedger.sourceNoteId, deliveryNotes.id),
+        ))
+        .leftJoin(retentionNotes, and(
+          eq(stockLedger.sourceType, 'retention_note'),
+          eq(stockLedger.sourceNoteId, retentionNotes.id),
+        ))
+        .where(eq(stockLedger.storeId, storeId))
+        .orderBy(desc(stockLedger.createdAt), desc(stockLedger.id))
+        .limit(5)
+
+      return movements.map((movement) => ({
+        id: movement.id,
+        equipmentItemId: movement.equipmentItemId,
+        equipmentName: movement.equipmentName,
+        direction: movement.direction,
+        quantityDelta: movement.quantityDelta,
+        createdAt: movement.createdAt,
+        source: movement.deliveryNoteNumber
+          ?? movement.retentionNoteNumber
+          ?? `${movement.sourceType.replaceAll('_', ' ')} ${movement.sourceNoteId.slice(0, 8)}`,
+      }))
     },
   }
 }
