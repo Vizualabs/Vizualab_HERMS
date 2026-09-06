@@ -1,7 +1,8 @@
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
+import { useState } from 'react'
 
-import { ApiError, api, formatMinorUnits } from '../../api'
+import { ApiError, api, formatMoney, type EquipmentItem } from '../../api'
 import { itemsQuery, queryKeys } from '../../queries'
 
 export const Route = createFileRoute('/_authenticated/customers/$customerId')({
@@ -92,56 +93,72 @@ function CustomerDetailPage() {
         </section>
 
         <section className="rounded-2xl border border-border bg-card p-6">
-          <h2 className="text-xl font-semibold">Fixed price list</h2>
+          <h2 className="text-xl font-semibold">Customer special prices</h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            Saving this list marks the customer Recurring and versions all current fixed prices.
+            Select only negotiated exceptions. Unselected items use their equipment standard price.
           </p>
           {items.isPending ? (
             <p className="mt-6 text-muted-foreground">Loading equipment…</p>
           ) : (
-            <form
-              className="mt-6 space-y-3"
-              onSubmit={(event) => {
-                event.preventDefault()
-                const form = new FormData(event.currentTarget)
-                setRecurring.mutate(
-                  (items.data ?? []).map((item) => ({
-                    equipmentItemId: item.id,
-                    unitPriceCents: Number(form.get(item.id)),
-                  })),
-                )
-              }}
-            >
-              {(items.data ?? []).map((item) => (
-                <label key={item.id} className="grid grid-cols-[1fr_9rem] items-center gap-4 text-sm">
-                  <span>
-                    <span className="font-medium">{item.name}</span>
-                    <span className="block text-xs text-muted-foreground">
-                      Current {formatMinorUnits(item.currentUnitPriceCents)}
-                    </span>
-                  </span>
-                  <input
-                    className="input"
-                    name={item.id}
-                    type="number"
-                    min="0"
-                    step="1"
-                    required
-                    aria-label={`${item.name} fixed price in minor units`}
-                    defaultValue={currentPrices.get(item.id) ?? item.currentUnitPriceCents}
-                  />
-                </label>
-              ))}
-              {setRecurring.error && <MutationError error={setRecurring.error} />}
-              <button type="submit" disabled={setRecurring.isPending} className="button-primary w-full">
-                {setRecurring.isPending ? 'Saving prices…' : 'Save recurring price list'}
-              </button>
-            </form>
+            <SpecialPriceForm
+              key={customer.data.updatedAt}
+              items={items.data ?? []}
+              currentPrices={currentPrices}
+              pending={setRecurring.isPending}
+              error={setRecurring.error}
+              onSave={(prices) => setRecurring.mutate(prices)}
+            />
           )}
         </section>
       </div>
     </div>
   )
+}
+
+function SpecialPriceForm({ items, currentPrices, pending, error, onSave }: {
+  items: EquipmentItem[]
+  currentPrices: Map<string, number>
+  pending: boolean
+  error: Error | null
+  onSave: (prices: Array<{ equipmentItemId: string; unitPriceCents: number }>) => void
+}) {
+  const [selectedItemId, setSelectedItemId] = useState('')
+  const [prices, setPrices] = useState(() => [...currentPrices].map(([equipmentItemId, unitPriceCents]) => ({ equipmentItemId, unitPriceCents })))
+  const [selectionError, setSelectionError] = useState<string | null>(null)
+  const selectedIds = new Set(prices.map((price) => price.equipmentItemId))
+
+  return <form className="mt-6 space-y-3" onSubmit={(event) => {
+    event.preventDefault()
+    if (prices.length === 0) { setSelectionError('Add at least one customer-specific price.'); return }
+    setSelectionError(null)
+    onSave(prices)
+  }}>
+    <div className="flex gap-2">
+      <select aria-label="Equipment for special price" className="input" value={selectedItemId} onChange={(event) => setSelectedItemId(event.currentTarget.value)}>
+        <option value="">Select equipment</option>
+        {items.map((item) => <option key={item.id} value={item.id} disabled={selectedIds.has(item.id)}>{item.name}</option>)}
+      </select>
+      <button className="button-secondary shrink-0" disabled={!selectedItemId} type="button" onClick={() => {
+        const item = items.find((entry) => entry.id === selectedItemId)
+        if (!item) return
+        setPrices((current) => [...current, { equipmentItemId: item.id, unitPriceCents: item.currentUnitPriceCents }])
+        setSelectedItemId('')
+      }}>Add exception</button>
+    </div>
+    {prices.length === 0 && <p className="rounded-lg bg-muted px-4 py-3 text-sm text-muted-foreground">No exceptions selected. Add only equipment with a negotiated customer price.</p>}
+    {prices.map((price) => {
+      const item = items.find((entry) => entry.id === price.equipmentItemId)
+      if (!item) return null
+      return <div key={item.id} className="grid grid-cols-[1fr_9rem_auto] items-center gap-3 rounded-lg border border-border p-3 text-sm">
+        <span><span className="font-medium">{item.name}</span><span className="block text-xs text-muted-foreground">Standard {formatMoney(item.currentUnitPriceCents)}</span></span>
+        <input aria-label={`${item.name} special price in LKR`} className="input" min="0.01" step="0.01" type="number" value={(price.unitPriceCents / 100).toFixed(2)} onChange={(event) => setPrices((current) => current.map((entry) => entry.equipmentItemId === item.id ? { ...entry, unitPriceCents: Math.round(event.currentTarget.valueAsNumber * 100) } : entry))} />
+        <button aria-label={`Remove ${item.name} special price`} className="text-xs font-medium text-danger hover:underline" type="button" onClick={() => setPrices((current) => current.filter((entry) => entry.equipmentItemId !== item.id))}>Remove</button>
+      </div>
+    })}
+    {selectionError && <p role="alert" className="text-sm text-danger">{selectionError}</p>}
+    {error && <MutationError error={error} />}
+    <button type="submit" disabled={pending} className="button-primary w-full">{pending ? 'Saving prices...' : 'Save special prices'}</button>
+  </form>
 }
 
 function EditField({

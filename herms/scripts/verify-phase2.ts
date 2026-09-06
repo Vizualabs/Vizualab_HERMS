@@ -57,6 +57,7 @@ const recurringResponse = await request('/api/quotations', cookie, {
   headers: { 'X-Request-ID': 'verify-phase2-recurring' },
   body: JSON.stringify({
     customerId: '30000000-0000-4000-8000-000000000001',
+    pricingMode: 'standard',
     lines: [
       { equipmentItemId: '40000000-0000-4000-8000-000000000001', quantity: 2 },
       { equipmentItemId: '40000000-0000-4000-8000-000000000002', quantity: 3 },
@@ -64,7 +65,7 @@ const recurringResponse = await request('/api/quotations', cookie, {
   }),
 })
 assert(recurringResponse.status === 201, `Recurring quotation failed: ${recurringResponse.status}`)
-const recurring = (await recurringResponse.json()) as { data: { id: string; quotationNumber: string; totalValueCents: number; lines: Array<{ unitPriceCents: number; lineTotalCents: number }> } }
+const recurring = (await recurringResponse.json()) as { data: { id: string; quotationNumber: string; totalValueCents: number; submissionLink: string; lines: Array<{ unitPriceCents: number; lineTotalCents: number }> } }
 assert(/^QT-\d{4}-\d{6,}$/.test(recurring.data.quotationNumber), 'Quotation number format is invalid')
 assert(recurring.data.lines[0]?.unitPriceCents === 125_000, 'Recurring fixed price was not used')
 assert(recurring.data.lines[1]?.unitPriceCents === 180_000, 'Second recurring fixed price was not used')
@@ -83,11 +84,17 @@ assert(new TextDecoder().decode(pdf.slice(0, 5)) === '%PDF-', 'Quotation PDF sig
 await mkdir('tmp/pdfs', { recursive: true })
 await Bun.write('tmp/pdfs/phase-2-verification-quotation.pdf', pdf)
 
-const acceptResponse = await request(`/api/quotations/${recurring.data.id}/accept`, cookie, {
+const quotationToken = new URL(recurring.data.submissionLink).pathname.split('/').at(-1)
+assert(quotationToken, 'Quotation response did not include a customer link')
+const acceptResponse = await request(`/api/public/quotations/${quotationToken}/accept`, cookie, {
   method: 'POST', headers: { 'X-Request-ID': 'verify-phase2-accept' }, body: '{}',
 })
 assert(acceptResponse.status === 200, `Quotation acceptance failed: ${acceptResponse.status}`)
-const acceptedOrder = (await acceptResponse.json()) as { data: { id: string; orderNumber: string; quotationId: string; totalValueCents: number } }
+const convertResponse = await request(`/api/quotations/${recurring.data.id}/order`, cookie, {
+  method: 'POST', headers: { 'X-Request-ID': 'verify-phase2-convert' }, body: '{}',
+})
+assert(convertResponse.status === 201, `Order conversion failed: ${convertResponse.status}`)
+const acceptedOrder = (await convertResponse.json()) as { data: { id: string; orderNumber: string; quotationId: string; totalValueCents: number } }
 assert(/^ORD-\d{4}-\d{6,}$/.test(acceptedOrder.data.orderNumber), 'Order number format is invalid')
 assert(acceptedOrder.data.quotationId === recurring.data.id, 'Order does not reference its quotation')
 assert(acceptedOrder.data.totalValueCents === recurring.data.totalValueCents, 'Order total differs from quotation total')
@@ -103,7 +110,7 @@ assert(invalidTransition.status === 409, 'Invalid accepted-to-rejected transitio
 
 const manualResponse = await request('/api/quotations', cookie, {
   method: 'POST', headers: { 'X-Request-ID': 'verify-phase2-manual' },
-  body: JSON.stringify({ customerId: '30000000-0000-4000-8000-000000000002', lines: [{ equipmentItemId: '40000000-0000-4000-8000-000000000003', quantity: 4, manualUnitPriceCents: 47_500 }] }),
+  body: JSON.stringify({ customerId: '30000000-0000-4000-8000-000000000002', pricingMode: 'custom', lines: [{ equipmentItemId: '40000000-0000-4000-8000-000000000003', quantity: 4, manualUnitPriceCents: 47_500 }] }),
 })
 assert(manualResponse.status === 201, `Manual quotation failed: ${manualResponse.status}`)
 const manual = (await manualResponse.json()) as { data: { id: string; lines: Array<{ unitPriceCents: number; lineTotalCents: number }> } }
@@ -111,9 +118,9 @@ assert(manual.data.lines[0]?.unitPriceCents === 47_500 && manual.data.lines[0]?.
 
 const missingManual = await request('/api/quotations', cookie, {
   method: 'POST',
-  body: JSON.stringify({ customerId: '30000000-0000-4000-8000-000000000003', lines: [{ equipmentItemId: '40000000-0000-4000-8000-000000000004', quantity: 1 }] }),
+  body: JSON.stringify({ customerId: '30000000-0000-4000-8000-000000000003', pricingMode: 'custom', lines: [{ equipmentItemId: '40000000-0000-4000-8000-000000000004', quantity: 1 }] }),
 })
-assert(missingManual.status === 409, 'A new-customer quotation without manual pricing was accepted')
+assert(missingManual.status === 400, 'A custom quotation without manual pricing was accepted')
 
 const [storedQuote] = await db.select().from(quotations).where(eq(quotations.id, recurring.data.id))
 const [storedOrder] = await db.select().from(orders).where(eq(orders.id, acceptedOrder.data.id))

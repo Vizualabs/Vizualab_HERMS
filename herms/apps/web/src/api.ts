@@ -9,6 +9,7 @@ import type {
   RecurringCustomerInput,
   SessionUser,
   QuotationInput,
+  QuotationPricingMode,
   QuotationStatus,
   OrderStatus,
   NoteStatus,
@@ -107,9 +108,13 @@ export type QuotationSummary = {
   customerId: string
   customerName: string
   status: QuotationStatus
+  pricingMode: QuotationPricingMode
   totalValueCents: number
   createdAt: string
   expiresAt: string | null
+  updatedAt: string
+  lineCount: number
+  orderId: string | null
 }
 
 export type QuotationDetail = QuotationSummary & {
@@ -122,8 +127,22 @@ export type QuotationDetail = QuotationSummary & {
   currency: string
   timezone: string
   sentAt: string | null
-  updatedAt: string
   lines: CommercialLine[]
+}
+
+export type QuotationLink = { submissionLink: string; expiresAt: string }
+export type CreatedQuotation = QuotationDetail & { submissionLink: string }
+export type PublicQuotation = {
+  quotationNumber: string
+  customerName: string
+  status: QuotationStatus
+  totalValueCents: number
+  sentAt: string | null
+  expiresAt: string | null
+  tokenExpiresAt: string
+  currency: string
+  lines: Array<Omit<CommercialLine, 'id' | 'equipmentItemId'>>
+  order: { orderNumber: string; status: OrderStatus } | null
 }
 
 export type OrderSummary = {
@@ -555,13 +574,20 @@ export const api = {
   quotations: () => request<QuotationSummary[]>('/api/quotations'),
   quotation: (id: string) => request<QuotationDetail>(`/api/quotations/${id}`),
   createQuotation: (input: QuotationInput) =>
-    request<QuotationDetail>('/api/quotations', { method: 'POST', body: JSON.stringify(input) }),
-  acceptQuotation: (id: string) =>
-    request<OrderDetail>(`/api/quotations/${id}/accept`, { method: 'POST', body: '{}' }),
+    request<CreatedQuotation>('/api/quotations', { method: 'POST', body: JSON.stringify(input) }),
+  quotationLink: (id: string) => request<QuotationLink>(`/api/quotations/${id}/share-link`),
+  convertQuotation: (id: string) =>
+    request<OrderDetail>(`/api/quotations/${id}/order`, { method: 'POST', body: '{}' }),
   rejectQuotation: (id: string) =>
     request<QuotationDetail>(`/api/quotations/${id}/reject`, { method: 'POST', body: '{}' }),
   expireQuotation: (id: string) =>
     request<QuotationDetail>(`/api/quotations/${id}/expire`, { method: 'POST', body: '{}' }),
+  publicQuotation: (token: string) =>
+    request<PublicQuotation>(`/api/public/quotations/${encodeURIComponent(token)}`),
+  acceptPublicQuotation: (token: string) =>
+    request<PublicQuotation>(`/api/public/quotations/${encodeURIComponent(token)}/accept`, { method: 'POST', body: '{}' }),
+  rejectPublicQuotation: (token: string) =>
+    request<PublicQuotation>(`/api/public/quotations/${encodeURIComponent(token)}/reject`, { method: 'POST', body: '{}' }),
   orders: () => request<OrderSummary[]>('/api/orders'),
   order: (id: string) => request<OrderDetail>(`/api/orders/${id}`),
   invoice: (id: string) => request<Invoice>(`/api/orders/${id}/invoice`),

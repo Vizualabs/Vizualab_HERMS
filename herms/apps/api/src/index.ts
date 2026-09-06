@@ -33,6 +33,8 @@ const app = createApp({
     quotationExpiryDays: env.QUOTATION_EXPIRY_DAYS,
     quotationNumberPrefix: env.QUOTATION_NUMBER_PREFIX,
     orderNumberPrefix: env.ORDER_NUMBER_PREFIX,
+    tokenSecret: env.NOTE_TOKEN_SECRET,
+    publicAppUrl: env.PUBLIC_APP_URL,
   }),
   delivery: createDeliveryService(db, {
     timezone: env.BUSINESS_TIMEZONE,

@@ -33,6 +33,7 @@ export const priceChangeReason = pgEnum('price_change_reason', [
 ])
 export const auditActorType = pgEnum('audit_actor_type', ['user', 'token'])
 export const quotationStatus = pgEnum('quotation_status', ['sent', 'accepted', 'rejected', 'expired'])
+export const quotationPricingMode = pgEnum('quotation_pricing_mode', ['standard', 'custom'])
 export const orderStatus = pgEnum('order_status', ['open', 'fully_returned', 'cancelled'])
 export const outboxStatus = pgEnum('outbox_status', ['pending', 'published', 'failed'])
 export const noteStatus = pgEnum('note_status', ['draft', 'submitted', 'pending_approval', 'approved', 'rejected', 'reopened'])
@@ -179,6 +180,7 @@ export const quotations = pgTable(
     quotationNumber: text('quotation_number').notNull().unique(),
     customerId: uuid('customer_id').notNull().references(() => customers.id),
     status: quotationStatus('status').default('sent').notNull(),
+    pricingMode: quotationPricingMode('pricing_mode').default('standard').notNull(),
     totalValueCents: integer('total_value_cents').default(0).notNull(),
     createdBy: uuid('created_by').references(() => users.id),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

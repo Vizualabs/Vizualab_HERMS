@@ -3,7 +3,9 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { useState } from 'react'
 
 import { ApiError, api } from '../../api'
+import { ManualLinkShare } from '../../components/ManualShareActions'
 import { queryKeys } from '../../queries'
+import { createNoteShareMessage } from '../../whatsapp'
 
 export const Route = createFileRoute('/_authenticated/delivery-notes/$noteId')({
   component: DeliveryNotePage,
@@ -33,6 +35,7 @@ function DeliveryNotePage() {
   }
 
   const data = note.data
+  const submissionLink = link ?? data.submissionLink ?? null
   const error = getLink.error || regenerate.error
   return <div>
     <Link to="/orders/$orderId" params={{ orderId: data.orderId }} className="text-sm font-medium text-primary hover:underline">
@@ -74,10 +77,18 @@ function DeliveryNotePage() {
         <button className="button-secondary" disabled={regenerate.isPending} onClick={() => regenerate.mutate()}>
           Revoke and regenerate
         </button>
-        {link && <button className="button-primary" onClick={() => navigator.clipboard.writeText(link)}>
-          Copy link
-        </button>}
       </div>}
+      {data.status !== 'approved' && submissionLink && <ManualLinkShare
+        label="Delivery submission link"
+        link={submissionLink}
+        message={createNoteShareMessage({
+          noteType: 'Delivery',
+          noteNumber: data.dnNumber,
+          orderNumber: data.orderNumber,
+          customerName: data.customerName,
+          submissionLink,
+        })}
+      />}
       {error && <p role="alert" className="mt-4 text-sm text-danger">
         {error instanceof ApiError ? error.message : 'Unable to manage delivery link'}
       </p>}

@@ -19,6 +19,7 @@ export const PRICE_CHANGE_REASONS = [
 ] as const
 export const MANUAL_PRICE_CHANGE_REASONS = ['negotiated', 'correction'] as const
 export const QUOTATION_STATUSES = ['sent', 'accepted', 'rejected', 'expired'] as const
+export const QUOTATION_PRICING_MODES = ['standard', 'custom'] as const
 export const ORDER_STATUSES = ['open', 'fully_returned', 'cancelled'] as const
 export const NOTE_STATUSES = ['draft', 'submitted', 'pending_approval', 'approved', 'rejected', 'reopened'] as const
 export const DISCREPANCY_TYPES = ['missing', 'damaged', 'not_accepted', 'other'] as const
@@ -36,6 +37,7 @@ export type CustomerType = (typeof CUSTOMER_TYPES)[number]
 export type PriceChangeReason = (typeof PRICE_CHANGE_REASONS)[number]
 export type ManualPriceChangeReason = (typeof MANUAL_PRICE_CHANGE_REASONS)[number]
 export type QuotationStatus = (typeof QUOTATION_STATUSES)[number]
+export type QuotationPricingMode = (typeof QUOTATION_PRICING_MODES)[number]
 export type OrderStatus = (typeof ORDER_STATUSES)[number]
 export type NoteStatus = (typeof NOTE_STATUSES)[number]
 export type DiscrepancyType = (typeof DISCREPANCY_TYPES)[number]
@@ -108,10 +110,22 @@ export const quotationLineInputSchema = z.object({
 
 export const quotationInputSchema = z.object({
   customerId: z.string().uuid(),
+  pricingMode: z.enum(QUOTATION_PRICING_MODES),
   lines: z.array(quotationLineInputSchema).min(1).max(100).refine(
     (lines) => new Set(lines.map((line) => line.equipmentItemId)).size === lines.length,
     'Each equipment item may appear only once',
   ),
+}).superRefine((quotation, context) => {
+  if (quotation.pricingMode !== 'custom') return
+  quotation.lines.forEach((line, index) => {
+    if (line.manualUnitPriceCents === undefined) {
+      context.addIssue({
+        code: 'custom',
+        path: ['lines', index, 'manualUnitPriceCents'],
+        message: 'Custom pricing requires a unit price for every selected item',
+      })
+    }
+  })
 })
 
 export const deliveryNoteSubmissionSchema = z.object({

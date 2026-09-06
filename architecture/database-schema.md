@@ -38,6 +38,7 @@ Use Neon's **HTTP/serverless driver** — no classic pooled `pg` connection per 
 | `user_role` | `business_owner`, `sales`, `field_staff`, `store_admin`, `finance`, `system_admin` |
 | `customer_type` | `recurring`, `new` |
 | `quotation_status` | `sent`, `accepted`, `rejected`, `expired` |
+| `quotation_pricing_mode` | `standard`, `custom` |
 | `order_status` | `open`, `fully_returned`, `cancelled` |
 | `note_status` | `draft`, `submitted`, `pending_approval`, `approved`, `rejected`, `reopened` |
 | `discrepancy_type` | `missing`, `damaged`, `not_accepted`, `other` |
@@ -156,6 +157,7 @@ Quotation header (FR-2.1, FR-2.3).
 | `quotation_number` | text NOT NULL UNIQUE | |
 | `customer_id` | uuid FK → `customer.id` NOT NULL | |
 | `status` | `quotation_status` NOT NULL default `sent` | |
+| `pricing_mode` | `quotation_pricing_mode` NOT NULL default `standard` | Records how frozen line prices were selected |
 | `total_value_cents` | integer NOT NULL default 0 | |
 | `created_by` | uuid FK → `user.id` NULL | |
 | `created_at` | timestamptz default now() | |
@@ -397,14 +399,14 @@ Index on `(status, available_at)`.
 
 ### note_token
 
-Scoped, expiring link token (FR-11.1, FR-12.2, I-9). Store the hash, never the raw token.
+Scoped, expiring document token (FR-11.1, FR-12.2, I-9). Store the hash, never the raw token.
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | uuid PK | |
 | `token_hash` | text NOT NULL UNIQUE | SHA-256 of the raw token |
-| `note_type` | text NOT NULL | `delivery_note` \| `retention_note` |
-| `note_id` | uuid NOT NULL | The note this token opens |
+| `note_type` | text NOT NULL | `delivery_note` \| `retention_note` \| `quotation` |
+| `note_id` | uuid NOT NULL | The document this token opens |
 | `status` | `token_status` NOT NULL default `active` | |
 | `expires_at` | timestamptz NOT NULL | Checked at read time (I-9) |
 | `used_at` | timestamptz NULL | |
@@ -437,7 +439,7 @@ Scoped, expiring link token (FR-11.1, FR-12.2, I-9). Store the hash, never the r
 | `discrepancy` | `damage_claim` | 1—0..1 | one claim per discrepancy |
 | `order` | `payment` | 1—N | |
 | `customer` | `payment` | 1—N | |
-| `delivery_note` / `retention_note` | `note_token` | 1—0..1 | via `note_id` |
+| `quotation` / `delivery_note` / `retention_note` | `note_token` | 1—0..1 | via `note_id` and document type |
 | `user` | `audit_log` | 1—N | actor |
 
 ### ER Diagram

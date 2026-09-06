@@ -3,7 +3,9 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { useState } from 'react'
 
 import { ApiError, api, formatMoney } from '../../api'
+import { ManualLinkShare } from '../../components/ManualShareActions'
 import { queryKeys, sessionQuery } from '../../queries'
+import { createNoteShareMessage } from '../../whatsapp'
 
 export const Route = createFileRoute('/_authenticated/orders/$orderId')({
   component: OrderDetailPage,
@@ -12,7 +14,11 @@ export const Route = createFileRoute('/_authenticated/orders/$orderId')({
 function OrderDetailPage() {
   const { orderId } = Route.useParams()
   const queryClient = useQueryClient()
-  const [newLink, setNewLink] = useState<{ type: 'delivery' | 'return'; url: string } | null>(null)
+  const [newLink, setNewLink] = useState<{
+    type: 'delivery' | 'retention'
+    noteNumber: string
+    url: string
+  } | null>(null)
   const session = useQuery(sessionQuery)
   const canUseSales = session.data?.role === 'sales' || session.data?.role === 'super_user'
   const canClose = session.data?.role === 'store_admin' || session.data?.role === 'super_user'
@@ -44,9 +50,7 @@ function OrderDetailPage() {
     onSuccess: async (note) => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.deliveryNotes(orderId) })
       if (note.submissionLink) {
-        window.location.assign(note.submissionLink)
-      } else {
-        setNewLink({ type: 'delivery', url: `/delivery-notes/${note.id}` })
+        setNewLink({ type: 'delivery', noteNumber: note.dnNumber, url: note.submissionLink })
       }
     },
   })
@@ -59,9 +63,7 @@ function OrderDetailPage() {
     onSuccess: async (note) => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.retentionNotes(orderId) })
       if (note.submissionLink) {
-        window.location.assign(note.submissionLink)
-      } else {
-        setNewLink({ type: 'return', url: `/retention-notes/${note.id}` })
+        setNewLink({ type: 'retention', noteNumber: note.rnNumber, url: note.submissionLink })
       }
     },
   })
@@ -165,7 +167,7 @@ function OrderDetailPage() {
               <input className="input" name={`delivery-${line.equipmentItemId}`} type="number" min="0" max={line.quantity} step="1" defaultValue={line.quantity} />
             </label>)}
             <button className="button-primary w-full text-sm" disabled={createDelivery.isPending || data.status !== 'open'}>
-              {createDelivery.isPending ? 'Creating...' : 'Create & open delivery note'}
+              {createDelivery.isPending ? 'Creating...' : 'Create delivery note'}
             </button>
           </form>
           <h3 className="mt-6 font-semibold">Delivery notes</h3>
@@ -208,7 +210,7 @@ function OrderDetailPage() {
               <span>{line.equipmentName}</span>
             </label>)}
             <button className="button-primary w-full text-sm" disabled={createRetention.isPending || data.status !== 'open'}>
-              {createRetention.isPending ? 'Creating...' : 'Create & open retention note'}
+              {createRetention.isPending ? 'Creating...' : 'Create retention note'}
             </button>
           </form>
           <h3 className="mt-6 font-semibold">Retention notes</h3>
@@ -222,16 +224,19 @@ function OrderDetailPage() {
           </ul>
         </section>
 
-        {newLink && <section className="rounded-2xl bg-primary-soft p-4">
-          <p className="text-xs font-semibold text-primary-strong">
-            {newLink.type === 'return' ? 'Return' : 'Delivery'} submission link created
-          </p>
-          <button className="mt-2 text-sm font-medium text-primary-strong underline" onClick={() => navigator.clipboard.writeText(newLink.url)}>
-            Copy secure link
-          </button>
-        </section>}
+        {newLink && <ManualLinkShare
+          label={`${newLink.type === 'retention' ? 'Retention' : 'Delivery'} submission link created`}
+          link={newLink.url}
+          message={createNoteShareMessage({
+            noteType: newLink.type === 'retention' ? 'Retention' : 'Delivery',
+            noteNumber: newLink.noteNumber,
+            orderNumber: data.orderNumber,
+            customerName: data.customerName,
+            submissionLink: newLink.url,
+          })}
+        />}
         {fieldStaff.isSuccess && fieldStaff.data.length === 0 && <p role={'alert'} className={'text-sm text-danger'}>
-          Add an active field staff user with a WhatsApp phone number before creating a note.
+          Add an active field staff user with a phone number before creating a note.
         </p>}
       </aside>}
     </div>

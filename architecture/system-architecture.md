@@ -35,13 +35,11 @@ flowchart LR
 
     subgraph AWS["AWS"]
         LFN["Lambda Function URL<br>Hono monolith (api)"]
-        PUB["Outbox publisher"]
-        SQS["SQS + DLQ"]
-        NOTIFY["Notification Lambda"]
         SCHED["EventBridge Scheduler"]
     end
 
     DB[("Neon PostgreSQL")]
+    WA["WhatsApp Web<br>manual send"]
 
     STORE --> NGINX
     MGMT --> NGINX
@@ -50,10 +48,7 @@ flowchart LR
     NGINX -->|"/api/* proxy"| LFN
     LFN --> DB
     LFN -->|"outbox rows (same tx)"| DB
-    PUB -->|"drain outbox"| DB
-    PUB --> SQS
-    SQS --> NOTIFY
-    NOTIFY --> WA["WhatsApp / SMS / Email"]
+    WEB -.->|"staff clicks share icon"| WA
     SCHED -->|"escalation job"| LFN
 ```
 
@@ -65,9 +60,7 @@ flowchart LR
 | Nginx | Hostinger VPS | Serve static frontend; proxy `/api/*` same-origin to the Lambda Function URL |
 | API | Hono monolith on AWS Lambda Function URL | All business logic, authorization, validation, transactions, outbox writes |
 | Database | Neon PostgreSQL (serverless) | Source of truth; append-only stock ledger, price history, audit log, outbox |
-| Outbox publisher | Part of the API (or a separate worker) | Drain `outbox` rows into SQS after commit |
-| Queue | AWS SQS + dead-letter queue | Reliable, at-least-once delivery of notification intents |
-| Notifier | Separate Notification Lambda | Consume SQS, call WhatsApp/SMS/email provider |
+| Manual sharing | WhatsApp Web opened by the frontend | Staff choose the recipient and send downloaded PDFs or secure links themselves |
 | Scheduler | EventBridge Scheduler (or equivalent) | Daily idempotent check for six-month price escalation |
 
 ## Request Flows
@@ -78,15 +71,13 @@ flowchart LR
 browser → Nginx → /api/* → Hono Lambda → Neon → JSON response
 ```
 
-### Asynchronous (notification)
+### Manual document sharing
 
 ```
-business change + outbox row (same DB transaction)
-        → publisher drains outbox
-        → SQS
-        → Notification Lambda
-        → provider (WhatsApp primary, SMS fallback, email back-office)
-        → DLQ + alarm on failure
+quotation PDF download or secure note link
+        → user clicks WhatsApp icon
+        → WhatsApp Web opens with prepared text
+        → user chooses recipient, attaches PDF when needed, and sends
 ```
 
 ### Scheduled (price escalation)
@@ -99,7 +90,7 @@ daily scheduler → "is any item due?" (idempotent per item + effective date)
 ## Key Architectural Decisions
 
 1. **Two runtimes** — static frontend on the VPS, serverless API on Lambda. The API could move onto the VPS if cold-start measurements from Phase 0 are poor (see [Architecture Risks](../roadmap/architecture-risks.md)).
-2. **Transactional outbox** — notification intents are durable with the business change; the provider is never called from the request path (Invariant I-12).
+2. **Manual sharing** — the application never calls a WhatsApp provider. Existing outbox rows remain only for compatible business history and secure-link recipient recovery.
 3. **Serverless-safe DB driver** — Neon HTTP/serverless driver, no per-invocation TCP pool.
 4. **Append-only records** — stock ledger, price history, and audit log are append-only (Invariants I-1, I-3, I-8).
 5. **Integer money** — all monetary values in minor units (cents), never floats (Invariant I-10).

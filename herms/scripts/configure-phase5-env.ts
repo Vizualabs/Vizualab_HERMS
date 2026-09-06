@@ -6,7 +6,6 @@ if (!(await file.exists())) {
 
 let content = await file.text()
 const defaults: Record<string, string> = {
-  WHATSAPP_PROVIDER_MODE: 'mock',
   OUTBOX_BATCH_SIZE: '10',
   OUTBOX_MAX_ATTEMPTS: '5',
   OUTBOX_LEASE_SECONDS: '240',
@@ -20,7 +19,7 @@ for (const [name, value] of Object.entries(defaults)) {
 await Bun.write(path, content)
 console.log(JSON.stringify({
   event: 'phase_5_environment_configured',
-  providerMode: 'mock',
+  deliveryMode: 'manual',
   added,
   cloudConfigurationDeferred: true,
   secretsPrinted: false,

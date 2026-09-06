@@ -74,7 +74,7 @@ summed across **all** retention notes for that order. Enforced when the order is
 
 **Source:** BR-1, FR-1.2, FR-1.3
 
-`Recurring` → the customer's stored fixed price list. `New` → the price entered on that quotation. One resolver function, called from quotation, order, invoice and claim paths. No second implementation, no inline `if customer.type ===` scattered through routes.
+`Standard` pricing resolves each line from a current customer-specific exception when one exists, otherwise from the equipment's registered unit price. `Custom` pricing requires an explicit price for each selected quotation line. Both modes freeze the resolved value on the quotation; downstream orders and invoices copy that frozen value rather than recalculating it.
 
 ## I-8 · Every stock, price, discrepancy and payment change is attributable
 

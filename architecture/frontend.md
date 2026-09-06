@@ -42,12 +42,13 @@ Field staff submit Delivery Notes and Retention Notes through a **scoped, expiri
 
 ## Notifications Rendering
 
-- Until Phase 5 lands the provider, quotations and note links are delivered by "copy link / download PDF" (Phase 2 fallback).
-- The UI reads notification intent from the backend; it never triggers provider sends directly.
+- Quotations provide a downloadable PDF and a secure customer link. Staff copy the link or use the WhatsApp icon to open a prepared message manually.
+- Delivery and retention screens expose Open, Copy, and WhatsApp actions for their secure links.
+- The WhatsApp icon opens WhatsApp Web; HERMS never chooses a recipient or sends a message automatically.
 
 ## Observability
 
-- A request ID is propagated web → api → notifier and surfaced in the UI for support correlation.
+- A request ID is propagated from web to API and surfaced in the UI for support correlation.
 - Client logs are structured JSON and shipped alongside server logs.
 
 ## Deployment

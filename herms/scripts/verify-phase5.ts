@@ -2,7 +2,6 @@ import { asc, inArray } from 'drizzle-orm'
 
 import {
   createDatabase,
-  createNotificationService,
   outboxEvents,
 } from '@herms/db'
 import {
@@ -13,8 +12,7 @@ import {
 } from '@herms/shared'
 
 import app from '../apps/api/src/index'
-import { createNotifierHandler } from '../apps/notifier/src/index'
-import { createMockWhatsAppProvider } from '../apps/notifier/src/provider'
+import { createManualOnlyNotifierHandler } from '../apps/notifier/src/index'
 
 const apiEnv = parseApiEnv(process.env)
 const seedEnv = parseSeedEnv(process.env)
@@ -62,7 +60,7 @@ const recipientPayload = (await recipientResponse.json()) as {
   data: Array<{ id: string; name: string; phoneMasked: string }>
 }
 const fieldStaff = recipientPayload.data[0]
-assert(fieldStaff, 'Seed an active field staff user with a WhatsApp phone number')
+assert(fieldStaff, 'Seed an active field staff user with a phone number')
 assert(!fieldStaff.phoneMasked.startsWith('+'), 'Recipient API exposed a full phone number')
 
 const quotationResponse = await request('/api/quotations', salesCookie, {
@@ -197,16 +195,9 @@ for (const expectedType of expectedTypes) {
   assert(rows.some((row) => row.eventType === expectedType), 'Missing outbox event: ' + expectedType)
 }
 
-const notifications = createNotificationService(db, {
-  businessCurrency: apiEnv.BUSINESS_CURRENCY,
-  noteTokenSecret: apiEnv.NOTE_TOKEN_SECRET,
-  publicAppUrl: apiEnv.PUBLIC_APP_URL,
-})
-const provider = createMockWhatsAppProvider()
-const notifier = createNotifierHandler({
-  notifications,
-  provider,
-  logger: () => undefined,
+const notifierLogs: Array<Record<string, unknown>> = []
+const notifier = createManualOnlyNotifierHandler({
+  logger: (entry) => notifierLogs.push(entry),
 })
 const event = {
   Records: rows.map((row) => ({
@@ -227,22 +218,18 @@ const event = {
   })),
 }
 const firstResult = await notifier(event as never)
-assert(firstResult.batchItemFailures.length === 0, 'Notifier failed to resolve an application event')
-assert(provider.sent.some((item) => item.templateKey === 'quotation_created' && item.document), 'Quotation WhatsApp payload is missing its PDF descriptor')
-assert(provider.sent.some((item) => item.templateKey === 'note_link' && item.recipient.id === fieldStaff.id), 'Field staff did not receive a note link')
-assert(provider.sent.some((item) => item.templateKey === 'note_pending_approval'), 'Store approval recipients were not resolved')
-assert(provider.sent.some((item) => item.templateKey === 'note_approved'), 'Sales and Finance recipients were not resolved')
-const deliveredOnce = provider.sent.length
-const secondResult = await notifier(event as never)
-assert(secondResult.batchItemFailures.length === 0, 'Duplicate notifier invocation failed')
-assert(provider.sent.length === deliveredOnce, 'Duplicate notifier invocation sent messages twice')
+assert(firstResult.batchItemFailures.length === 0, 'Manual-only notifier did not acknowledge legacy events')
+assert(notifierLogs.length === rows.length, 'Manual-only notifier did not suppress every legacy event')
+assert(
+  notifierLogs.every((entry) => entry.event === 'automatic_whatsapp_delivery_disabled'),
+  'Automatic WhatsApp delivery was not disabled',
+)
 
 console.log(JSON.stringify({
   event: 'phase_5_verification_complete',
-  providerMode: 'mock',
+  deliveryMode: 'manual',
   fieldStaffSelection: true,
   outboxEventTypesVerified: expectedTypes.length,
-  whatsappMessagesResolved: deliveredOnce,
-  duplicateDeliverySuppressed: true,
+  automaticWhatsAppEventsSuppressed: notifierLogs.length,
   cloudInfrastructureDeferred: true,
 }))

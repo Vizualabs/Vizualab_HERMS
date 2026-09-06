@@ -18,7 +18,7 @@ The backend is a **Hono.js monolith** running on an **AWS Lambda Function URL**,
 apps/
   web/        TanStack Start (frontend)
   api/        Hono (this backend)
-  notifier/   Notification Lambda
+  notifier/   Legacy queue safety handler (automatic delivery disabled)
 packages/
   db/         Drizzle schema + migrations
   shared/     Shared types and constants
@@ -42,14 +42,14 @@ Business rules are implemented once as deterministic domain services, reused acr
 
 | Service | Enforces |
 |---|---|
-| Pricing resolver | BR-1 / I-7: recurring → fixed list, new → manual price. One function used by quotation, order, invoice, and claim paths. |
+| Pricing resolver | I-7: `standard` uses a customer-specific exception when present and otherwise the equipment price; `custom` uses explicit prices only for selected quotation lines. |
 | Approval gate | BR-4 / I-1, I-2: physical count, flag difference, atomic stock posting. |
 | Stock ledger | FR-6.1 / I-1: append-only rows citing an approved source note. |
 | Reconciliation | BR-3 / I-6: cumulative `returned + balance + missing_damaged = delivered` at close. |
 | Claim service | BR-5, FR-9.6 / I-5: customer responsibility + Finance confirmation. |
 | Price history | FR-9.7 / I-3: append-only, trigger-enforced. |
 | Escalation | FR-9.3 / I-4: +10% every six months, idempotent per `(item, effective_date)`. |
-| Notification intent | I-12: write `outbox` row, never call a provider directly. |
+| Notification intent | Preserve internal `outbox` records used by secure-link recovery; never call a messaging provider. |
 
 ## Authentication and Authorization
 
@@ -64,16 +64,17 @@ Business rules are implemented once as deterministic domain services, reused acr
 - Idempotency keys prevent duplicate effects from retries.
 - No direct SQS `PutMessage` in the request path — a post-commit failure would silently lose the notification (I-12).
 
-## Notification Pipeline
+## Manual document sharing
 
 ```
-outbox row (same tx) → publisher drains → SQS → Notification Lambda → provider
-                                                        ↓ (both fail)
-                                                       DLQ + alarm
+quotation detail → download PDF and/or get secure customer link → copy/WhatsApp icon → staff sends manually
+note detail → get secure link → copy/open/WhatsApp icon → staff sends manually
 ```
 
-- WhatsApp Business API primary, SMS fallback, email for back-office (SRS §4.3).
-- Idempotency key per notification — SQS is at-least-once and a customer must never receive the same quotation twice (I-12).
+- HERMS has no WhatsApp provider credentials and makes no automatic messaging API calls.
+- Customer quotation links are hashed at rest, expire with the quotation, and separate customer acceptance from authenticated Sales order conversion.
+- Existing outbox rows are retained because note-link regeneration uses them to recover the selected field-staff assignment.
+- The legacy notifier acknowledges any remaining queue trigger without resolving a recipient or sending a message.
 
 ## Scheduler
 
@@ -84,9 +85,9 @@ outbox row (same tx) → publisher drains → SQS → Notification Lambda → pr
 ## API Conventions
 
 - `GET /api/health` returns database round-trip time.
-- Structured JSON logs with a request ID propagated web → api → notifier.
+- Structured JSON logs with a request ID propagated through web and API requests.
 - Direct Lambda Function URL access is authenticated, rate-limited, validated, and monitored — not assumed safe just because Nginx normally proxies it.
 
 ## Open Decisions
 
-Provider choice, escalation confirmation semantics, and the cold-start trade-off are tracked in [Open Decisions](../roadmap/open-decisions.md) and [Architecture Risks](../roadmap/architecture-risks.md).
+Escalation confirmation semantics and the cold-start trade-off are tracked in [Open Decisions](../roadmap/open-decisions.md) and [Architecture Risks](../roadmap/architecture-risks.md).

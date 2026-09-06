@@ -21,7 +21,9 @@ export function requestContext(logger: AppLogger) {
       await next()
     } finally {
       const durationMs = Math.round((performance.now() - startedAt) * 100) / 100
-      const path = c.req.path.replace(/(\/api\/notes\/token\/)[^/]+/g, '$1[REDACTED]')
+      const path = c.req.path
+        .replace(/(\/api\/notes\/token\/)[^/]+/g, '$1[REDACTED]')
+        .replace(/(\/api\/public\/quotations\/)[^/]+/g, '$1[REDACTED]')
       const sloName = path.startsWith('/api/dashboard') ? 'dashboard_response' : 'api_availability'
       const sloTargetMs = sloName === 'dashboard_response' ? 3_000 : undefined
       c.header(REQUEST_ID_HEADER, requestId)

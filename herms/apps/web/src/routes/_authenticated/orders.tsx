@@ -1,6 +1,5 @@
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { useState } from 'react'
 
 import {
   ApiError,
@@ -32,8 +31,6 @@ const activityFormatter = new Intl.DateTimeFormat('en-LK', {
 function OrdersPage() {
   const orders = useQuery(ordersQuery)
   const session = useQuery(sessionQuery)
-  const [openingNote, setOpeningNote] = useState<string | null>(null)
-  const [openError, setOpenError] = useState<string | null>(null)
   const canManageNotes = session.data?.role === 'sales' || session.data?.role === 'super_user'
   const canViewBalances = canManageNotes || session.data?.role === 'finance'
   const rows = orders.data ?? []
@@ -78,12 +75,11 @@ function OrdersPage() {
     ...allRetentionNotes.map((note) => ({ ...note, kind: 'retention' as const })),
   ].sort((left, right) => noteTime(right) - noteTime(left)).slice(0, 6)
 
-  const openNote = async (
+  const openNote = (
     order: OrderSummary,
     type: 'delivery' | 'retention',
     notes: DeliveryNoteSummary[] | RetentionNoteSummary[],
   ) => {
-    setOpenError(null)
     const actionable = notes.find((note) =>
       note.status === 'draft' || note.status === 'reopened' || note.status === 'pending_approval')
 
@@ -96,17 +92,7 @@ function OrdersPage() {
       return
     }
 
-    const actionKey = `${type}-${actionable.id}`
-    setOpeningNote(actionKey)
-    try {
-      const result = type === 'delivery'
-        ? await api.deliveryNoteLink(actionable.id)
-        : await api.retentionNoteLink(actionable.id)
-      window.location.assign(result.submissionLink)
-    } catch (error) {
-      setOpenError(error instanceof ApiError ? error.message : `Unable to open the ${type} note`)
-      setOpeningNote(null)
-    }
+    window.location.assign(`/${type === 'delivery' ? 'delivery' : 'retention'}-notes/${actionable.id}`)
   }
 
   const notesLoading = canManageNotes
@@ -136,7 +122,7 @@ function OrdersPage() {
         <SummaryCard
           label="Notes in field"
           value={orders.isPending || notesLoading || supportingError ? undefined : notesInField.length}
-          description="Links sent, not yet submitted"
+          description="Links created, not yet submitted"
         />
         <SummaryCard
           label="Order value (open)"
@@ -144,10 +130,9 @@ function OrdersPage() {
         />
       </dl>
 
-      {(orders.error || openError || supportingError) && (
+      {(orders.error || supportingError) && (
         <p role="alert" className="mt-5 rounded-xl border border-danger/20 bg-danger-soft px-5 py-4 text-danger">
-          {openError
-            ?? (orders.error instanceof ApiError ? orders.error.message : null)
+          {(orders.error instanceof ApiError ? orders.error.message : null)
             ?? (supportingError instanceof ApiError ? supportingError.message : 'Unable to load all order details')}
         </p>
       )}
@@ -176,8 +161,6 @@ function OrdersPage() {
                   const retention = retentionNotes[index]?.data ?? []
                   const status = displayStatus(order, delivery, retention)
                   const balance = invoices[index]?.data?.outstandingBalanceCents
-                  const deliveryOpening = delivery.some((note) => openingNote === `delivery-${note.id}`)
-                  const retentionOpening = retention.some((note) => openingNote === `retention-${note.id}`)
                   const deliveryLoading = canManageNotes && deliveryNotes[index]?.isPending
                   const retentionLoading = canManageNotes && retentionNotes[index]?.isPending
                   return (
@@ -208,13 +191,13 @@ function OrdersPage() {
                       <td className="py-3.5 pl-3">
                         <div className="flex justify-end gap-2">
                           <NoteButton
-                            label={deliveryLoading ? 'Loading…' : deliveryOpening ? 'Opening…' : 'Delivery note'}
-                            disabled={!canManageNotes || deliveryLoading || deliveryOpening || (order.status !== 'open' && delivery.length === 0)}
+                            label={deliveryLoading ? 'Loading…' : 'Delivery note'}
+                            disabled={!canManageNotes || deliveryLoading || (order.status !== 'open' && delivery.length === 0)}
                             onClick={() => openNote(order, 'delivery', delivery)}
                           />
                           <NoteButton
-                            label={retentionLoading ? 'Loading…' : retentionOpening ? 'Opening…' : 'Retention note'}
-                            disabled={!canManageNotes || retentionLoading || retentionOpening || (order.status !== 'open' && retention.length === 0)}
+                            label={retentionLoading ? 'Loading…' : 'Retention note'}
+                            disabled={!canManageNotes || retentionLoading || (order.status !== 'open' && retention.length === 0)}
                             onClick={() => openNote(order, 'retention', retention)}
                           />
                         </div>

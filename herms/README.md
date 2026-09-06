@@ -34,6 +34,21 @@ equivalent `bun run bootstrap`, `bun run bootstrap --with-db`, and `bun run dev`
 The web app is available at `http://localhost:3000`, and the API listens at
 `http://localhost:3001`. Press `Ctrl+C` to stop both services.
 
+## Manual WhatsApp sharing
+
+HERMS does not contact a WhatsApp provider or send messages automatically.
+Quotation PDFs can be downloaded from the quotation detail screen. Quotations also
+have a secure expiring customer link that staff can copy or place into a prepared
+WhatsApp Web message; customers accept or reject through that link and Sales then
+converts accepted quotations to orders. Delivery and retention note screens show
+their secure link with separate Open, Copy, and WhatsApp actions. The WhatsApp
+action opens a prepared message containing the secure link; staff choose the
+recipient and press Send themselves.
+
+Existing notification-intent rows remain in the database because they are also
+used to safely recover the selected field-staff recipient when regenerating a
+note link. No database schema or migration is required for manual sharing.
+
 To run them in separate terminals instead:
 
 ```sh

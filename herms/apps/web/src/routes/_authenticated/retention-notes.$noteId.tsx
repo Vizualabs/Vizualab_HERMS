@@ -3,7 +3,9 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { useState } from 'react'
 
 import { ApiError, api } from '../../api'
+import { ManualLinkShare } from '../../components/ManualShareActions'
 import { queryKeys } from '../../queries'
+import { createNoteShareMessage } from '../../whatsapp'
 
 export const Route = createFileRoute('/_authenticated/retention-notes/$noteId')({
   component: RetentionNotePage,
@@ -31,6 +33,7 @@ function RetentionNotePage() {
     </p>
   }
   const data = note.data
+  const submissionLink = link ?? data.submissionLink ?? null
   const error = getLink.error || regenerate.error
   return <div>
     <Link to="/orders/$orderId" params={{ orderId: data.orderId }} className="text-sm font-medium text-primary hover:underline">
@@ -74,10 +77,18 @@ function RetentionNotePage() {
         <button className="button-secondary" disabled={regenerate.isPending} onClick={() => regenerate.mutate()}>
           Revoke and regenerate
         </button>
-        {link && <button className="button-primary" onClick={() => navigator.clipboard.writeText(link)}>
-          Copy link
-        </button>}
       </div>}
+      {data.status !== 'approved' && submissionLink && <ManualLinkShare
+        label="Retention submission link"
+        link={submissionLink}
+        message={createNoteShareMessage({
+          noteType: 'Retention',
+          noteNumber: data.rnNumber,
+          orderNumber: data.orderNumber,
+          customerName: data.customerName,
+          submissionLink,
+        })}
+      />}
       {error && <p role="alert" className="mt-4 text-sm text-danger">
         {error instanceof ApiError ? error.message : 'Unable to manage return link'}
       </p>}

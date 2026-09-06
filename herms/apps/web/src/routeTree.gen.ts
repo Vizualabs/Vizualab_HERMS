@@ -22,6 +22,7 @@ import { Route as AuthenticatedOrdersRouteImport } from './routes/_authenticated
 import { Route as AuthenticatedQuotationsRouteImport } from './routes/_authenticated/quotations'
 import { Route as AuthenticatedStockRouteImport } from './routes/_authenticated/stock'
 import { Route as NotesTokenRouteImport } from './routes/notes.$token'
+import { Route as QuotesTokenRouteImport } from './routes/quotes.$token'
 import { Route as AuthenticatedApprovalsNoteIdRouteImport } from './routes/_authenticated/approvals.$noteId'
 import { Route as AuthenticatedCustomersCustomerIdRouteImport } from './routes/_authenticated/customers.$customerId'
 import { Route as AuthenticatedDeliveryNotesNoteIdRouteImport } from './routes/_authenticated/delivery-notes.$noteId'
@@ -94,6 +95,11 @@ const NotesTokenRoute = NotesTokenRouteImport.update({
   path: '/notes/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
+const QuotesTokenRoute = QuotesTokenRouteImport.update({
+  id: '/quotes/$token',
+  path: '/quotes/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedApprovalsNoteIdRoute =
   AuthenticatedApprovalsNoteIdRouteImport.update({
     id: '/$noteId',
@@ -150,6 +156,7 @@ export interface FileRoutesByFullPath {
   '/quotations': typeof AuthenticatedQuotationsRouteWithChildren
   '/stock': typeof AuthenticatedStockRoute
   '/notes/$token': typeof NotesTokenRoute
+  '/quotes/$token': typeof QuotesTokenRoute
   '/approvals/$noteId': typeof AuthenticatedApprovalsNoteIdRoute
   '/customers/$customerId': typeof AuthenticatedCustomersCustomerIdRoute
   '/delivery-notes/$noteId': typeof AuthenticatedDeliveryNotesNoteIdRoute
@@ -170,6 +177,7 @@ export interface FileRoutesByTo {
   '/quotations': typeof AuthenticatedQuotationsRouteWithChildren
   '/stock': typeof AuthenticatedStockRoute
   '/notes/$token': typeof NotesTokenRoute
+  '/quotes/$token': typeof QuotesTokenRoute
   '/': typeof AuthenticatedIndexRoute
   '/approvals/$noteId': typeof AuthenticatedApprovalsNoteIdRoute
   '/customers/$customerId': typeof AuthenticatedCustomersCustomerIdRoute
@@ -193,6 +201,7 @@ export interface FileRoutesById {
   '/_authenticated/quotations': typeof AuthenticatedQuotationsRouteWithChildren
   '/_authenticated/stock': typeof AuthenticatedStockRoute
   '/notes/$token': typeof NotesTokenRoute
+  '/quotes/$token': typeof QuotesTokenRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/approvals/$noteId': typeof AuthenticatedApprovalsNoteIdRoute
   '/_authenticated/customers/$customerId': typeof AuthenticatedCustomersCustomerIdRoute
@@ -217,6 +226,7 @@ export interface FileRouteTypes {
     | '/quotations'
     | '/stock'
     | '/notes/$token'
+    | '/quotes/$token'
     | '/approvals/$noteId'
     | '/customers/$customerId'
     | '/delivery-notes/$noteId'
@@ -237,6 +247,7 @@ export interface FileRouteTypes {
     | '/quotations'
     | '/stock'
     | '/notes/$token'
+    | '/quotes/$token'
     | '/'
     | '/approvals/$noteId'
     | '/customers/$customerId'
@@ -259,6 +270,7 @@ export interface FileRouteTypes {
     | '/_authenticated/quotations'
     | '/_authenticated/stock'
     | '/notes/$token'
+    | '/quotes/$token'
     | '/_authenticated/'
     | '/_authenticated/approvals/$noteId'
     | '/_authenticated/customers/$customerId'
@@ -273,6 +285,7 @@ export interface RootRouteChildren {
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   LoginRoute: typeof LoginRoute
   NotesTokenRoute: typeof NotesTokenRoute
+  QuotesTokenRoute: typeof QuotesTokenRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -366,6 +379,13 @@ declare module '@tanstack/react-router' {
       path: '/notes/$token'
       fullPath: '/notes/$token'
       preLoaderRoute: typeof NotesTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/quotes/$token': {
+      id: '/quotes/$token'
+      path: '/quotes/$token'
+      fullPath: '/quotes/$token'
+      preLoaderRoute: typeof QuotesTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/approvals/$noteId': {
@@ -525,6 +545,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   LoginRoute: LoginRoute,
   NotesTokenRoute: NotesTokenRoute,
+  QuotesTokenRoute: QuotesTokenRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

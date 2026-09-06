@@ -20,6 +20,8 @@
   --color-warning-soft: oklch(94% 0.055 75);
   --color-danger: oklch(57.7% 0.21 27.5);
   --color-danger-soft: oklch(94% 0.04 27.5);
+  --color-whatsapp: #25d366;
+  --color-whatsapp-hover: #1ebe5d;
   --color-ring: oklch(52% 0.09 194);
   --color-shadow: oklch(22% 0.02 220);
 

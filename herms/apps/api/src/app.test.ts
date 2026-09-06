@@ -118,12 +118,15 @@ function createServices() {
     storeName: 'HERMS Main Store',
     storeAddress: null,
     status: 'sent' as const,
+    pricingMode: 'standard' as const,
     totalValueCents: 2500,
     createdBy: user('sales').id,
     createdAt: new Date('2026-08-24T00:00:00Z'),
     sentAt: new Date('2026-08-24T00:00:00Z'),
     expiresAt: new Date('2026-09-07T00:00:00Z'),
     updatedAt: new Date('2026-08-24T00:00:00Z'),
+    lineCount: 1,
+    orderId: null,
     currency: 'LKR',
     timezone: 'Asia/Colombo',
     lines: [{
@@ -154,8 +157,12 @@ function createServices() {
   const commercial = {
     listQuotations: async () => [quotation],
     getQuotation: async () => quotation,
-    createQuotation: async () => quotation,
-    acceptQuotation: async () => order,
+    createQuotation: async () => ({ ...quotation, submissionLink: 'http://localhost:3000/quotes/test-token' }),
+    getQuotationLink: async () => ({ submissionLink: 'http://localhost:3000/quotes/test-token', expiresAt: quotation.expiresAt }),
+    readQuotationByToken: async () => ({ ...quotation, tokenExpiresAt: quotation.expiresAt, order: null }),
+    acceptQuotationByToken: async () => ({ ...quotation, status: 'accepted' as const, tokenExpiresAt: quotation.expiresAt, order: null }),
+    rejectQuotationByToken: async () => ({ ...quotation, status: 'rejected' as const, tokenExpiresAt: quotation.expiresAt, order: null }),
+    convertQuotationToOrder: async () => order,
     rejectQuotation: async () => ({ ...quotation, status: 'rejected' as const }),
     expireQuotation: async () => ({ ...quotation, status: 'expired' as const }),
     listOrders: async () => [order],
@@ -761,6 +768,7 @@ describe('Phase 2 API', () => {
       headers: { Cookie: cookie, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         customerId: '20000000-0000-4000-8000-000000000001',
+        pricingMode: 'custom',
         lines: [
           { equipmentItemId: itemId, quantity: 1, manualUnitPriceCents: 100 },
           { equipmentItemId: itemId, quantity: 1, manualUnitPriceCents: 100 },
@@ -768,6 +776,26 @@ describe('Phase 2 API', () => {
       }),
     })
     expect(response.status).toBe(400)
+  })
+
+  test('keeps quotation links public, redacted, and separates customer acceptance from order conversion', async () => {
+    const { entries, logger } = createTestLogger()
+    const app = createApp({ healthCheck: async () => 1, ...createServices(), auth: TEST_AUTH, logger })
+    const publicResponse = await app.request('/api/public/quotations/highly-sensitive-quote-token')
+    expect(publicResponse.status).toBe(200)
+    expect(entries.at(-1)?.path).toBe('/api/public/quotations/[REDACTED]')
+    expect(JSON.stringify(entries)).not.toContain('highly-sensitive-quote-token')
+
+    const accepted = await app.request('/api/public/quotations/token/accept', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+    })
+    expect(accepted.status).toBe(200)
+
+    const cookie = await sessionCookie(app, 'sales')
+    const converted = await app.request('/api/quotations/30000000-0000-4000-8000-000000000001/order', {
+      method: 'POST', headers: { Cookie: cookie, 'Content-Type': 'application/json' }, body: '{}',
+    })
+    expect(converted.status).toBe(201)
   })
 
   test('denies non-Sales roles and only exposes expiry to System Admin', async () => {

@@ -22,22 +22,24 @@ Implement the commercial flow: a quotation with the correct automatic price, a s
 ## Work Items (in order)
 
 1. Schema: `quotation`, `quotation_line`, `order`, `order_line` (from [database-schema.md](../../architecture/database-schema.md)).
-2. Pricing resolver as one function (I-7): recurring → stored fixed list; new → manual per-line price. Used by every pricing path.
+2. Pricing resolver as one function (I-7): standard → customer exception or equipment price fallback; custom → explicit price on each selected line.
 3. Quotation create: resolve each line's `unit_price_cents`, freeze it, compute totals (FR-2.1).
 4. Quotation status machine: `Sent → Accepted | Rejected | Expired` (FR-2.3); reject invalid transitions.
-5. Accept → Order: copy lines verbatim, freeze prices (FR-2.4, I-11).
-6. Delivery (FR-2.2 deferred): write a `quotation_created` row to `outbox`, and expose copy-link / download-PDF. No provider call (I-12).
-7. Frontend: quotation create/list/detail, order list/detail.
+5. Customer link response: signed, hashed-at-rest, expiring link permits accept/reject without a login; token paths are redacted from logs.
+6. Accepted → Order: an authenticated Sales action copies lines verbatim and cannot create a duplicate order (FR-2.4, I-11).
+7. Delivery: preserve the `quotation_created` outbox history and expose manual copy-link, WhatsApp Web, and download-PDF actions. No provider call.
+8. Frontend: quotation create/list/detail, public customer response, order list/detail.
 
 ## Schema Changes
 
 | Table | Purpose |
 |---|---|
-| `quotation` | FR-2.1, FR-2.3 |
+| `quotation` | FR-2.1, FR-2.3, including `pricing_mode` |
 | `quotation_line` | Frozen unit price per line (I-11) |
 | `order` | FR-2.4 |
 | `order_line` | Copied from quotation lines, frozen (I-11) |
 | `outbox` | I-12 — quotation delivery intent; drained in Phase 5 |
+| `note_token` | Reused for hashed, expiring quotation links; no new token table |
 
 ## API Endpoints
 
@@ -46,7 +48,11 @@ Implement the commercial flow: a quotation with the correct automatic price, a s
 | POST | `/api/quotations` | sales | Create (pricing resolver) |
 | GET | `/api/quotations` | sales | List |
 | GET | `/api/quotations/:id` | sales | Detail |
-| POST | `/api/quotations/:id/accept` | sales | → Order (FR-2.4) |
+| GET | `/api/quotations/:id/share-link` | sales | Retrieve the same unexpired customer link |
+| GET | `/api/public/quotations/:token` | public token | Safe customer detail |
+| POST | `/api/public/quotations/:token/accept` | public token | Status → accepted |
+| POST | `/api/public/quotations/:token/reject` | public token | Status → rejected and revoke link |
+| POST | `/api/quotations/:id/order` | sales | Accepted quotation → Order (FR-2.4) |
 | POST | `/api/quotations/:id/reject` | sales | Status → rejected |
 | POST | `/api/quotations/:id/expire` | sales/system | Status → expired |
 | GET | `/api/quotations/:id/pdf` | sales | PDF for copy-link fallback |
@@ -55,7 +61,7 @@ Implement the commercial flow: a quotation with the correct automatic price, a s
 
 ## Frontend Deliverables
 
-- Quotation create form (line items + automatic pricing for recurring).
+- Quotation create form with Standard and Custom pricing; custom editing is limited to selected lines.
 - Quotation list + detail (status transitions).
 - Order list + detail.
 
@@ -74,16 +80,18 @@ Implement the commercial flow: a quotation with the correct automatic price, a s
 
 ## Tests
 
-- A recurring customer's quotation prices itself with zero manual input (I-7).
+- Standard mode uses customer price exceptions and falls back to registered equipment prices with zero manual input (I-7).
+- Custom mode starts from standard prices and permits selected-line overrides.
+- Customer acceptance and Sales order conversion are separate transitions; expired/rejected links cannot be used.
 - An accepted quotation produces an order with identical line items and prices (FR-2.4, I-11).
-- Quotation accept writes an `outbox` row (I-12).
+- Quotation creation writes its traceable `outbox` history row (I-12).
 - Invalid status transitions are rejected (FR-2.3).
 
 ## Definition of Done
 
-- Quotations price correctly for recurring and new customers.
-- Accepting a quotation creates an order with identical lines.
-- Quotation delivery is staged through `outbox` with a copy-link/PDF fallback.
+- Quotations price correctly in Standard and Custom modes.
+- Converting an accepted quotation creates one order with identical frozen lines.
+- Quotation delivery is manual through a secure copy link, WhatsApp Web, or PDF download.
 
 ## Outputs (Handoff to Phase 3)
 

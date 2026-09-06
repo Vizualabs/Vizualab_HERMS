@@ -175,6 +175,15 @@ export function createApp({
     })
 
   const publicRoutes = routes
+    .get('/api/public/quotations/:token', async (c) =>
+      c.json({ data: await commercial.readQuotationByToken(c.req.param('token'), c.get('requestId')) }),
+    )
+    .post('/api/public/quotations/:token/accept', async (c) =>
+      c.json({ data: await commercial.acceptQuotationByToken(c.req.param('token'), c.get('requestId')) }),
+    )
+    .post('/api/public/quotations/:token/reject', async (c) =>
+      c.json({ data: await commercial.rejectQuotationByToken(c.req.param('token'), c.get('requestId')) }),
+    )
     .get('/api/notes/token/:token', async (c) => {
       const token = c.req.param('token')
       const requestId = c.get('requestId')
@@ -308,8 +317,11 @@ export function createApp({
     .get('/api/quotations/:id', requireRoles('sales'), async (c) =>
       c.json({ data: await commercial.getQuotation(c.req.param('id'), c.get('user')) }),
     )
-    .post('/api/quotations/:id/accept', requireRoles('sales'), async (c) =>
-      c.json({ data: await commercial.acceptQuotation(c.req.param('id'), actor(c)) }),
+    .get('/api/quotations/:id/share-link', requireRoles('sales'), async (c) =>
+      c.json({ data: await commercial.getQuotationLink(c.req.param('id'), actor(c)) }),
+    )
+    .post('/api/quotations/:id/order', requireRoles('sales'), async (c) =>
+      c.json({ data: await commercial.convertQuotationToOrder(c.req.param('id'), actor(c)) }, 201),
     )
     .post('/api/quotations/:id/reject', requireRoles('sales'), async (c) =>
       c.json({ data: await commercial.rejectQuotation(c.req.param('id'), actor(c)) }),

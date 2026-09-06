@@ -79,7 +79,7 @@ function CustomersPage() {
         >
           <Field label="Name" name="name" required />
           <p className="rounded-xl bg-muted px-4 py-3 text-sm text-muted-foreground">
-            Customers start as New. Add a complete fixed price list from their detail page to make them Recurring.
+            Customers start as New. Add only negotiated special-price exceptions from their detail page when needed.
           </p>
           <Field label="Email" name="email" type="email" />
           <Field label="Phone" name="phone" />
