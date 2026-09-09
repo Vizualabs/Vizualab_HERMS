@@ -110,6 +110,87 @@ test.describe('Payments & Finance report', () => {
     })
   })
 
+  test('accepts cents and clears the payment amount after a successful save', async ({ page }) => {
+    const orderId = '60000000-0000-4000-8000-000000000001'
+    const customerId = '10000000-0000-4000-8000-000000000001'
+    await page.route('**/api/orders', (route) => route.fulfill({
+      status: 200,
+      json: {
+        data: [{
+          id: orderId,
+          orderNumber: 'ORD-CENTS-001',
+          quotationId: '50000000-0000-4000-8000-000000000001',
+          customerId,
+          customerName: 'Cents Test Customer',
+          status: 'open',
+          totalValueCents: 10_000,
+          createdAt: '2026-09-10T00:00:00.000Z',
+        }],
+      },
+    }))
+    await page.route(`**/api/orders/${orderId}/invoice`, (route) => route.fulfill({
+      status: 200,
+      json: {
+        data: {
+          id: orderId,
+          orderNumber: 'ORD-CENTS-001',
+          quotationId: '50000000-0000-4000-8000-000000000001',
+          customerId,
+          customerName: 'Cents Test Customer',
+          status: 'open',
+          createdAt: '2026-09-10T00:00:00.000Z',
+          orderValueCents: 10_000,
+          claimAmountCents: 0,
+          invoiceValueCents: 10_000,
+          paidAmountCents: 0,
+          outstandingBalanceCents: 10_000,
+          currency: 'LKR',
+          lines: [],
+        },
+      },
+    }))
+    await page.route(`**/api/customers/${customerId}/balance`, (route) => route.fulfill({
+      status: 200,
+      json: {
+        data: {
+          id: customerId,
+          name: 'Cents Test Customer',
+          outstandingBalanceCents: 10_000,
+          currency: 'LKR',
+          orders: [],
+        },
+      },
+    }))
+    await page.route('**/api/payments', async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.continue()
+        return
+      }
+      await route.fulfill({ status: 201, json: { data: { id: 'payment-test-id' } } })
+    })
+
+    await signInAsFinance(page)
+
+    const orderSelect = page.getByRole('combobox', { name: 'Order' })
+    const paymentAmount = page.getByLabel(/^Amount \(LKR\)/)
+    await orderSelect.selectOption(orderId)
+    await expect(page.getByText('Order selected')).toBeVisible()
+
+    await expect(paymentAmount).toBeEnabled()
+    await expect(paymentAmount).toHaveAttribute('step', '0.01')
+    await expect(paymentAmount).toHaveAttribute('inputmode', 'decimal')
+
+    const paymentRequest = page.waitForRequest((request) =>
+      new URL(request.url()).pathname === '/api/payments' && request.method() === 'POST')
+
+    await paymentAmount.fill('0.01')
+    await page.getByRole('button', { name: 'Record payment' }).click()
+
+    expect((await paymentRequest).postDataJSON()).toMatchObject({ amountCents: 1 })
+    await expect(page.getByText('Payment recorded and balances updated.')).toBeVisible()
+    await expect(paymentAmount).toBeEmpty()
+  })
+
   test('rolls the live finance graph forward at Colombo midnight', async ({ page }) => {
     await page.clock.install({ time: new Date('2026-09-30T18:29:30.000Z') })
     await signInAsFinance(page)

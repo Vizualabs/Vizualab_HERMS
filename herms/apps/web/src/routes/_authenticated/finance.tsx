@@ -4,6 +4,7 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 
 import { ApiError, api, formatMoney, type MonthlyFinance } from '../../api'
+import { parseMajorCurrencyToMinorUnits } from '../../money'
 import { REPORTING_REFRESH_INTERVAL_MS, useCurrentColomboMonth } from '../../reportingTime'
 import {
   customerBalanceQuery,
@@ -114,6 +115,7 @@ function FinancePage() {
   const [month, setMonth] = useState(currentMonth)
   const [followsCurrentMonth, setFollowsCurrentMonth] = useState(true)
   const [orderId, setOrderId] = useState('')
+  const [paymentAmount, setPaymentAmount] = useState('')
   const orders = useQuery({ ...ordersQuery, enabled: isFinance })
   const invoice = useQuery({ ...invoiceQuery(orderId), enabled: isFinance && Boolean(orderId) })
   const customerId = invoice.data?.customerId ?? ''
@@ -135,6 +137,7 @@ function FinancePage() {
   const payment = useMutation({
     mutationFn: (input: PaymentInput) => api.recordPayment(input),
     onSuccess: async (_created, input) => {
+      setPaymentAmount('')
       const selectedCustomerId = invoice.data?.customerId
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.invoice(input.orderId) }),
@@ -283,6 +286,7 @@ function FinancePage() {
                 value={orderId}
                 onChange={(event) => {
                   setOrderId(event.target.value)
+                  setPaymentAmount('')
                   payment.reset()
                 }}
               >
@@ -354,30 +358,47 @@ function FinancePage() {
                   onSubmit={(event) => {
                     event.preventDefault()
                     const form = new FormData(event.currentTarget)
+                    const amountInput = event.currentTarget.elements.namedItem('amount')
+                    if (!(amountInput instanceof HTMLInputElement)) return
+                    const amountCents = parseMajorCurrencyToMinorUnits(amountInput.value)
+                    if (amountCents === null) {
+                      amountInput.setCustomValidity('Enter a valid amount with no more than two decimal places.')
+                      amountInput.reportValidity()
+                      return
+                    }
+                    amountInput.setCustomValidity('')
                     payment.mutate({
                       orderId,
-                      amountCents: Number(form.get('amountCents')),
+                      amountCents,
                       paymentDate: new Date(String(form.get('paymentDate'))).toISOString(),
                       method: String(form.get('method')) as PaymentMethod,
                     })
                   }}
               >
                   <label className="flex flex-col gap-2 text-sm font-medium sm:col-span-2">
-                    Amount (minor units)
+                    Amount ({invoice.data?.currency ?? 'LKR'})
                     <input
                       className="input"
-                      name="amountCents"
+                      name="amount"
                       type="number"
-                      min="1"
-                      max={invoice.data?.outstandingBalanceCents}
-                      step="1"
-                      inputMode="numeric"
+                      min="0.01"
+                      max={invoice.data ? (invoice.data.outstandingBalanceCents / 100).toFixed(2) : undefined}
+                      step="0.01"
+                      inputMode="decimal"
                       autoComplete="off"
+                      placeholder="0.00"
                       required
                       disabled={!invoice.data || invoice.data.outstandingBalanceCents === 0}
                       aria-describedby="payment-amount-help"
+                      value={paymentAmount}
+                      onChange={(event) => {
+                        event.currentTarget.setCustomValidity('')
+                        setPaymentAmount(event.currentTarget.value)
+                      }}
                     />
-                    <span id="payment-amount-help" className="text-xs font-normal text-muted-foreground">Enter whole minor units; 150000 equals LKR 1,500.00.</span>
+                    <span id="payment-amount-help" className="text-xs font-normal text-muted-foreground">
+                      Enter rupees and cents, for example 1500.50.
+                    </span>
                   </label>
                   <label className="flex flex-col gap-2 text-sm font-medium">
                     Payment date & time
