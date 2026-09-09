@@ -697,10 +697,89 @@ describe('Phase 1 API', () => {
     expect(response.status).toBe(400)
   })
 
+  test('composes the customer pricing register from existing services', async () => {
+    const services = createServices()
+    const customerId = '20000000-0000-4000-8000-000000000009'
+    const itemId = '50000000-0000-4000-8000-000000000009'
+    const createdAt = new Date('2026-01-01T00:00:00.000Z')
+    services.masterData.listCustomers = async () => [{
+      id: customerId,
+      storeId: '10000000-0000-4000-8000-000000000001',
+      name: 'Customer One',
+      type: 'recurring',
+      phone: '+94 77 123 4567',
+      email: 'customer@example.test',
+      address: '1 Test Road',
+      outstandingBalanceCents: 18_450_000,
+      createdAt,
+      updatedAt: createdAt,
+    }]
+    services.masterData.listItems = async () => [{
+      id: itemId,
+      name: 'Dinner Spoon',
+      category: 'Cutlery',
+      unitOfMeasure: 'unit',
+      currentUnitPriceCents: 16_500,
+      reorderThreshold: null,
+      createdAt,
+      updatedAt: createdAt,
+    }]
+    services.masterData.listPriceHistory = async () => [{
+      id: '51000000-0000-4000-8000-000000000009',
+      equipmentItemId: itemId,
+      oldPriceCents: 15_000,
+      newPriceCents: 16_500,
+      effectiveDate: new Date('2026-07-01T00:00:00.000Z'),
+      reason: 'scheduled_escalation',
+      createdBy: user('business_owner').id,
+      createdAt: new Date('2026-07-01T00:00:00.000Z'),
+    }]
+    services.commercial.listOrders = async () => [{
+      id: '60000000-0000-4000-8000-000000000009',
+      orderNumber: 'ORD-2026-000009',
+      quotationId: null,
+      customerId,
+      customerName: 'Customer One',
+      status: 'open',
+      totalValueCents: 40_000,
+      createdAt,
+    }]
+    const { logger } = createTestLogger()
+    const app = createApp({
+      healthCheck: async () => 1,
+      ...services,
+      auth: TEST_AUTH,
+      logger,
+    })
+    const cookie = await sessionCookie(app, 'sales')
+
+    const response = await app.request('/api/customers/pricing', {
+      headers: { Cookie: cookie },
+    })
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as {
+      data: {
+        customers: Array<{ reference: string; orderCount: number }>
+        fixedPrices: Array<{ name: string; currentUnitPriceCents: number }>
+        priceHistory: Array<{ itemName: string; reason: string }>
+      }
+    }
+    expect(body.data.customers[0]).toMatchObject({ reference: 'CUS-101', orderCount: 1 })
+    expect(body.data.fixedPrices[0]).toMatchObject({
+      name: 'Dinner Spoon',
+      currentUnitPriceCents: 16_500,
+    })
+    expect(body.data.priceHistory[0]).toMatchObject({
+      itemName: 'Dinner Spoon',
+      reason: 'scheduled_escalation',
+    })
+  })
+
   test('enforces the Sales authorization boundary', async () => {
     const app = createTestApp()
     const cookie = await sessionCookie(app, 'sales')
     expect((await app.request('/api/customers', { headers: { Cookie: cookie } })).status).toBe(200)
+    expect((await app.request('/api/customers/pricing', { headers: { Cookie: cookie } })).status).toBe(200)
     expect((await app.request('/api/items', { headers: { Cookie: cookie } })).status).toBe(200)
     expect((await app.request('/api/audit-logs', { headers: { Cookie: cookie } })).status).toBe(403)
   })
@@ -709,6 +788,7 @@ describe('Phase 1 API', () => {
     const app = createTestApp()
     const cookie = await sessionCookie(app, 'field_staff')
     expect((await app.request('/api/customers', { headers: { Cookie: cookie } })).status).toBe(403)
+    expect((await app.request('/api/customers/pricing', { headers: { Cookie: cookie } })).status).toBe(403)
     expect((await app.request('/api/items', { headers: { Cookie: cookie } })).status).toBe(403)
     expect((await app.request('/api/audit-logs', { headers: { Cookie: cookie } })).status).toBe(403)
   })
@@ -718,6 +798,7 @@ describe('Phase 1 API', () => {
     const cookie = await sessionCookie(app, 'system_admin')
     expect((await app.request('/api/items', { headers: { Cookie: cookie } })).status).toBe(200)
     expect((await app.request('/api/customers', { headers: { Cookie: cookie } })).status).toBe(403)
+    expect((await app.request('/api/customers/pricing', { headers: { Cookie: cookie } })).status).toBe(403)
     expect((await app.request('/api/audit-logs', { headers: { Cookie: cookie } })).status).toBe(200)
   })
 
@@ -727,6 +808,7 @@ describe('Phase 1 API', () => {
     const headers = { Cookie: cookie }
     const checks = [
       '/api/customers',
+      '/api/customers/pricing',
       '/api/items',
       '/api/quotations',
       '/api/orders',

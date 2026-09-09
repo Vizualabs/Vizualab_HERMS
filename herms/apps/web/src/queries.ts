@@ -6,6 +6,7 @@ import { api } from './api'
 export const queryKeys = {
   session: ['session'] as const,
   customers: ['customers'] as const,
+  customerPricing: ['customers', 'pricing'] as const,
   customer: (id: string) => ['customers', id] as const,
   items: ['items'] as const,
   item: (id: string) => ['items', id] as const,
@@ -26,6 +27,7 @@ export const queryKeys = {
   stock: ['stock'] as const,
   stockMovements: ['stock', 'movements'] as const,
   finance: ['finance'] as const,
+  monthlyFinanceReports: ['finance', 'monthly'] as const,
   invoice: (id: string) => ['finance', 'invoices', id] as const,
   customerBalance: (id: string) => ['finance', 'customers', id, 'balance'] as const,
   monthlyFinance: (month: string) => ['finance', 'monthly', month] as const,
@@ -54,6 +56,12 @@ export const sessionQuery = queryOptions({
 export const customersQuery = queryOptions({
   queryKey: queryKeys.customers,
   queryFn: api.customers,
+  staleTime: 15_000,
+})
+
+export const customerPricingQuery = queryOptions({
+  queryKey: queryKeys.customerPricing,
+  queryFn: api.customerPricing,
   staleTime: 15_000,
 })
 
@@ -121,6 +129,7 @@ export const monthlyFinanceQuery = (month: string) => queryOptions({
   queryKey: queryKeys.monthlyFinance(month),
   queryFn: () => api.monthlyFinance(month),
   staleTime: 5_000,
+  refetchOnWindowFocus: 'always',
 })
 
 export const claimsQuery = queryOptions({
@@ -145,30 +154,35 @@ export const dashboardStockQuery = queryOptions({
   queryKey: queryKeys.dashboardStock,
   queryFn: api.dashboardStock,
   staleTime: 15_000,
+  refetchOnWindowFocus: 'always',
 })
 
 export const dashboardPaymentsQuery = (month: string) => queryOptions({
   queryKey: queryKeys.dashboardPayments(month),
   queryFn: () => api.dashboardPayments(month),
   staleTime: 15_000,
+  refetchOnWindowFocus: 'always',
 })
 
 export const dashboardIncomeExpensesQuery = (month: string) => queryOptions({
   queryKey: queryKeys.dashboardIncomeExpenses(month),
   queryFn: () => api.dashboardIncomeExpenses(month),
   staleTime: 15_000,
+  refetchOnWindowFocus: 'always',
 })
 
 export const dashboardDiscrepanciesQuery = (filters: DashboardFilters) => queryOptions({
   queryKey: queryKeys.dashboardDiscrepancies(filters),
   queryFn: () => api.dashboardDiscrepancies(filters),
   staleTime: 15_000,
+  refetchOnWindowFocus: 'always',
 })
 
 export const dashboardRankingsQuery = (filters: DashboardFilters) => queryOptions({
   queryKey: queryKeys.dashboardRankings(filters),
   queryFn: () => api.dashboardRankings(filters),
   staleTime: 15_000,
+  refetchOnWindowFocus: 'always',
 })
 
 export const dashboardEscalationsQuery = queryOptions({

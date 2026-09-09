@@ -28,6 +28,36 @@ test.describe('Payments & Finance report', () => {
     await expect(page.getByText('Received this month')).toBeVisible()
     await expect(page.getByText('Expenses this month')).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Income vs expenses — last 6 months' })).toBeVisible()
+    const graphPoints = page.getByRole('button', { name: /Income LKR .*Expenses LKR/ })
+    await expect(graphPoints).toHaveCount(6)
+    const restingBackground = await graphPoints.first().evaluate((element) =>
+      getComputedStyle(element).backgroundColor)
+    await graphPoints.first().hover()
+    await expect.poll(() => graphPoints.first().evaluate((element) =>
+      getComputedStyle(element).backgroundColor)).not.toBe(restingBackground)
+    const graphTooltip = page.getByRole('tooltip')
+    await expect(graphTooltip).toContainText(/Income: LKR/)
+    await expect(graphTooltip).toContainText(/Expenses: LKR/)
+    await expect(graphTooltip).toHaveCSS('animation-name', 'finance-chart-tooltip-in')
+    await expect(graphTooltip).toHaveCSS('animation-duration', '0.18s')
+    await graphTooltip.evaluate(async (element) => {
+      await Promise.all(element.getAnimations().map((animation) => animation.finished))
+    })
+    const firstPointBox = await graphPoints.first().boundingBox()
+    const firstTooltipBox = await graphTooltip.boundingBox()
+    if (!firstPointBox || !firstTooltipBox) throw new Error('First graph tooltip was not measurable')
+    expect(Math.abs(firstTooltipBox.x - firstPointBox.x)).toBeLessThan(2)
+
+    await graphPoints.last().hover()
+    await graphTooltip.evaluate(async (element) => {
+      await Promise.all(element.getAnimations().map((animation) => animation.finished))
+    })
+    const lastPointBox = await graphPoints.last().boundingBox()
+    const lastTooltipBox = await graphTooltip.boundingBox()
+    if (!lastPointBox || !lastTooltipBox) throw new Error('Last graph tooltip was not measurable')
+    expect(Math.abs(
+      (lastTooltipBox.x + lastTooltipBox.width) - (lastPointBox.x + lastPointBox.width),
+    )).toBeLessThan(2)
     await expect(page.getByRole('heading', { name: 'Payments received' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Expenses', exact: true })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Outstanding balances' })).toBeVisible()
@@ -65,6 +95,10 @@ test.describe('Payments & Finance report', () => {
 
     await expect(page.getByRole('heading', { name: 'Payments & Finance' })).toBeVisible()
     await expect(page.getByText('Received this month')).toBeVisible()
+    const graphPoints = page.getByRole('button', { name: /Income LKR .*Expenses LKR/ })
+    await expect(graphPoints).toHaveCount(6)
+    await graphPoints.last().click()
+    await expect(page.getByRole('tooltip')).toBeVisible()
     expect(await page.evaluate(() =>
       document.documentElement.scrollWidth <= window.innerWidth + 1,
     )).toBe(true)
@@ -74,5 +108,29 @@ test.describe('Payments & Finance report', () => {
       fullPage: true,
       animations: 'disabled',
     })
+  })
+
+  test('rolls the live finance graph forward at Colombo midnight', async ({ page }) => {
+    await page.clock.install({ time: new Date('2026-09-30T18:29:30.000Z') })
+    await signInAsFinance(page)
+
+    await expect(page.getByText(/September 2026.*auto-updates every minute/)).toBeVisible()
+    const graph = page.getByRole('region', { name: 'Income vs expenses — last 6 months' })
+    await expect(graph.getByText('Apr', { exact: true })).toBeVisible()
+    await expect(graph.getByText('Sep', { exact: true })).toBeVisible()
+    const octoberReport = page.waitForResponse((response) => {
+      const url = new URL(response.url())
+      return url.pathname === '/api/finance/monthly'
+        && url.searchParams.get('month') === '2026-10'
+    })
+
+    await page.clock.fastForward(60_000)
+
+    expect((await octoberReport).ok()).toBe(true)
+    await expect(page.getByLabel('Reporting month')).toHaveValue('2026-10')
+    await expect(page.getByText(/October 2026.*auto-updates every minute/)).toBeVisible()
+    await expect(graph.getByText('Apr', { exact: true })).toHaveCount(0)
+    await expect(graph.getByText('May', { exact: true })).toBeVisible()
+    await expect(graph.getByText('Oct', { exact: true })).toBeVisible()
   })
 })

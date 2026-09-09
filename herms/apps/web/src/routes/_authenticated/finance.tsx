@@ -1,9 +1,10 @@
 import type { ExpenseInput, PaymentInput, PaymentMethod } from '@herms/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { ApiError, api, formatMoney, type MonthlyFinance } from '../../api'
+import { REPORTING_REFRESH_INTERVAL_MS, useCurrentColomboMonth } from '../../reportingTime'
 import {
   customerBalanceQuery,
   invoiceQuery,
@@ -109,7 +110,9 @@ function FinancePage() {
   const session = useQuery(sessionQuery)
   const isFinance = session.data?.role === 'finance' || session.data?.role === 'super_user'
   const canView = isFinance || session.data?.role === 'business_owner'
-  const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7))
+  const currentMonth = useCurrentColomboMonth()
+  const [month, setMonth] = useState(currentMonth)
+  const [followsCurrentMonth, setFollowsCurrentMonth] = useState(true)
   const [orderId, setOrderId] = useState('')
   const orders = useQuery({ ...ordersQuery, enabled: isFinance })
   const invoice = useQuery({ ...invoiceQuery(orderId), enabled: isFinance && Boolean(orderId) })
@@ -118,7 +121,16 @@ function FinancePage() {
     ...customerBalanceQuery(customerId),
     enabled: isFinance && Boolean(customerId),
   })
-  const monthly = useQuery({ ...monthlyFinanceQuery(month), enabled: canView })
+  const monthly = useQuery({
+    ...monthlyFinanceQuery(month),
+    enabled: canView,
+    refetchInterval: REPORTING_REFRESH_INTERVAL_MS,
+    refetchIntervalInBackground: false,
+  })
+
+  useEffect(() => {
+    if (followsCurrentMonth) setMonth(currentMonth)
+  }, [currentMonth, followsCurrentMonth])
 
   const payment = useMutation({
     mutationFn: (input: PaymentInput) => api.recordPayment(input),
@@ -131,7 +143,7 @@ function FinancePage() {
               queryKey: queryKeys.customerBalance(selectedCustomerId),
             })
           : Promise.resolve(),
-        queryClient.invalidateQueries({ queryKey: queryKeys.monthlyFinance(month) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.monthlyFinanceReports }),
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboard }),
       ])
     },
@@ -140,7 +152,7 @@ function FinancePage() {
     mutationFn: (input: ExpenseInput) => api.recordExpense(input),
     onSuccess: async () => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.monthlyFinance(month) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.monthlyFinanceReports }),
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboard }),
       ])
     },
@@ -159,7 +171,9 @@ function FinancePage() {
       <header className="flex flex-col gap-4 border-b border-border pb-5 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1>Payments & Finance</h1>
-          <p className="mt-1 text-base text-muted-foreground">{formatMonth(month)}</p>
+          <p className="mt-1 text-base text-muted-foreground">
+            {formatMonth(month)} <span aria-hidden="true">&middot;</span> auto-updates every minute
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <label className="sr-only" htmlFor="finance-report-month">Reporting month</label>
@@ -170,7 +184,11 @@ function FinancePage() {
             type="month"
             autoComplete="off"
             value={month}
-            onChange={(event) => setMonth(event.target.value)}
+            onChange={(event) => {
+              const nextMonth = event.target.value || currentMonth
+              setMonth(nextMonth)
+              setFollowsCurrentMonth(nextMonth === currentMonth)
+            }}
           />
           <button
             type="button"
@@ -510,6 +528,7 @@ function SummaryCard({
 }
 
 function FinanceChart({ rows, currency }: { rows: MonthlyFinance['history']; currency: string }) {
+  const [activeIndex, setActiveIndex] = useState<number | null>(null)
   const maximum = Math.max(...rows.flatMap((row) => [row.incomeCents, row.expenseCents]), 1)
   const magnitude = 10 ** Math.max(Math.floor(Math.log10(maximum)) - 1, 0)
   const chartMaximum = Math.ceil(maximum / magnitude) * magnitude
@@ -525,7 +544,7 @@ function FinanceChart({ rows, currency }: { rows: MonthlyFinance['history']; cur
         <h2 id="finance-chart-title">Income vs expenses — last 6 months</h2>
       </div>
       <div className="overflow-x-auto px-4 pb-4 pt-5 sm:px-5">
-        <div className="grid min-w-[640px] grid-cols-[3.25rem_1fr] gap-3">
+        <div className="grid min-w-[300px] grid-cols-[2.75rem_1fr] gap-2 sm:grid-cols-[3.25rem_1fr] sm:gap-3">
           <div className="flex h-64 flex-col justify-between pb-8 text-right text-xs text-muted-foreground" aria-hidden="true">
             {ticks.map((tick) => <span key={tick}>{compactMoney(chartMaximum * tick)}</span>)}
           </div>
@@ -533,28 +552,76 @@ function FinanceChart({ rows, currency }: { rows: MonthlyFinance['history']; cur
             <div className="absolute inset-x-0 bottom-8 top-0 flex flex-col justify-between" aria-hidden="true">
               {ticks.map((tick) => <div key={tick} className="border-t border-dashed border-border" />)}
             </div>
-            <div className="absolute inset-x-0 bottom-8 top-0 flex items-end gap-3 px-3">
-              {rows.map((row) => (
-                <div key={row.month} className="flex h-full min-w-0 flex-1 items-end justify-center gap-1">
-                  <div
-                    className="w-full max-w-[4.5rem] rounded-t bg-[oklch(52%_0.11_194)]"
-                    style={{ height: `${Math.max((row.incomeCents / chartMaximum) * 100, row.incomeCents ? 1 : 0)}%` }}
-                    title={`${formatMonth(row.month)} income: ${formatMoney(row.incomeCents, currency)}`}
-                    aria-hidden="true"
-                  />
-                  <div
-                    className="w-full max-w-[4.5rem] rounded-t bg-[oklch(72%_0.15_75)]"
-                    style={{ height: `${Math.max((row.expenseCents / chartMaximum) * 100, row.expenseCents ? 1 : 0)}%` }}
-                    title={`${formatMonth(row.month)} expenses: ${formatMoney(row.expenseCents, currency)}`}
-                    aria-hidden="true"
-                  />
-                  <span className="sr-only">
-                    {formatMonth(row.month)}: income {formatMoney(row.incomeCents, currency)}, expenses {formatMoney(row.expenseCents, currency)}
-                  </span>
-                </div>
-              ))}
+            <div className="absolute inset-x-0 bottom-8 top-0 flex items-end gap-1 px-1 sm:gap-3 sm:px-3">
+              {rows.map((row, index) => {
+                const label = `${formatMonth(row.month)}: Income ${formatMoney(row.incomeCents, currency)}; Expenses ${formatMoney(row.expenseCents, currency)}`
+                const tallestBarHeight = (Math.max(row.incomeCents, row.expenseCents) / chartMaximum) * 224
+                const tooltipBottom = Math.min(tallestBarHeight + 8, 116)
+                const tooltipAlignment = index === 0
+                  ? 'left-0'
+                  : index === rows.length - 1
+                    ? 'right-0'
+                    : index < rows.length / 2
+                      ? 'left-1/2 -translate-x-1/4'
+                      : 'right-1/2 translate-x-1/4'
+                const pointerAlignment = index === 0
+                  ? 'left-4'
+                  : index === rows.length - 1
+                    ? 'right-4'
+                    : index < rows.length / 2
+                      ? 'left-1/4 -translate-x-1/2'
+                      : 'right-1/4 translate-x-1/2'
+                return (
+                  <div key={row.month} className="relative flex h-full min-w-0 flex-1 items-end">
+                    <button
+                      type="button"
+                      aria-label={label}
+                      aria-pressed={activeIndex === index}
+                      className={`group flex h-full w-full cursor-pointer items-end justify-center gap-0.5 p-0 outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-primary sm:gap-1 ${activeIndex === index
+                        ? 'bg-[oklch(90%_0.008_215)]'
+                        : 'bg-transparent hover:bg-[oklch(90%_0.008_215)] focus-visible:bg-[oklch(90%_0.008_215)]'
+                      }`}
+                      onMouseEnter={() => setActiveIndex(index)}
+                      onMouseLeave={() => setActiveIndex(null)}
+                      onFocus={() => setActiveIndex(index)}
+                      onBlur={() => setActiveIndex(null)}
+                      onClick={() => setActiveIndex(index)}
+                    >
+                      <div
+                        className="w-full max-w-[4.5rem] rounded-t bg-[oklch(52%_0.11_194)] transition-opacity group-hover:opacity-90"
+                        style={{ height: `${Math.max((row.incomeCents / chartMaximum) * 100, row.incomeCents ? 1 : 0)}%` }}
+                        aria-hidden="true"
+                      />
+                      <div
+                        className="w-full max-w-[4.5rem] rounded-t bg-[oklch(72%_0.15_75)] transition-opacity group-hover:opacity-90"
+                        style={{ height: `${Math.max((row.expenseCents / chartMaximum) * 100, row.expenseCents ? 1 : 0)}%` }}
+                        aria-hidden="true"
+                      />
+                    </button>
+                    {activeIndex === index && (
+                      <div
+                        role="tooltip"
+                        style={{ bottom: `${tooltipBottom}px` }}
+                        className={`finance-chart-tooltip pointer-events-none absolute z-20 w-52 rounded-md border border-border bg-card p-3 text-left ${tooltipAlignment}`}
+                      >
+                        <span
+                          aria-hidden="true"
+                          className={`absolute -bottom-1.5 size-3 rotate-45 border-b border-r border-border bg-card ${pointerAlignment}`}
+                        />
+                        <p className="text-base font-semibold text-foreground">{formatMonth(row.month)}</p>
+                        <p className="mt-2 text-sm font-medium text-[oklch(45%_0.11_194)]">
+                          Income: {formatMoney(row.incomeCents, currency)}
+                        </p>
+                        <p className="mt-1.5 text-sm font-medium text-[oklch(62%_0.15_75)]">
+                          Expenses: {formatMoney(row.expenseCents, currency)}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
-            <div className="absolute inset-x-0 bottom-0 flex gap-3 px-3 text-center text-xs text-muted-foreground" aria-hidden="true">
+            <div className="absolute inset-x-0 bottom-0 flex gap-1 px-1 text-center text-[11px] text-muted-foreground sm:gap-3 sm:px-3 sm:text-xs" aria-hidden="true">
               {rows.map((row) => <span key={row.month} className="min-w-0 flex-1">{formatMonth(row.month, 'short')}</span>)}
             </div>
           </div>
@@ -563,6 +630,9 @@ function FinanceChart({ rows, currency }: { rows: MonthlyFinance['history']; cur
           <span className="flex items-center gap-2 text-[oklch(45%_0.11_194)]"><span className="size-3 bg-[oklch(52%_0.11_194)]" aria-hidden="true" />Income</span>
           <span className="flex items-center gap-2 text-[oklch(62%_0.15_75)]"><span className="size-3 bg-[oklch(72%_0.15_75)]" aria-hidden="true" />Expenses</span>
         </div>
+        <p className="mt-2 text-center text-xs text-muted-foreground">
+          Hover, tap, or focus a month to see exact amounts.
+        </p>
       </div>
     </section>
   )

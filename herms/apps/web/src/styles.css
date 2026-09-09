@@ -229,6 +229,35 @@
   box-shadow: 0 1px 2px oklch(22% 0.02 220 / 8%) !important;
 }
 
+@keyframes finance-chart-tooltip-in {
+  from {
+    opacity: 0;
+    translate: 0 0.45rem;
+    scale: 0.96;
+  }
+
+  to {
+    opacity: 1;
+    translate: 0 0;
+    scale: 1;
+  }
+}
+
+.app-main .finance-chart-tooltip,
+.app-main .dashboard-chart-tooltip {
+  animation: finance-chart-tooltip-in 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  transform-origin: bottom center;
+  will-change: opacity, translate, scale;
+}
+
+.app-main .finance-chart-tooltip {
+  box-shadow: 0 12px 28px oklch(22% 0.02 220 / 16%) !important;
+}
+
+.app-main .dashboard-chart-tooltip {
+  transform-box: fill-box;
+}
+
 .app-main .bg-success-soft,
 .app-main .bg-danger-soft,
 .app-main .bg-primary-soft,
@@ -258,5 +287,10 @@
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+  }
+
+  .app-main .finance-chart-tooltip,
+  .app-main .dashboard-chart-tooltip {
+    animation: none;
   }
 }

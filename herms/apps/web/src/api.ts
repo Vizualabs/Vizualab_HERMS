@@ -92,6 +92,17 @@ export type PriceHistoryEntry = {
   createdAt: string
 }
 
+export type CustomerPricingOverview = {
+  customers: Array<Customer & {
+    reference: string
+    orderCount: number
+  }>
+  fixedPrices: EquipmentItem[]
+  priceHistory: Array<PriceHistoryEntry & {
+    itemName: string
+  }>
+}
+
 export type CommercialLine = {
   id: string
   equipmentItemId: string
@@ -534,6 +545,7 @@ export const api = {
     }),
   me: () => request<SessionUser>('/api/me'),
   customers: () => request<Customer[]>('/api/customers'),
+  customerPricing: () => request<CustomerPricingOverview>('/api/customers/pricing'),
   customer: (id: string) => request<CustomerDetail>(`/api/customers/${id}`),
   createCustomer: (input: CustomerInput) =>
     request<Customer>('/api/customers', { method: 'POST', body: JSON.stringify(input) }),

@@ -227,6 +227,50 @@ export function createApp({
     .get('/api/customers', async (c) =>
       c.json({ data: await masterData.listCustomers(c.get('user')) }),
     )
+    .get('/api/customers/pricing', requireRoles('business_owner', 'sales'), async (c) => {
+      const currentUser = c.get('user')
+      const [customers, items, orders] = await Promise.all([
+        masterData.listCustomers(currentUser),
+        masterData.listItems(),
+        commercial.listOrders(currentUser),
+      ])
+      const histories = await Promise.all(items.map(async (item) => ({
+        item,
+        entries: await masterData.listPriceHistory(item.id),
+      })))
+      const orderCounts = new Map<string, number>()
+      for (const order of orders) {
+        orderCounts.set(order.customerId, (orderCounts.get(order.customerId) ?? 0) + 1)
+      }
+      const customersByAge = [...customers].sort((left, right) => {
+        const dateDifference = left.createdAt.getTime() - right.createdAt.getTime()
+        return dateDifference || left.id.localeCompare(right.id)
+      })
+      const references = new Map(customersByAge.map((customer, index) => [
+        customer.id,
+        `CUS-${String(index + 101).padStart(3, '0')}`,
+      ]))
+
+      return c.json({
+        data: {
+          customers: customers.map((customer) => ({
+            ...customer,
+            reference: references.get(customer.id)!,
+            orderCount: orderCounts.get(customer.id) ?? 0,
+          })),
+          fixedPrices: items,
+          priceHistory: histories
+            .flatMap(({ item, entries }) => entries.map((entry) => ({
+              ...entry,
+              itemName: item.name,
+            })))
+            .sort((left, right) => {
+              const dateDifference = right.effectiveDate.getTime() - left.effectiveDate.getTime()
+              return dateDifference || right.createdAt.getTime() - left.createdAt.getTime()
+            }),
+        },
+      })
+    })
     .post('/api/customers', async (c) => {
       const parsed = await validatedJson(c, customerInputSchema)
       if ('response' in parsed) return parsed.response
