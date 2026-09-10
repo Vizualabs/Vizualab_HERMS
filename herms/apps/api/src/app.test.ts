@@ -171,6 +171,7 @@ function createServices() {
 
   const deliveryNote = {
     id: '70000000-0000-4000-8000-000000000001',
+    noteType: 'delivery_note' as const,
     dnNumber: 'DN-2026-000001',
     orderId: order.id,
     orderNumber: order.orderNumber,
@@ -1036,6 +1037,30 @@ describe('Phase 3 API', () => {
     })).status).toBe(200)
     const salesCookie = await sessionCookie(app, 'sales')
     expect((await app.request('/api/approvals', { headers: { Cookie: salesCookie } })).status).toBe(403)
+  })
+
+  test('dispatches Delivery and Retention Note approval actions to the correct workflow', async () => {
+    const app = createTestApp()
+    const storeCookie = await sessionCookie(app, 'store_admin')
+
+    for (const [noteId, noteType] of [
+      ['70000000-0000-4000-8000-000000000001', 'delivery_note'],
+      ['90000000-0000-4000-8000-000000000001', 'retention_note'],
+    ] as const) {
+      const detail = await app.request(`/api/approvals/${noteId}`, {
+        headers: { Cookie: storeCookie },
+      })
+      expect(detail.status).toBe(200)
+      expect(((await detail.json()) as { data: { noteType: string } }).data.noteType).toBe(noteType)
+
+      const approval = await app.request(`/api/approvals/${noteId}/approve`, {
+        method: 'POST',
+        headers: { Cookie: storeCookie, 'Content-Type': 'application/json' },
+        body: '{}',
+      })
+      expect(approval.status).toBe(200)
+      expect(((await approval.json()) as { data: { status: string } }).data.status).toBe('approved')
+    }
   })
 
   test('summarizes the store-scoped approval queue for the approval dashboard', async () => {

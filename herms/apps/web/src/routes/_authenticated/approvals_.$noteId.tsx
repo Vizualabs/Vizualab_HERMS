@@ -7,7 +7,7 @@ import { ManualLinkShare } from '../../components/ManualShareActions'
 import { queryKeys } from '../../queries'
 import { createNoteShareMessage } from '../../whatsapp'
 
-export const Route = createFileRoute('/_authenticated/approvals/$noteId')({
+export const Route = createFileRoute('/_authenticated/approvals_/$noteId')({
   component: ApprovalDetailPage,
 })
 
@@ -97,7 +97,7 @@ function ApprovalDetailPage() {
       ? <RetentionApproval
           note={note.data}
           countPending={countRetention.isPending}
-          actionPending={approve.isPending || reject.isPending || reopen.isPending}
+          actionPending={countRetention.isPending || approve.isPending || reject.isPending || reopen.isPending}
           reversePending={reverse.isPending}
           onCount={countRetention.mutate}
           onApprove={() => approve.mutate('retention_note')}
@@ -108,7 +108,7 @@ function ApprovalDetailPage() {
       : <DeliveryApproval
           note={note.data}
           countPending={countDelivery.isPending}
-          actionPending={approve.isPending || reject.isPending || reopen.isPending}
+          actionPending={countDelivery.isPending || approve.isPending || reject.isPending || reopen.isPending}
           onCount={countDelivery.mutate}
           onApprove={() => approve.mutate('delivery_note')}
           onReject={() => reject.mutate('delivery_note')}
@@ -186,9 +186,9 @@ function DeliveryApproval({
             </strong>}
           </span>
         </span>
-        <input className="input" name={line.id} type="number" min="0" step="1" required defaultValue={line.countedQty ?? line.handedOverQty} aria-label={`${line.equipmentName} physical count`} />
+        <input className="input" name={line.id} type="number" inputMode="numeric" min="0" max="1000000" step="1" required autoComplete="off" disabled={actionPending} defaultValue={line.countedQty ?? line.handedOverQty} aria-label={`${line.equipmentName} physical count`} />
       </label>)}
-      <button className="button-secondary" disabled={countPending}>
+      <button className="button-secondary" disabled={actionPending}>
         {countPending ? 'Saving count...' : allCounted ? 'Update physical count' : 'Save physical count'}
       </button>
     </form>}
@@ -238,9 +238,9 @@ function RetentionApproval({
             </strong>}
           </span>
         </span>
-        <input className="input" name={line.id} type="number" min="0" step="1" required defaultValue={line.countedReturnedQty ?? line.returnedQty} aria-label={`${line.equipmentName} returned physical count`} />
+        <input className="input" name={line.id} type="number" inputMode="numeric" min="0" max="1000000" step="1" required autoComplete="off" disabled={actionPending} defaultValue={line.countedReturnedQty ?? line.returnedQty} aria-label={`${line.equipmentName} returned physical count`} />
       </label>)}
-      <button className="button-secondary" disabled={countPending}>
+      <button className="button-secondary" disabled={actionPending}>
         {countPending ? 'Saving count...' : allCounted ? 'Update physical count' : 'Save physical count'}
       </button>
     </form>}
@@ -290,16 +290,18 @@ function ApprovalActions({
 }) {
   return <div className="mt-6 flex flex-wrap gap-3">
     {note.status === 'pending_approval' && <>
-      <button className="button-primary" disabled={!allCounted || pending} onClick={() => {
+      <button type="button" className="button-primary" disabled={!allCounted || pending} onClick={() => {
         if (window.confirm('Approve this physical count and post its stock movements?')) onApprove()
       }}>
         Approve and post stock
       </button>
-      <button className="button-secondary" disabled={pending} onClick={() => {
+      <button type="button" className="button-secondary" disabled={pending} onClick={() => {
         if (window.confirm('Reject this note and revoke its field link?')) onReject()
       }}>Reject</button>
     </>}
-    {note.status === 'rejected' && <button className="button-primary" disabled={pending} onClick={onReopen}>
+    {note.status === 'rejected' && <button type="button" className="button-primary" disabled={pending} onClick={() => {
+      if (window.confirm('Reopen this note and create a new field link?')) onReopen()
+    }}>
       Reopen and create link
     </button>}
   </div>

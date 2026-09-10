@@ -23,7 +23,7 @@ import { Route as AuthenticatedQuotationsRouteImport } from './routes/_authentic
 import { Route as AuthenticatedStockRouteImport } from './routes/_authenticated/stock'
 import { Route as NotesTokenRouteImport } from './routes/notes.$token'
 import { Route as QuotesTokenRouteImport } from './routes/quotes.$token'
-import { Route as AuthenticatedApprovalsNoteIdRouteImport } from './routes/_authenticated/approvals.$noteId'
+import { Route as AuthenticatedApprovalsNoteIdRouteImport } from './routes/_authenticated/approvals_.$noteId'
 import { Route as AuthenticatedCustomersCustomerIdRouteImport } from './routes/_authenticated/customers_.$customerId'
 import { Route as AuthenticatedDeliveryNotesNoteIdRouteImport } from './routes/_authenticated/delivery-notes.$noteId'
 import { Route as AuthenticatedItemsItemIdRouteImport } from './routes/_authenticated/items_.$itemId'
@@ -102,9 +102,9 @@ const QuotesTokenRoute = QuotesTokenRouteImport.update({
 } as any)
 const AuthenticatedApprovalsNoteIdRoute =
   AuthenticatedApprovalsNoteIdRouteImport.update({
-    id: '/$noteId',
-    path: '/$noteId',
-    getParentRoute: () => AuthenticatedApprovalsRoute,
+    id: '/approvals_/$noteId',
+    path: '/approvals/$noteId',
+    getParentRoute: () => AuthenticatedRoute,
   } as any)
 const AuthenticatedCustomersCustomerIdRoute =
   AuthenticatedCustomersCustomerIdRouteImport.update({
@@ -146,7 +146,7 @@ const AuthenticatedRetentionNotesNoteIdRoute =
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/login': typeof LoginRoute
-  '/approvals': typeof AuthenticatedApprovalsRouteWithChildren
+  '/approvals': typeof AuthenticatedApprovalsRoute
   '/claims': typeof AuthenticatedClaimsRoute
   '/customers': typeof AuthenticatedCustomersRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
@@ -167,7 +167,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
-  '/approvals': typeof AuthenticatedApprovalsRouteWithChildren
+  '/approvals': typeof AuthenticatedApprovalsRoute
   '/claims': typeof AuthenticatedClaimsRoute
   '/customers': typeof AuthenticatedCustomersRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
@@ -191,7 +191,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/login': typeof LoginRoute
-  '/_authenticated/approvals': typeof AuthenticatedApprovalsRouteWithChildren
+  '/_authenticated/approvals': typeof AuthenticatedApprovalsRoute
   '/_authenticated/claims': typeof AuthenticatedClaimsRoute
   '/_authenticated/customers': typeof AuthenticatedCustomersRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
@@ -203,7 +203,7 @@ export interface FileRoutesById {
   '/notes/$token': typeof NotesTokenRoute
   '/quotes/$token': typeof QuotesTokenRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
-  '/_authenticated/approvals/$noteId': typeof AuthenticatedApprovalsNoteIdRoute
+  '/_authenticated/approvals_/$noteId': typeof AuthenticatedApprovalsNoteIdRoute
   '/_authenticated/customers_/$customerId': typeof AuthenticatedCustomersCustomerIdRoute
   '/_authenticated/delivery-notes/$noteId': typeof AuthenticatedDeliveryNotesNoteIdRoute
   '/_authenticated/items_/$itemId': typeof AuthenticatedItemsItemIdRoute
@@ -272,7 +272,7 @@ export interface FileRouteTypes {
     | '/notes/$token'
     | '/quotes/$token'
     | '/_authenticated/'
-    | '/_authenticated/approvals/$noteId'
+    | '/_authenticated/approvals_/$noteId'
     | '/_authenticated/customers_/$customerId'
     | '/_authenticated/delivery-notes/$noteId'
     | '/_authenticated/items_/$itemId'
@@ -388,12 +388,12 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof QuotesTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/approvals/$noteId': {
-      id: '/_authenticated/approvals/$noteId'
-      path: '/$noteId'
+    '/_authenticated/approvals_/$noteId': {
+      id: '/_authenticated/approvals_/$noteId'
+      path: '/approvals/$noteId'
       fullPath: '/approvals/$noteId'
       preLoaderRoute: typeof AuthenticatedApprovalsNoteIdRouteImport
-      parentRoute: typeof AuthenticatedApprovalsRoute
+      parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/customers_/$customerId': {
       id: '/_authenticated/customers_/$customerId'
@@ -440,22 +440,8 @@ declare module '@tanstack/react-router' {
   }
 }
 
-interface AuthenticatedApprovalsRouteChildren {
-  AuthenticatedApprovalsNoteIdRoute: typeof AuthenticatedApprovalsNoteIdRoute
-}
-
-const AuthenticatedApprovalsRouteChildren: AuthenticatedApprovalsRouteChildren =
-  {
-    AuthenticatedApprovalsNoteIdRoute: AuthenticatedApprovalsNoteIdRoute,
-  }
-
-const AuthenticatedApprovalsRouteWithChildren =
-  AuthenticatedApprovalsRoute._addFileChildren(
-    AuthenticatedApprovalsRouteChildren,
-  )
-
 interface AuthenticatedRouteChildren {
-  AuthenticatedApprovalsRoute: typeof AuthenticatedApprovalsRouteWithChildren
+  AuthenticatedApprovalsRoute: typeof AuthenticatedApprovalsRoute
   AuthenticatedClaimsRoute: typeof AuthenticatedClaimsRoute
   AuthenticatedCustomersRoute: typeof AuthenticatedCustomersRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
@@ -465,6 +451,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedQuotationsRoute: typeof AuthenticatedQuotationsRoute
   AuthenticatedStockRoute: typeof AuthenticatedStockRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
+  AuthenticatedApprovalsNoteIdRoute: typeof AuthenticatedApprovalsNoteIdRoute
   AuthenticatedCustomersCustomerIdRoute: typeof AuthenticatedCustomersCustomerIdRoute
   AuthenticatedDeliveryNotesNoteIdRoute: typeof AuthenticatedDeliveryNotesNoteIdRoute
   AuthenticatedItemsItemIdRoute: typeof AuthenticatedItemsItemIdRoute
@@ -474,7 +461,7 @@ interface AuthenticatedRouteChildren {
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
-  AuthenticatedApprovalsRoute: AuthenticatedApprovalsRouteWithChildren,
+  AuthenticatedApprovalsRoute: AuthenticatedApprovalsRoute,
   AuthenticatedClaimsRoute: AuthenticatedClaimsRoute,
   AuthenticatedCustomersRoute: AuthenticatedCustomersRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
@@ -484,6 +471,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedQuotationsRoute: AuthenticatedQuotationsRoute,
   AuthenticatedStockRoute: AuthenticatedStockRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
+  AuthenticatedApprovalsNoteIdRoute: AuthenticatedApprovalsNoteIdRoute,
   AuthenticatedCustomersCustomerIdRoute: AuthenticatedCustomersCustomerIdRoute,
   AuthenticatedDeliveryNotesNoteIdRoute: AuthenticatedDeliveryNotesNoteIdRoute,
   AuthenticatedItemsItemIdRoute: AuthenticatedItemsItemIdRoute,

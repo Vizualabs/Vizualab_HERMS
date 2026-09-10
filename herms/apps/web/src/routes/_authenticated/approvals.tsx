@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, Link } from '@tanstack/react-router'
 
 import {
   ApiError,
@@ -10,7 +10,9 @@ import {
   type RetentionNoteDetail,
   type TokenNote,
 } from '../../api'
+import { ManualLinkShare } from '../../components/ManualShareActions'
 import { approvalMetricsQuery, approvalsQuery, queryKeys } from '../../queries'
+import { createNoteShareMessage } from '../../whatsapp'
 
 export const Route = createFileRoute('/_authenticated/approvals')({ component: ApprovalsPage })
 
@@ -55,7 +57,7 @@ function ApprovalsPage() {
           valueClassName="text-[#159563]"
         />
         <MetricCard
-          label="Count mismatches flagged"
+          label="Discrepancies flagged"
           value={metrics.data?.mismatchesFlagged}
           valueClassName="text-[#df2f2f]"
           description="Require review before approval"
@@ -231,10 +233,13 @@ function ApprovalFormCard({
 
   return (
     <form
+      aria-label={`Approval for ${number}`}
       className="overflow-hidden rounded-xl border border-[#d6e0e2] bg-white"
       onSubmit={(event) => {
         event.preventDefault()
-        onApprove()
+        if (window.confirm('Approve this physical count and post its stock movements?')) {
+          onApprove()
+        }
       }}
     >
       <div className="flex flex-col gap-4 border-b border-[#d6e0e2] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
@@ -244,7 +249,9 @@ function ApprovalFormCard({
             type="button"
             className="min-h-10 rounded-lg border border-[#d6e0e2] bg-white px-4 text-xs font-semibold text-[#071c23] shadow-sm transition-colors hover:bg-[#f4f8f8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#078486]"
             disabled={actionPending}
-            onClick={onReject}
+            onClick={() => {
+              if (window.confirm('Reject this note and revoke its field link?')) onReject()
+            }}
           >
             {rejectPending ? 'Rejecting…' : 'Reject'}
           </button>
@@ -289,9 +296,12 @@ function ApprovalFormCard({
                     <input
                       className="h-10 w-36 rounded-lg border border-[#d6e0e2] bg-white px-3 text-sm tabular-nums text-[#071c23] shadow-sm outline-none transition focus:border-[#078486] focus:ring-2 focus:ring-[#078486]/15"
                       type="number"
+                      inputMode="numeric"
                       min="0"
+                      max="1000000"
                       step="1"
                       required
+                      autoComplete="off"
                       value={count}
                       aria-label={`${row.itemName} admin physical count`}
                       onChange={(event) => setCount(
@@ -331,12 +341,14 @@ function ApprovalIdentity({
   return (
     <div className="min-w-0">
       <h2 className="text-[#071c23]">
-        <a
-          href={`/approvals/${note.id}`}
+        <Link
+          to="/approvals/$noteId"
+          params={{ noteId: note.id }}
+          preload="intent"
           className="rounded-sm hover:text-[#078486] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#078486]"
         >
           {number} · {typeLabel}
-        </a>
+        </Link>
       </h2>
       <p className="mt-0.5 truncate text-xs text-[#526977]">
         {note.orderNumber} · {note.customerName} · submitted by {note.submittedByName ?? 'Field staff'}
@@ -348,11 +360,13 @@ function ApprovalIdentity({
 
 function WaitingApprovalCard({ note }: { note: TokenNote }) {
   const client = useQueryClient()
+  const [reopenedLink, setReopenedLink] = useState<string | null>(null)
   const reopen = useMutation<DeliveryNoteDetail | RetentionNoteDetail, Error, void>({
     mutationFn: () => note.noteType === 'retention_note'
       ? api.reopenRetentionNote(note.id)
       : api.reopenDeliveryNote(note.id),
-    onSuccess: async () => {
+    onSuccess: async (reopenedNote) => {
+      setReopenedLink(reopenedNote.submissionLink ?? null)
       await client.invalidateQueries({ queryKey: queryKeys.approvals })
     },
   })
@@ -375,18 +389,22 @@ function WaitingApprovalCard({ note }: { note: TokenNote }) {
           <span className="rounded-full bg-[#d9f2f3] px-3 py-1 text-xs font-semibold capitalize text-[#087a7d]">
             {status}
           </span>
-          <a
-            href={`/approvals/${note.id}`}
+          <Link
+            to="/approvals/$noteId"
+            params={{ noteId: note.id }}
+            preload="intent"
             className="inline-flex min-h-10 items-center rounded-lg border border-[#d6e0e2] bg-white px-4 text-xs font-semibold text-[#071c23] shadow-sm hover:bg-[#f4f8f8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#078486]"
           >
             View note
-          </a>
+          </Link>
           {note.status === 'rejected' && (
             <button
               type="button"
               className="min-h-10 rounded-lg border border-[#078486] bg-[#078486] px-4 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#096f72] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#078486] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
               disabled={reopen.isPending}
-              onClick={() => reopen.mutate()}
+              onClick={() => {
+                if (window.confirm('Reopen this note and create a new field link?')) reopen.mutate()
+              }}
             >
               {reopen.isPending ? 'Reopening…' : 'Reopen & create link'}
             </button>
@@ -398,6 +416,17 @@ function WaitingApprovalCard({ note }: { note: TokenNote }) {
           {getErrorMessage(reopen.error, 'Unable to reopen this note')}
         </p>
       )}
+      {reopenedLink && <ManualLinkShare
+        label={`${typeLabel} submission link created`}
+        link={reopenedLink}
+        message={createNoteShareMessage({
+          noteType: note.noteType === 'retention_note' ? 'Retention' : 'Delivery',
+          noteNumber: number,
+          orderNumber: note.orderNumber,
+          customerName: note.customerName,
+          submissionLink: reopenedLink,
+        })}
+      />}
     </article>
   )
 }
@@ -423,12 +452,14 @@ function ApprovalCardFallback({
           </p>
         </div>
         {!pending && (
-          <a
-            href={`/approvals/${summary.id}`}
+          <Link
+            to="/approvals/$noteId"
+            params={{ noteId: summary.id }}
+            preload="intent"
             className="inline-flex min-h-10 items-center rounded-lg border border-[#d6e0e2] px-4 text-xs font-semibold text-[#071c23] shadow-sm hover:bg-[#f4f8f8]"
           >
             View note
-          </a>
+          </Link>
         )}
       </div>
     </article>
