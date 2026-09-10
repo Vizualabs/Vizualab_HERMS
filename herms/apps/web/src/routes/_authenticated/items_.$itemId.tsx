@@ -5,7 +5,7 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { ApiError, api, formatMinorUnits } from '../../api'
 import { queryKeys, sessionQuery } from '../../queries'
 
-export const Route = createFileRoute('/_authenticated/items/$itemId')({
+export const Route = createFileRoute('/_authenticated/items_/$itemId')({
   component: ItemDetailPage,
 })
 

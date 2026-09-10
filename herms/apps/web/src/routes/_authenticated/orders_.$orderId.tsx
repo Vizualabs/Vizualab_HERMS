@@ -7,7 +7,7 @@ import { ManualLinkShare } from '../../components/ManualShareActions'
 import { queryKeys, sessionQuery } from '../../queries'
 import { createNoteShareMessage } from '../../whatsapp'
 
-export const Route = createFileRoute('/_authenticated/orders/$orderId')({
+export const Route = createFileRoute('/_authenticated/orders_/$orderId')({
   component: OrderDetailPage,
 })
 
@@ -19,6 +19,7 @@ function OrderDetailPage() {
     noteNumber: string
     url: string
   } | null>(null)
+  const [formError, setFormError] = useState<string | null>(null)
   const session = useQuery(sessionQuery)
   const canUseSales = session.data?.role === 'sales' || session.data?.role === 'super_user'
   const canClose = session.data?.role === 'store_admin' || session.data?.role === 'super_user'
@@ -48,7 +49,11 @@ function OrderDetailPage() {
       lines: Array<{ equipmentItemId: string; issuedQty: number }>
     }) => api.createDeliveryNote(orderId, input),
     onSuccess: async (note) => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.deliveryNotes(orderId) })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.order(orderId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.deliveryNotes(orderId) }),
+      ])
+      setFormError(null)
       if (note.submissionLink) {
         setNewLink({ type: 'delivery', noteNumber: note.dnNumber, url: note.submissionLink })
       }
@@ -61,7 +66,11 @@ function OrderDetailPage() {
         lines: input.equipmentItemIds.map((equipmentItemId) => ({ equipmentItemId })),
       }),
     onSuccess: async (note) => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.retentionNotes(orderId) })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.order(orderId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.retentionNotes(orderId) }),
+      ])
+      setFormError(null)
       if (note.submissionLink) {
         setNewLink({ type: 'retention', noteNumber: note.rnNumber, url: note.submissionLink })
       }
@@ -84,6 +93,15 @@ function OrderDetailPage() {
     </p>
   }
   const data = order.data
+  const deliveryLines = data.lines.map((line) => ({
+    ...line,
+    remainingQty: Math.max(0, line.quantity - (line.allocatedDeliveryQty ?? 0)),
+  })).filter((line) => line.remainingQty > 0)
+  const retentionLines = data.lines.map((line) => ({
+    ...line,
+    remainingQty: Math.max(0, (line.approvedDeliveredQty ?? 0) - (line.accountedRetentionQty ?? 0)),
+  })).filter((line) => line.remainingQty > 0)
+  const hasFieldStaff = Boolean(fieldStaff.data?.length)
   const mutationError = createDelivery.error || createRetention.error || close.error
   return <div>
     <Link to="/orders" className="text-sm font-medium text-primary hover:underline">Back to orders</Link>
@@ -121,7 +139,15 @@ function OrderDetailPage() {
           <p className="mt-2 text-sm text-muted-foreground">
             Closing succeeds only when approved returns, balances, and missing/damaged quantities exactly equal every approved delivered quantity.
           </p>
-          <button className="button-primary mt-4" disabled={close.isPending || data.status !== 'open'} onClick={() => close.mutate()}>
+          <button
+            className="button-primary mt-4"
+            disabled={close.isPending || data.status !== 'open'}
+            onClick={() => {
+              if (window.confirm('Mark this order Fully Returned? This succeeds only when every delivered quantity is reconciled.')) {
+                close.mutate()
+              }
+            }}
+          >
             {close.isPending ? 'Checking reconciliation...' : 'Mark Fully Returned'}
           </button>
           {close.data && <div className="mt-4 overflow-x-auto">
@@ -139,34 +165,41 @@ function OrderDetailPage() {
       {canUseSales && <aside className="flex h-fit flex-col gap-6">
         <section id="create-delivery-note" className="scroll-mt-6 rounded-2xl border border-border bg-card p-6">
           <h2 className="text-lg font-semibold">Create delivery note</h2>
-          <p className="mt-2 text-sm text-muted-foreground">Enter the quantity issued now. Use zero to omit an item.</p>
+          <p className="mt-2 text-sm text-muted-foreground">Only quantities not already allocated to another active Delivery Note are shown.</p>
           <form className="mt-4 flex flex-col gap-3" onSubmit={(event) => {
             event.preventDefault()
             const form = new FormData(event.currentTarget)
+            const lines = deliveryLines
+              .map((line) => ({
+                equipmentItemId: line.equipmentItemId,
+                issuedQty: Number(form.get(`delivery-${line.equipmentItemId}`)),
+              }))
+              .filter((line) => line.issuedQty > 0)
+            if (lines.length === 0) {
+              setFormError('Enter a delivery quantity for at least one item.')
+              return
+            }
+            setFormError(null)
             createDelivery.mutate({
               fieldStaffUserId: String(form.get('deliveryFieldStaffUserId')),
-              lines: data.lines
-                .map((line) => ({
-                  equipmentItemId: line.equipmentItemId,
-                  issuedQty: Number(form.get(`delivery-${line.equipmentItemId}`)),
-                }))
-                .filter((line) => line.issuedQty > 0),
+              lines,
             })
           }}>
             <label className={'flex flex-col gap-2 text-sm font-medium'}>
               Field staff recipient
-              <select className={'input'} name={'deliveryFieldStaffUserId'} required defaultValue={''}>
+              <select className={'input'} name={'deliveryFieldStaffUserId'} required defaultValue={''} autoComplete="off">
                 <option value={''} disabled>Select field staff</option>
                 {fieldStaff.data?.map((recipient) => <option key={recipient.id} value={recipient.id}>
                   {recipient.name} - {recipient.phoneMasked}
                 </option>)}
               </select>
             </label>
-            {data.lines.map((line) => <label key={line.id} className="grid grid-cols-[1fr_6rem] items-center gap-3 text-sm">
-              <span>{line.equipmentName}<span className="block text-xs text-muted-foreground">Ordered {line.quantity}</span></span>
-              <input className="input" name={`delivery-${line.equipmentItemId}`} type="number" min="0" max={line.quantity} step="1" defaultValue={line.quantity} />
+            {deliveryLines.map((line) => <label key={line.id} className="grid grid-cols-[1fr_6rem] items-center gap-3 text-sm">
+              <span>{line.equipmentName}<span className="block text-xs text-muted-foreground">Ordered {line.quantity} · already allocated {line.allocatedDeliveryQty ?? 0} · remaining {line.remainingQty}</span></span>
+              <input className="input" name={`delivery-${line.equipmentItemId}`} type="number" inputMode="numeric" min="0" max={line.remainingQty} step="1" defaultValue={line.remainingQty} autoComplete="off" />
             </label>)}
-            <button className="button-primary w-full text-sm" disabled={createDelivery.isPending || data.status !== 'open'}>
+            {deliveryLines.length === 0 && <p className="text-sm text-muted-foreground">All ordered quantities are already allocated.</p>}
+            <button className="button-primary w-full text-sm" disabled={createDelivery.isPending || data.status !== 'open' || deliveryLines.length === 0 || !hasFieldStaff}>
               {createDelivery.isPending ? 'Creating...' : 'Create delivery note'}
             </button>
           </form>
@@ -184,32 +217,39 @@ function OrderDetailPage() {
         <section id="create-retention-note" className="scroll-mt-6 rounded-2xl border border-border bg-card p-6">
           <h2 className="text-lg font-semibold">Create retention note</h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            Select items already delivered. The secure return form records returned, balance, and shortfall quantities.
+            Select from approved delivered quantities that have not already been accounted for.
           </p>
           <form className="mt-4 flex flex-col gap-3" onSubmit={(event) => {
             event.preventDefault()
             const form = new FormData(event.currentTarget)
+            const equipmentItemIds = retentionLines
+              .filter((line) => form.get(`retention-${line.equipmentItemId}`) === 'on')
+              .map((line) => line.equipmentItemId)
+            if (equipmentItemIds.length === 0) {
+              setFormError('Select at least one item for the Retention Note.')
+              return
+            }
+            setFormError(null)
             createRetention.mutate({
               fieldStaffUserId: String(form.get('retentionFieldStaffUserId')),
-              equipmentItemIds: data.lines
-                .filter((line) => form.get(`retention-${line.equipmentItemId}`) === 'on')
-                .map((line) => line.equipmentItemId),
+              equipmentItemIds,
             })
           }}>
             <label className={'flex flex-col gap-2 text-sm font-medium'}>
               Field staff recipient
-              <select className={'input'} name={'retentionFieldStaffUserId'} required defaultValue={''}>
+              <select className={'input'} name={'retentionFieldStaffUserId'} required defaultValue={''} autoComplete="off">
                 <option value={''} disabled>Select field staff</option>
                 {fieldStaff.data?.map((recipient) => <option key={recipient.id} value={recipient.id}>
                   {recipient.name} - {recipient.phoneMasked}
                 </option>)}
               </select>
             </label>
-            {data.lines.map((line) => <label key={line.id} className="flex items-center gap-3 text-sm">
+            {retentionLines.map((line) => <label key={line.id} className="flex items-center gap-3 rounded-lg border border-border px-3 py-2 text-sm">
               <input name={`retention-${line.equipmentItemId}`} type="checkbox" defaultChecked />
-              <span>{line.equipmentName}</span>
+              <span>{line.equipmentName}<span className="block text-xs text-muted-foreground">Delivered {line.approvedDeliveredQty ?? 0} · already accounted {line.accountedRetentionQty ?? 0} · available {line.remainingQty}</span></span>
             </label>)}
-            <button className="button-primary w-full text-sm" disabled={createRetention.isPending || data.status !== 'open'}>
+            {retentionLines.length === 0 && <p className="text-sm text-muted-foreground">No approved delivered quantities are available for a new Retention Note.</p>}
+            <button className="button-primary w-full text-sm" disabled={createRetention.isPending || data.status !== 'open' || retentionLines.length === 0 || !hasFieldStaff}>
               {createRetention.isPending ? 'Creating...' : 'Create retention note'}
             </button>
           </form>
@@ -235,6 +275,7 @@ function OrderDetailPage() {
             submissionLink: newLink.url,
           })}
         />}
+        {formError && <p role="alert" className="text-sm text-danger">{formError}</p>}
         {fieldStaff.isSuccess && fieldStaff.data.length === 0 && <p role={'alert'} className={'text-sm text-danger'}>
           Add an active field staff user with a phone number before creating a note.
         </p>}

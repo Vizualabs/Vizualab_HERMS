@@ -8,6 +8,8 @@ import {
   auditLogs,
   customerPrices,
   customers,
+  deliveryNoteLines,
+  deliveryNotes,
   equipmentItems,
   noteTokens,
   orderLines,
@@ -15,6 +17,8 @@ import {
   outboxEvents,
   quotationLines,
   quotations,
+  retentionNoteLines,
+  retentionNotes,
   stores,
 } from './schema'
 import { DataConflictError, DataNotFoundError, type AuditActor } from './services'
@@ -499,6 +503,30 @@ export function createCommercialService(db: Database, config: CommercialConfig) 
         equipmentName: equipmentItems.name, unitOfMeasure: equipmentItems.unitOfMeasure,
         quantity: orderLines.quantity, unitPriceCents: orderLines.unitPriceCents,
         lineTotalCents: orderLines.lineTotalCents,
+        allocatedDeliveryQty: sql<number>`COALESCE((
+          SELECT SUM(delivery_line.issued_qty)
+          FROM ${deliveryNoteLines} delivery_line
+          JOIN ${deliveryNotes} delivery_note ON delivery_note.id = delivery_line.delivery_note_id
+          WHERE delivery_note.order_id = ${id}::uuid
+            AND delivery_note.status <> 'rejected'
+            AND delivery_line.equipment_item_id = ${orderLines.equipmentItemId}
+        ), 0)::int`,
+        approvedDeliveredQty: sql<number>`COALESCE((
+          SELECT SUM(delivery_line.counted_qty)
+          FROM ${deliveryNoteLines} delivery_line
+          JOIN ${deliveryNotes} delivery_note ON delivery_note.id = delivery_line.delivery_note_id
+          WHERE delivery_note.order_id = ${id}::uuid
+            AND delivery_note.status = 'approved'
+            AND delivery_line.equipment_item_id = ${orderLines.equipmentItemId}
+        ), 0)::int`,
+        accountedRetentionQty: sql<number>`COALESCE((
+          SELECT SUM(return_line.returned_qty + return_line.balance_qty + return_line.missing_damaged_qty)
+          FROM ${retentionNoteLines} return_line
+          JOIN ${retentionNotes} return_note ON return_note.id = return_line.retention_note_id
+          WHERE return_note.order_id = ${id}::uuid
+            AND return_note.status <> 'rejected'
+            AND return_line.equipment_item_id = ${orderLines.equipmentItemId}
+        ), 0)::int`,
       }).from(orderLines).innerJoin(equipmentItems, eq(orderLines.equipmentItemId, equipmentItems.id))
         .where(eq(orderLines.orderId, id)).orderBy(equipmentItems.name)
       return { ...header, currency: config.currency, timezone: config.timezone, lines }

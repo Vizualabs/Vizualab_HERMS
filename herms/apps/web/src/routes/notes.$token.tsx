@@ -1,17 +1,14 @@
 import type { DeliveryNoteSubmission, RetentionNoteSubmission } from '@herms/shared'
-import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { queryOptions, useMutation, useQuery } from '@tanstack/react-query'
+import { createFileRoute } from '@tanstack/react-router'
 import { useState } from 'react'
 
 import { ApiError, api, type DeliveryNoteDetail, type RetentionNoteDetail, type TokenNote } from '../api'
-import { queryKeys } from '../queries'
 
 export const Route = createFileRoute('/notes/$token')({ component: TokenNotePage })
 
 function TokenNotePage() {
   const { token } = Route.useParams()
-  const navigate = useNavigate()
-  const queryClient = useQueryClient()
   const note = useQuery(queryOptions({
     queryKey: ['token-note', token],
     queryFn: () => api.tokenNote(token),
@@ -20,14 +17,6 @@ function TokenNotePage() {
   const submit = useMutation({
     mutationFn: (input: DeliveryNoteSubmission | RetentionNoteSubmission) =>
       api.submitTokenNote(token, input),
-    onSuccess: async (submittedNote) => {
-      queryClient.setQueryData(queryKeys.approvalNote(submittedNote.id), submittedNote)
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.approvals }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.approvalMetrics }),
-      ])
-      await navigate({ to: submittedNote.approvalPath })
-    },
   })
 
   if (note.isPending) {
@@ -45,7 +34,7 @@ function TokenNotePage() {
 
   return (
     <PublicShell>
-      <NoteHeader note={note.data} token={token} />
+      <NoteHeader note={note.data} />
       {submit.isSuccess
         ? <SubmissionComplete />
         : note.data.noteType === 'retention_note'
@@ -55,7 +44,7 @@ function TokenNotePage() {
   )
 }
 
-function NoteHeader({ note, token }: { note: TokenNote; token: string }) {
+function NoteHeader({ note }: { note: TokenNote }) {
   const number = note.noteType === 'retention_note' ? note.rnNumber : note.dnNumber
   const typeLabel = note.noteType === 'retention_note' ? 'Retention note' : 'Delivery note'
   return (
@@ -65,7 +54,7 @@ function NoteHeader({ note, token }: { note: TokenNote; token: string }) {
       <p className="mt-1 text-sm text-[#526977]">{note.orderNumber} · {note.customerAddress ?? 'Customer location'}</p>
       <p className="mt-2 flex items-center gap-2 text-xs text-[#526977]">
         <ClockIcon />
-        Link {token.slice(0, 12)}… {expiryLabel(note.tokenExpiresAt)}
+        Secure field link {expiryLabel(note.tokenExpiresAt)}
       </p>
     </header>
   )
@@ -121,11 +110,14 @@ function DeliveryForm({
               Quantity handed over
               <input
                 className="input mt-2 max-w-[17rem]"
+                name={`handed-over-${line.id}`}
                 type="number"
+                inputMode="numeric"
                 min="0"
                 max={line.issuedQty}
                 step="1"
                 required
+                autoComplete="off"
                 value={quantity}
                 onChange={(event) => setQuantities((current) => ({
                   ...current,
@@ -138,7 +130,9 @@ function DeliveryForm({
                 Reason for difference
                 <select
                   className="input mt-2"
+                  name={`delivery-reason-${line.id}`}
                   required
+                  autoComplete="off"
                   value={reasons[line.id] ?? ''}
                   onChange={(event) => setReasons((current) => ({
                     ...current,
@@ -194,9 +188,13 @@ function RetentionForm({
   const [remarks, setRemarks] = useState(note.lines.find((line) => line.reasonDetail)?.reasonDetail ?? '')
   const hasOtherReason = note.lines.some((line) =>
     (values[line.id]?.shortfall ?? 0) > 0 && reasons[line.id] === 'other')
-  const hasInvalidTotal = note.lines.some((line) => {
+  const hasOverAccountedLine = note.lines.some((line) => {
     const value = values[line.id] ?? { returned: 0, balance: 0, shortfall: 0 }
-    return value.returned + value.balance + value.shortfall !== line.deliveredQty
+    return value.returned + value.balance + value.shortfall > (line.availableQty ?? line.deliveredQty)
+  })
+  const hasNoAccountedQuantity = note.lines.every((line) => {
+    const value = values[line.id] ?? { returned: 0, balance: 0, shortfall: 0 }
+    return value.returned + value.balance + value.shortfall === 0
   })
 
   const updateValue = (lineId: string, field: keyof RetentionValue, value: number) => {
@@ -225,25 +223,36 @@ function RetentionForm({
       })
     }}>
       <p className="rounded-xl bg-[#e8f5f5] p-4 text-xs leading-5 text-[#087a7d]">
-        Record returned, still-out, and missing or damaged quantities. The total for each item must equal its approved delivered quantity.
+        Record only the quantities handled on this visit. Unaccounted equipment stays available for a later Retention Note; the full order is reconciled only when it is closed.
       </p>
       {note.lines.map((line) => {
         const value = values[line.id] ?? { returned: 0, balance: 0, shortfall: 0 }
         const accounted = value.returned + value.balance + value.shortfall
+        const available = line.availableQty ?? line.deliveredQty
+        const remainingAfterThisNote = available - accounted
         return (
           <section key={line.id} className="rounded-xl border border-[#d6e0e2] bg-white p-5">
             <div className="flex items-start justify-between gap-4">
               <h2 className="text-sm font-semibold text-[#071c23]">{line.equipmentName}</h2>
-              <p className="text-xs text-[#526977]">Delivered: {line.deliveredQty}</p>
+              <p className="text-right text-xs text-[#526977]">
+                <span className="block">Approved delivered: {line.deliveredQty}</span>
+                <span className="block font-semibold text-[#071c23]">Available on this note: {available}</span>
+              </p>
             </div>
             <div className="mt-5 grid gap-3 sm:grid-cols-3">
-              <QuantityInput label="Returned" value={value.returned} onChange={(next) => updateValue(line.id, 'returned', next)} />
-              <QuantityInput label="Still on rent" value={value.balance} onChange={(next) => updateValue(line.id, 'balance', next)} />
-              <QuantityInput label="Missing / damaged" value={value.shortfall} onChange={(next) => updateValue(line.id, 'shortfall', next)} />
+              <QuantityInput name={`returned-${line.id}`} label="Returned" value={value.returned} max={available} onChange={(next) => updateValue(line.id, 'returned', next)} />
+              <QuantityInput name={`balance-${line.id}`} label="Balance accounted" value={value.balance} max={available} onChange={(next) => updateValue(line.id, 'balance', next)} />
+              <QuantityInput name={`shortfall-${line.id}`} label="Missing / damaged" value={value.shortfall} max={available} onChange={(next) => updateValue(line.id, 'shortfall', next)} />
             </div>
-            {accounted !== line.deliveredQty && (
-              <p className="mt-3 text-xs font-medium text-[#b16b00]">
-                Accounted {accounted} of {line.deliveredQty}. Adjust the quantities before submitting.
+            {accounted > available ? (
+              <p role="alert" className="mt-3 text-xs font-medium text-danger">
+                This note accounts for {accounted}, but only {available} remains. Reduce the quantities by {accounted - available}.
+              </p>
+            ) : (
+              <p className="mt-3 text-xs text-[#526977]">
+                This note accounts for {accounted}. {remainingAfterThisNote > 0
+                  ? `${remainingAfterThisNote} will remain available for a later note.`
+                  : 'This item is fully accounted for.'}
               </p>
             )}
             {value.shortfall > 0 && (
@@ -252,7 +261,9 @@ function RetentionForm({
                   Shortfall type
                   <select
                     className="input mt-2"
+                    name={`shortfall-type-${line.id}`}
                     required
+                    autoComplete="off"
                     value={reasons[line.id] ?? ''}
                     onChange={(event) => setReasons((current) => ({
                       ...current,
@@ -269,7 +280,9 @@ function RetentionForm({
                   Responsible party
                   <select
                     className="input mt-2"
+                    name={`responsible-party-${line.id}`}
                     required
+                    autoComplete="off"
                     value={responsible[line.id] ?? ''}
                     onChange={(event) => setResponsible((current) => ({
                       ...current,
@@ -288,7 +301,10 @@ function RetentionForm({
       })}
       <Remarks value={remarks} required={hasOtherReason} onChange={setRemarks} />
       {error && <ErrorMessage message={error} />}
-      <button className="button-primary w-full" disabled={pending || hasInvalidTotal}>
+      {hasNoAccountedQuantity && (
+        <p className="text-center text-xs text-[#526977]">Enter at least one quantity to submit this note.</p>
+      )}
+      <button className="button-primary w-full" disabled={pending || hasOverAccountedLine || hasNoAccountedQuantity}>
         {pending ? 'Submitting…' : 'Submit note'}
       </button>
       <PublicFooter />
@@ -296,16 +312,32 @@ function RetentionForm({
   )
 }
 
-function QuantityInput({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
+function QuantityInput({
+  name,
+  label,
+  value,
+  max,
+  onChange,
+}: {
+  name: string
+  label: string
+  value: number
+  max: number
+  onChange: (value: number) => void
+}) {
   return (
     <label className="text-xs font-semibold text-[#071c23]">
       {label}
       <input
         className="input mt-2"
+        name={name}
         type="number"
+        inputMode="numeric"
         min="0"
+        max={max}
         step="1"
         required
+        autoComplete="off"
         value={value}
         onChange={(event) => onChange(event.currentTarget.valueAsNumber)}
       />
@@ -319,9 +351,11 @@ function Remarks({ value, required, onChange }: { value: string; required: boole
       Remarks
       <textarea
         className="input mt-2 min-h-24 resize-y font-normal"
+        name="remarks"
         maxLength={500}
-        placeholder="Anything the store admin should know"
+        placeholder="Example: packaging was damaged…"
         required={required}
+        autoComplete="off"
         value={value}
         onChange={(event) => onChange(event.currentTarget.value)}
       />
@@ -335,14 +369,9 @@ function SubmissionComplete() {
       <ShieldCheckIcon />
       <h2 className="mt-4 text-lg font-semibold text-[#071c23]">Note submitted</h2>
       <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#526977]">
-        Opening the store admin approval queue. Stock will update only after approval.
+        The Store Admin will verify the physical quantities. Stock will update only after approval.
       </p>
-      <a
-        href="/approvals"
-        className="mt-5 inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-[#078486] bg-[#078486] px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#096f72] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#078486] focus-visible:ring-offset-2"
-      >
-        View approval queue
-      </a>
+      <p className="mt-5 text-sm font-semibold text-[#087a7d]">You can safely close this page.</p>
     </section>
   )
 }
@@ -352,7 +381,7 @@ function ErrorMessage({ message }: { message: string }) {
 }
 
 function PublicFooter() {
-  return <p className="text-center text-xs text-[#526977]">No login required — this link is single-use and time-bound.</p>
+  return <p className="text-center text-xs text-[#526977]">No login required. You can correct this note until store counting begins or the link expires.</p>
 }
 
 function PublicShell({ children }: { children: React.ReactNode }) {

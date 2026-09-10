@@ -56,6 +56,16 @@ export function reconciliationIsComplete(lines: ReconciliationLine[]) {
       line.returnedQty + line.balanceQty + line.missingDamagedQty === line.deliveredQty)
 }
 
+export function fieldSubmissionIssue(status: string, hasPhysicalCount: boolean) {
+  if (!['draft', 'reopened', 'pending_approval'].includes(status)) {
+    return status === 'rejected'
+      ? 'The rejected retention note must be reopened before creating a field link'
+      : 'The retention note is not open for field submission'
+  }
+  if (hasPhysicalCount) return 'A field link cannot be created after physical counting has started'
+  return null
+}
+
 function snapshot(value: object | null): Record<string, unknown> | null {
   return value ? (JSON.parse(JSON.stringify(value)) as Record<string, unknown>) : null
 }
@@ -270,6 +280,33 @@ export function createRetentionService(db: Database, config: RetentionConfig) {
     return result.rows
   }
 
+  async function availableQuantities(noteId: string, orderId: string) {
+    const result = await db.execute<{ equipmentItemId: string; availableQty: number }>(sql`
+      WITH delivered AS (
+        SELECT line.equipment_item_id, SUM(line.counted_qty)::int AS quantity
+        FROM ${deliveryNoteLines} line
+        JOIN ${deliveryNotes} note ON note.id = line.delivery_note_id
+        WHERE note.order_id = ${orderId}::uuid AND note.status = 'approved'
+        GROUP BY line.equipment_item_id
+      ), accounted_elsewhere AS (
+        SELECT line.equipment_item_id,
+          SUM(line.returned_qty + line.balance_qty + line.missing_damaged_qty)::int AS quantity
+        FROM ${retentionNoteLines} line
+        JOIN ${retentionNotes} note ON note.id = line.retention_note_id
+        WHERE note.order_id = ${orderId}::uuid
+          AND note.id <> ${noteId}::uuid
+          AND note.status <> 'rejected'
+        GROUP BY line.equipment_item_id
+      )
+      SELECT delivered.equipment_item_id AS "equipmentItemId",
+        GREATEST(delivered.quantity - COALESCE(accounted_elsewhere.quantity, 0), 0)::int AS "availableQty"
+      FROM delivered
+      LEFT JOIN accounted_elsewhere
+        ON accounted_elsewhere.equipment_item_id = delivered.equipment_item_id
+    `)
+    return new Map(result.rows.map((line) => [line.equipmentItemId, line.availableQty]))
+  }
+
   return {
     async ownsNote(id: string, actor: SessionUser) {
       const condition = actor.storeId
@@ -383,10 +420,12 @@ export function createRetentionService(db: Database, config: RetentionConfig) {
     getRetentionNote: noteDetail,
 
     async getLink(id: string, actor: AuditActor) {
-      const note = await noteHeader(id, actor)
-      if (note.status === 'approved') {
-        throw new DataConflictError('An approved retention note no longer accepts field submissions')
-      }
+      const note = await noteDetail(id, actor)
+      const issue = fieldSubmissionIssue(
+        note.status,
+        note.lines.some((line) => line.countedReturnedQty !== null),
+      )
+      if (issue) throw new DataConflictError(issue)
       let [token] = await db.select().from(noteTokens).where(and(
         eq(noteTokens.noteType, 'retention_note'),
         eq(noteTokens.noteId, id),
@@ -414,10 +453,12 @@ export function createRetentionService(db: Database, config: RetentionConfig) {
     },
 
     async regenerateLink(id: string, input: NoteLinkRecipient, actor: AuditActor) {
-      const note = await noteHeader(id, actor)
-      if (note.status === 'approved') {
-        throw new DataConflictError('An approved retention note cannot receive a new link')
-      }
+      const note = await noteDetail(id, actor)
+      const issue = fieldSubmissionIssue(
+        note.status,
+        note.lines.some((line) => line.countedReturnedQty !== null),
+      )
+      if (issue) throw new DataConflictError(issue)
       if (!note.storeId) throw new DataConflictError('The retention note has no store')
       const recipient = await resolveFieldStaffRecipient(db, input.fieldStaffUserId, id, note.storeId)
       const now = new Date()
@@ -456,15 +497,25 @@ export function createRetentionService(db: Database, config: RetentionConfig) {
     async readByToken(raw: string, requestId: string) {
       const token = await tokenRecord(raw, requestId)
       const note = await noteDetail(token.noteId)
-      if (!['draft', 'reopened', 'pending_approval'].includes(note.status)) {
-        throw new DataConflictError('The retention note is not open for field submission')
-      }
+      const issue = fieldSubmissionIssue(
+        note.status,
+        note.lines.some((line) => line.countedReturnedQty !== null),
+      )
+      if (issue) throw new DataConflictError(issue)
+      const availableByItem = await availableQuantities(note.id, note.orderId)
       await db.insert(auditLogs).values({
         actorType: 'token', actorId: token.id, action: 'note_token.read',
         entityType: 'retention_note', entityId: note.id, before: null,
         after: { status: note.status }, requestId,
       })
-      return { ...note, tokenExpiresAt: token.expiresAt }
+      return {
+        ...note,
+        lines: note.lines.map((line) => ({
+          ...line,
+          availableQty: availableByItem.get(line.equipmentItemId) ?? 0,
+        })),
+        tokenExpiresAt: token.expiresAt,
+      }
     },
 
     async submitByToken(raw: string, input: RetentionNoteSubmission, requestId: string) {
@@ -480,6 +531,17 @@ export function createRetentionService(db: Database, config: RetentionConfig) {
       if (input.lines.length !== before.lines.length
         || input.lines.some((line) => !known.has(line.lineId))) {
         throw new DataConflictError('Submission must include every retention note line exactly once')
+      }
+      const availableByItem = await availableQuantities(before.id, before.orderId)
+      for (const line of input.lines) {
+        const current = before.lines.find((candidate) => candidate.id === line.lineId)!
+        const accountedQty = line.returnedQty + line.balanceQty + line.missingDamagedQty
+        const availableQty = availableByItem.get(current.equipmentItemId) ?? 0
+        if (accountedQty > availableQty) {
+          throw new DataConflictError(
+            `${current.equipmentName} accounts for ${accountedQty}, but only ${availableQty} remains`,
+          )
+        }
       }
       const normalized = input.lines.map((line) => ({
         lineId: line.lineId,

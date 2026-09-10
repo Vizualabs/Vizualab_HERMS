@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import { fileURLToPath } from 'node:url'
 
+import { deliveryFieldSubmissionIssue } from './delivery'
+
 describe('Stock write boundary', () => {
   test('keeps application stock-ledger inserts inside note approval/reversal services', async () => {
     const files = new Bun.Glob('**/*.ts').scan({ cwd: fileURLToPath(new URL('../../..', import.meta.url)) })
@@ -15,5 +17,18 @@ describe('Stock write boundary', () => {
     expect(insertLocations).toEqual(expect.arrayContaining([expect.stringContaining('packages/db/src/delivery.ts')]))
     expect(insertLocations).toEqual(expect.arrayContaining([expect.stringContaining('packages/db/src/retention.ts')]))
     expect(insertLocations).toHaveLength(2)
+  })
+})
+
+describe('Delivery Note field-link boundary', () => {
+  test('allows draft and pending notes only before physical counting', () => {
+    expect(deliveryFieldSubmissionIssue('draft', false)).toBeNull()
+    expect(deliveryFieldSubmissionIssue('pending_approval', false)).toBeNull()
+    expect(deliveryFieldSubmissionIssue('pending_approval', true)).toContain('physical counting')
+  })
+
+  test('requires rejected notes to be reopened', () => {
+    expect(deliveryFieldSubmissionIssue('rejected', false)).toContain('must be reopened')
+    expect(deliveryFieldSubmissionIssue('approved', false)).toContain('not open')
   })
 })

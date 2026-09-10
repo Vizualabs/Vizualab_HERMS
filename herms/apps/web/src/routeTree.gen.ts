@@ -24,11 +24,11 @@ import { Route as AuthenticatedStockRouteImport } from './routes/_authenticated/
 import { Route as NotesTokenRouteImport } from './routes/notes.$token'
 import { Route as QuotesTokenRouteImport } from './routes/quotes.$token'
 import { Route as AuthenticatedApprovalsNoteIdRouteImport } from './routes/_authenticated/approvals.$noteId'
-import { Route as AuthenticatedCustomersCustomerIdRouteImport } from './routes/_authenticated/customers.$customerId'
+import { Route as AuthenticatedCustomersCustomerIdRouteImport } from './routes/_authenticated/customers_.$customerId'
 import { Route as AuthenticatedDeliveryNotesNoteIdRouteImport } from './routes/_authenticated/delivery-notes.$noteId'
-import { Route as AuthenticatedItemsItemIdRouteImport } from './routes/_authenticated/items.$itemId'
-import { Route as AuthenticatedOrdersOrderIdRouteImport } from './routes/_authenticated/orders.$orderId'
-import { Route as AuthenticatedQuotationsQuotationIdRouteImport } from './routes/_authenticated/quotations.$quotationId'
+import { Route as AuthenticatedItemsItemIdRouteImport } from './routes/_authenticated/items_.$itemId'
+import { Route as AuthenticatedOrdersOrderIdRouteImport } from './routes/_authenticated/orders_.$orderId'
+import { Route as AuthenticatedQuotationsQuotationIdRouteImport } from './routes/_authenticated/quotations_.$quotationId'
 import { Route as AuthenticatedRetentionNotesNoteIdRouteImport } from './routes/_authenticated/retention-notes.$noteId'
 
 const AuthenticatedRoute = AuthenticatedRouteImport.update({
@@ -108,9 +108,9 @@ const AuthenticatedApprovalsNoteIdRoute =
   } as any)
 const AuthenticatedCustomersCustomerIdRoute =
   AuthenticatedCustomersCustomerIdRouteImport.update({
-    id: '/$customerId',
-    path: '/$customerId',
-    getParentRoute: () => AuthenticatedCustomersRoute,
+    id: '/customers_/$customerId',
+    path: '/customers/$customerId',
+    getParentRoute: () => AuthenticatedRoute,
   } as any)
 const AuthenticatedDeliveryNotesNoteIdRoute =
   AuthenticatedDeliveryNotesNoteIdRouteImport.update({
@@ -120,21 +120,21 @@ const AuthenticatedDeliveryNotesNoteIdRoute =
   } as any)
 const AuthenticatedItemsItemIdRoute =
   AuthenticatedItemsItemIdRouteImport.update({
-    id: '/$itemId',
-    path: '/$itemId',
-    getParentRoute: () => AuthenticatedItemsRoute,
+    id: '/items_/$itemId',
+    path: '/items/$itemId',
+    getParentRoute: () => AuthenticatedRoute,
   } as any)
 const AuthenticatedOrdersOrderIdRoute =
   AuthenticatedOrdersOrderIdRouteImport.update({
-    id: '/$orderId',
-    path: '/$orderId',
-    getParentRoute: () => AuthenticatedOrdersRoute,
+    id: '/orders_/$orderId',
+    path: '/orders/$orderId',
+    getParentRoute: () => AuthenticatedRoute,
   } as any)
 const AuthenticatedQuotationsQuotationIdRoute =
   AuthenticatedQuotationsQuotationIdRouteImport.update({
-    id: '/$quotationId',
-    path: '/$quotationId',
-    getParentRoute: () => AuthenticatedQuotationsRoute,
+    id: '/quotations_/$quotationId',
+    path: '/quotations/$quotationId',
+    getParentRoute: () => AuthenticatedRoute,
   } as any)
 const AuthenticatedRetentionNotesNoteIdRoute =
   AuthenticatedRetentionNotesNoteIdRouteImport.update({
@@ -148,12 +148,12 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/approvals': typeof AuthenticatedApprovalsRouteWithChildren
   '/claims': typeof AuthenticatedClaimsRoute
-  '/customers': typeof AuthenticatedCustomersRouteWithChildren
+  '/customers': typeof AuthenticatedCustomersRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/finance': typeof AuthenticatedFinanceRoute
-  '/items': typeof AuthenticatedItemsRouteWithChildren
-  '/orders': typeof AuthenticatedOrdersRouteWithChildren
-  '/quotations': typeof AuthenticatedQuotationsRouteWithChildren
+  '/items': typeof AuthenticatedItemsRoute
+  '/orders': typeof AuthenticatedOrdersRoute
+  '/quotations': typeof AuthenticatedQuotationsRoute
   '/stock': typeof AuthenticatedStockRoute
   '/notes/$token': typeof NotesTokenRoute
   '/quotes/$token': typeof QuotesTokenRoute
@@ -169,12 +169,12 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/approvals': typeof AuthenticatedApprovalsRouteWithChildren
   '/claims': typeof AuthenticatedClaimsRoute
-  '/customers': typeof AuthenticatedCustomersRouteWithChildren
+  '/customers': typeof AuthenticatedCustomersRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/finance': typeof AuthenticatedFinanceRoute
-  '/items': typeof AuthenticatedItemsRouteWithChildren
-  '/orders': typeof AuthenticatedOrdersRouteWithChildren
-  '/quotations': typeof AuthenticatedQuotationsRouteWithChildren
+  '/items': typeof AuthenticatedItemsRoute
+  '/orders': typeof AuthenticatedOrdersRoute
+  '/quotations': typeof AuthenticatedQuotationsRoute
   '/stock': typeof AuthenticatedStockRoute
   '/notes/$token': typeof NotesTokenRoute
   '/quotes/$token': typeof QuotesTokenRoute
@@ -193,22 +193,22 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/_authenticated/approvals': typeof AuthenticatedApprovalsRouteWithChildren
   '/_authenticated/claims': typeof AuthenticatedClaimsRoute
-  '/_authenticated/customers': typeof AuthenticatedCustomersRouteWithChildren
+  '/_authenticated/customers': typeof AuthenticatedCustomersRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/finance': typeof AuthenticatedFinanceRoute
-  '/_authenticated/items': typeof AuthenticatedItemsRouteWithChildren
-  '/_authenticated/orders': typeof AuthenticatedOrdersRouteWithChildren
-  '/_authenticated/quotations': typeof AuthenticatedQuotationsRouteWithChildren
+  '/_authenticated/items': typeof AuthenticatedItemsRoute
+  '/_authenticated/orders': typeof AuthenticatedOrdersRoute
+  '/_authenticated/quotations': typeof AuthenticatedQuotationsRoute
   '/_authenticated/stock': typeof AuthenticatedStockRoute
   '/notes/$token': typeof NotesTokenRoute
   '/quotes/$token': typeof QuotesTokenRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/approvals/$noteId': typeof AuthenticatedApprovalsNoteIdRoute
-  '/_authenticated/customers/$customerId': typeof AuthenticatedCustomersCustomerIdRoute
+  '/_authenticated/customers_/$customerId': typeof AuthenticatedCustomersCustomerIdRoute
   '/_authenticated/delivery-notes/$noteId': typeof AuthenticatedDeliveryNotesNoteIdRoute
-  '/_authenticated/items/$itemId': typeof AuthenticatedItemsItemIdRoute
-  '/_authenticated/orders/$orderId': typeof AuthenticatedOrdersOrderIdRoute
-  '/_authenticated/quotations/$quotationId': typeof AuthenticatedQuotationsQuotationIdRoute
+  '/_authenticated/items_/$itemId': typeof AuthenticatedItemsItemIdRoute
+  '/_authenticated/orders_/$orderId': typeof AuthenticatedOrdersOrderIdRoute
+  '/_authenticated/quotations_/$quotationId': typeof AuthenticatedQuotationsQuotationIdRoute
   '/_authenticated/retention-notes/$noteId': typeof AuthenticatedRetentionNotesNoteIdRoute
 }
 export interface FileRouteTypes {
@@ -273,11 +273,11 @@ export interface FileRouteTypes {
     | '/quotes/$token'
     | '/_authenticated/'
     | '/_authenticated/approvals/$noteId'
-    | '/_authenticated/customers/$customerId'
+    | '/_authenticated/customers_/$customerId'
     | '/_authenticated/delivery-notes/$noteId'
-    | '/_authenticated/items/$itemId'
-    | '/_authenticated/orders/$orderId'
-    | '/_authenticated/quotations/$quotationId'
+    | '/_authenticated/items_/$itemId'
+    | '/_authenticated/orders_/$orderId'
+    | '/_authenticated/quotations_/$quotationId'
     | '/_authenticated/retention-notes/$noteId'
   fileRoutesById: FileRoutesById
 }
@@ -395,12 +395,12 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedApprovalsNoteIdRouteImport
       parentRoute: typeof AuthenticatedApprovalsRoute
     }
-    '/_authenticated/customers/$customerId': {
-      id: '/_authenticated/customers/$customerId'
-      path: '/$customerId'
+    '/_authenticated/customers_/$customerId': {
+      id: '/_authenticated/customers_/$customerId'
+      path: '/customers/$customerId'
       fullPath: '/customers/$customerId'
       preLoaderRoute: typeof AuthenticatedCustomersCustomerIdRouteImport
-      parentRoute: typeof AuthenticatedCustomersRoute
+      parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/delivery-notes/$noteId': {
       id: '/_authenticated/delivery-notes/$noteId'
@@ -409,26 +409,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDeliveryNotesNoteIdRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    '/_authenticated/items/$itemId': {
-      id: '/_authenticated/items/$itemId'
-      path: '/$itemId'
+    '/_authenticated/items_/$itemId': {
+      id: '/_authenticated/items_/$itemId'
+      path: '/items/$itemId'
       fullPath: '/items/$itemId'
       preLoaderRoute: typeof AuthenticatedItemsItemIdRouteImport
-      parentRoute: typeof AuthenticatedItemsRoute
+      parentRoute: typeof AuthenticatedRoute
     }
-    '/_authenticated/orders/$orderId': {
-      id: '/_authenticated/orders/$orderId'
-      path: '/$orderId'
+    '/_authenticated/orders_/$orderId': {
+      id: '/_authenticated/orders_/$orderId'
+      path: '/orders/$orderId'
       fullPath: '/orders/$orderId'
       preLoaderRoute: typeof AuthenticatedOrdersOrderIdRouteImport
-      parentRoute: typeof AuthenticatedOrdersRoute
+      parentRoute: typeof AuthenticatedRoute
     }
-    '/_authenticated/quotations/$quotationId': {
-      id: '/_authenticated/quotations/$quotationId'
-      path: '/$quotationId'
+    '/_authenticated/quotations_/$quotationId': {
+      id: '/_authenticated/quotations_/$quotationId'
+      path: '/quotations/$quotationId'
       fullPath: '/quotations/$quotationId'
       preLoaderRoute: typeof AuthenticatedQuotationsQuotationIdRouteImport
-      parentRoute: typeof AuthenticatedQuotationsRoute
+      parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/retention-notes/$noteId': {
       id: '/_authenticated/retention-notes/$noteId'
@@ -454,85 +454,42 @@ const AuthenticatedApprovalsRouteWithChildren =
     AuthenticatedApprovalsRouteChildren,
   )
 
-interface AuthenticatedCustomersRouteChildren {
-  AuthenticatedCustomersCustomerIdRoute: typeof AuthenticatedCustomersCustomerIdRoute
-}
-
-const AuthenticatedCustomersRouteChildren: AuthenticatedCustomersRouteChildren =
-  {
-    AuthenticatedCustomersCustomerIdRoute:
-      AuthenticatedCustomersCustomerIdRoute,
-  }
-
-const AuthenticatedCustomersRouteWithChildren =
-  AuthenticatedCustomersRoute._addFileChildren(
-    AuthenticatedCustomersRouteChildren,
-  )
-
-interface AuthenticatedItemsRouteChildren {
-  AuthenticatedItemsItemIdRoute: typeof AuthenticatedItemsItemIdRoute
-}
-
-const AuthenticatedItemsRouteChildren: AuthenticatedItemsRouteChildren = {
-  AuthenticatedItemsItemIdRoute: AuthenticatedItemsItemIdRoute,
-}
-
-const AuthenticatedItemsRouteWithChildren =
-  AuthenticatedItemsRoute._addFileChildren(AuthenticatedItemsRouteChildren)
-
-interface AuthenticatedOrdersRouteChildren {
-  AuthenticatedOrdersOrderIdRoute: typeof AuthenticatedOrdersOrderIdRoute
-}
-
-const AuthenticatedOrdersRouteChildren: AuthenticatedOrdersRouteChildren = {
-  AuthenticatedOrdersOrderIdRoute: AuthenticatedOrdersOrderIdRoute,
-}
-
-const AuthenticatedOrdersRouteWithChildren =
-  AuthenticatedOrdersRoute._addFileChildren(AuthenticatedOrdersRouteChildren)
-
-interface AuthenticatedQuotationsRouteChildren {
-  AuthenticatedQuotationsQuotationIdRoute: typeof AuthenticatedQuotationsQuotationIdRoute
-}
-
-const AuthenticatedQuotationsRouteChildren: AuthenticatedQuotationsRouteChildren =
-  {
-    AuthenticatedQuotationsQuotationIdRoute:
-      AuthenticatedQuotationsQuotationIdRoute,
-  }
-
-const AuthenticatedQuotationsRouteWithChildren =
-  AuthenticatedQuotationsRoute._addFileChildren(
-    AuthenticatedQuotationsRouteChildren,
-  )
-
 interface AuthenticatedRouteChildren {
   AuthenticatedApprovalsRoute: typeof AuthenticatedApprovalsRouteWithChildren
   AuthenticatedClaimsRoute: typeof AuthenticatedClaimsRoute
-  AuthenticatedCustomersRoute: typeof AuthenticatedCustomersRouteWithChildren
+  AuthenticatedCustomersRoute: typeof AuthenticatedCustomersRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedFinanceRoute: typeof AuthenticatedFinanceRoute
-  AuthenticatedItemsRoute: typeof AuthenticatedItemsRouteWithChildren
-  AuthenticatedOrdersRoute: typeof AuthenticatedOrdersRouteWithChildren
-  AuthenticatedQuotationsRoute: typeof AuthenticatedQuotationsRouteWithChildren
+  AuthenticatedItemsRoute: typeof AuthenticatedItemsRoute
+  AuthenticatedOrdersRoute: typeof AuthenticatedOrdersRoute
+  AuthenticatedQuotationsRoute: typeof AuthenticatedQuotationsRoute
   AuthenticatedStockRoute: typeof AuthenticatedStockRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
+  AuthenticatedCustomersCustomerIdRoute: typeof AuthenticatedCustomersCustomerIdRoute
   AuthenticatedDeliveryNotesNoteIdRoute: typeof AuthenticatedDeliveryNotesNoteIdRoute
+  AuthenticatedItemsItemIdRoute: typeof AuthenticatedItemsItemIdRoute
+  AuthenticatedOrdersOrderIdRoute: typeof AuthenticatedOrdersOrderIdRoute
+  AuthenticatedQuotationsQuotationIdRoute: typeof AuthenticatedQuotationsQuotationIdRoute
   AuthenticatedRetentionNotesNoteIdRoute: typeof AuthenticatedRetentionNotesNoteIdRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedApprovalsRoute: AuthenticatedApprovalsRouteWithChildren,
   AuthenticatedClaimsRoute: AuthenticatedClaimsRoute,
-  AuthenticatedCustomersRoute: AuthenticatedCustomersRouteWithChildren,
+  AuthenticatedCustomersRoute: AuthenticatedCustomersRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedFinanceRoute: AuthenticatedFinanceRoute,
-  AuthenticatedItemsRoute: AuthenticatedItemsRouteWithChildren,
-  AuthenticatedOrdersRoute: AuthenticatedOrdersRouteWithChildren,
-  AuthenticatedQuotationsRoute: AuthenticatedQuotationsRouteWithChildren,
+  AuthenticatedItemsRoute: AuthenticatedItemsRoute,
+  AuthenticatedOrdersRoute: AuthenticatedOrdersRoute,
+  AuthenticatedQuotationsRoute: AuthenticatedQuotationsRoute,
   AuthenticatedStockRoute: AuthenticatedStockRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
+  AuthenticatedCustomersCustomerIdRoute: AuthenticatedCustomersCustomerIdRoute,
   AuthenticatedDeliveryNotesNoteIdRoute: AuthenticatedDeliveryNotesNoteIdRoute,
+  AuthenticatedItemsItemIdRoute: AuthenticatedItemsItemIdRoute,
+  AuthenticatedOrdersOrderIdRoute: AuthenticatedOrdersOrderIdRoute,
+  AuthenticatedQuotationsQuotationIdRoute:
+    AuthenticatedQuotationsQuotationIdRoute,
   AuthenticatedRetentionNotesNoteIdRoute:
     AuthenticatedRetentionNotesNoteIdRoute,
 }

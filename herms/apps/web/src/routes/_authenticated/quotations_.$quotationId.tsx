@@ -7,7 +7,7 @@ import { ManualLinkShare, WhatsAppShareButton } from '../../components/ManualSha
 import { queryKeys } from '../../queries'
 import { createQuotationShareMessage } from '../../whatsapp'
 
-export const Route = createFileRoute('/_authenticated/quotations/$quotationId')({ component: QuotationDetailPage })
+export const Route = createFileRoute('/_authenticated/quotations_/$quotationId')({ component: QuotationDetailPage })
 
 function QuotationDetailPage() {
   const { quotationId } = Route.useParams()

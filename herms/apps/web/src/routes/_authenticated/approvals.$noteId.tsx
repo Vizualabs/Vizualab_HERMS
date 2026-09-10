@@ -1,8 +1,11 @@
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
+import { useState } from 'react'
 
 import { ApiError, api, type DeliveryNoteDetail, type RetentionNoteDetail } from '../../api'
+import { ManualLinkShare } from '../../components/ManualShareActions'
 import { queryKeys } from '../../queries'
+import { createNoteShareMessage } from '../../whatsapp'
 
 export const Route = createFileRoute('/_authenticated/approvals/$noteId')({
   component: ApprovalDetailPage,
@@ -11,6 +14,13 @@ export const Route = createFileRoute('/_authenticated/approvals/$noteId')({
 function ApprovalDetailPage() {
   const { noteId } = Route.useParams()
   const client = useQueryClient()
+  const [reopenedLink, setReopenedLink] = useState<{
+    noteType: 'Delivery' | 'Retention'
+    noteNumber: string
+    orderNumber: string
+    customerName: string
+    link: string
+  } | null>(null)
   const note = useQuery(queryOptions({
     queryKey: queryKeys.approvalNote(noteId),
     queryFn: () => api.approvalNote(noteId),
@@ -52,7 +62,18 @@ function ApprovalDetailPage() {
       noteType === 'retention_note'
         ? api.reopenRetentionNote(noteId)
         : api.reopenDeliveryNote(noteId),
-    onSuccess: refresh,
+    onSuccess: async (reopenedNote) => {
+      if (reopenedNote.submissionLink) {
+        setReopenedLink({
+          noteType: reopenedNote.noteType === 'retention_note' ? 'Retention' : 'Delivery',
+          noteNumber: reopenedNote.noteType === 'retention_note' ? reopenedNote.rnNumber : reopenedNote.dnNumber,
+          orderNumber: reopenedNote.orderNumber,
+          customerName: reopenedNote.customerName,
+          link: reopenedNote.submissionLink,
+        })
+      }
+      await refresh()
+    },
   })
   const reverse = useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string }) =>
@@ -93,6 +114,17 @@ function ApprovalDetailPage() {
           onReject={() => reject.mutate('delivery_note')}
           onReopen={() => reopen.mutate('delivery_note')}
         />}
+    {reopenedLink && <ManualLinkShare
+      label={`${reopenedLink.noteType} submission link created`}
+      link={reopenedLink.link}
+      message={createNoteShareMessage({
+        noteType: reopenedLink.noteType,
+        noteNumber: reopenedLink.noteNumber,
+        orderNumber: reopenedLink.orderNumber,
+        customerName: reopenedLink.customerName,
+        submissionLink: reopenedLink.link,
+      })}
+    />}
     {error && <p role="alert" className="mt-4 text-sm text-danger">
       {error instanceof ApiError ? error.message : 'Unable to update note'}
     </p>}
@@ -227,7 +259,9 @@ function RetentionApproval({
             {line.discrepancyId && line.discrepancyStatus === 'written_off' && !line.writeOffReversed && <form className="mt-2 flex max-w-md gap-2" onSubmit={(event) => {
               event.preventDefault()
               const form = new FormData(event.currentTarget)
-              onReverse(line.discrepancyId!, String(form.get('reason')))
+              if (window.confirm('Reverse this write-off and restore the quantity to stock?')) {
+                onReverse(line.discrepancyId!, String(form.get('reason')))
+              }
             }}>
               <input className="input" name="reason" required maxLength={500} placeholder="Reversal reason" aria-label={`Reversal reason for ${line.equipmentName}`} />
               <button className="button-secondary whitespace-nowrap" disabled={reversePending}>Reverse</button>
@@ -256,10 +290,14 @@ function ApprovalActions({
 }) {
   return <div className="mt-6 flex flex-wrap gap-3">
     {note.status === 'pending_approval' && <>
-      <button className="button-primary" disabled={!allCounted || pending} onClick={onApprove}>
+      <button className="button-primary" disabled={!allCounted || pending} onClick={() => {
+        if (window.confirm('Approve this physical count and post its stock movements?')) onApprove()
+      }}>
         Approve and post stock
       </button>
-      <button className="button-secondary" disabled={pending} onClick={onReject}>Reject</button>
+      <button className="button-secondary" disabled={pending} onClick={() => {
+        if (window.confirm('Reject this note and revoke its field link?')) onReject()
+      }}>Reject</button>
     </>}
     {note.status === 'rejected' && <button className="button-primary" disabled={pending} onClick={onReopen}>
       Reopen and create link

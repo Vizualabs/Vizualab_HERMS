@@ -201,16 +201,12 @@ export function createApp({
         const parsed = await validatedJson(c, retentionNoteSubmissionSchema)
         if ('response' in parsed) return parsed.response
         const note = await retention.submitByToken(token, parsed.data, requestId)
-        return c.json({
-          data: { ...note, approvalPath: '/approvals' as const },
-        })
+        return c.json({ data: note })
       }
       const parsed = await validatedJson(c, deliveryNoteSubmissionSchema)
       if ('response' in parsed) return parsed.response
       const note = await delivery.submitByToken(token, parsed.data, requestId)
-      return c.json({
-        data: { ...note, approvalPath: '/approvals' as const },
-      })
+      return c.json({ data: note })
     })
 
   app.use('/api/*', authenticate(identity, auth))

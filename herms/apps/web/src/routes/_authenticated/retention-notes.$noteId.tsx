@@ -35,6 +35,9 @@ function RetentionNotePage() {
   const data = note.data
   const submissionLink = link ?? data.submissionLink ?? null
   const error = getLink.error || regenerate.error
+  const hasPhysicalCount = data.lines.some((line) => line.countedReturnedQty !== null)
+  const canManageLink = ['draft', 'reopened', 'pending_approval'].includes(data.status)
+    && !hasPhysicalCount
   return <div>
     <Link to="/orders/$orderId" params={{ orderId: data.orderId }} className="text-sm font-medium text-primary hover:underline">
       Back to order
@@ -70,15 +73,25 @@ function RetentionNotePage() {
           </tr>)}</tbody>
         </table>
       </div>
-      {data.status !== 'approved' && <div className="mt-6 flex flex-wrap gap-3">
-        <button className="button-secondary" disabled={getLink.isPending} onClick={() => getLink.mutate()}>
+      {canManageLink && <div className="mt-6 flex flex-wrap gap-3">
+        <button type="button" className="button-secondary" disabled={getLink.isPending || regenerate.isPending} onClick={() => getLink.mutate()}>
           Get submission link
         </button>
-        <button className="button-secondary" disabled={regenerate.isPending} onClick={() => regenerate.mutate()}>
-          Revoke and regenerate
+        <button type="button" className="button-secondary" disabled={getLink.isPending || regenerate.isPending} onClick={() => {
+          if (window.confirm('Replace the current field link? The old link will stop working immediately.')) {
+            regenerate.mutate()
+          }
+        }}>
+          Replace field link
         </button>
       </div>}
-      {data.status !== 'approved' && submissionLink && <ManualLinkShare
+      {!canManageLink && data.status === 'rejected' && <p className="mt-6 text-sm text-muted-foreground">
+        This note was rejected. A Store Admin must reopen it before a new field link can be shared.
+      </p>}
+      {!canManageLink && data.status === 'pending_approval' && hasPhysicalCount && <p className="mt-6 text-sm text-muted-foreground">
+        Physical counting has started, so field corrections and replacement links are closed.
+      </p>}
+      {canManageLink && submissionLink && <ManualLinkShare
         label="Retention submission link"
         link={submissionLink}
         message={createNoteShareMessage({

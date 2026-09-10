@@ -75,26 +75,6 @@ function OrdersPage() {
     ...allRetentionNotes.map((note) => ({ ...note, kind: 'retention' as const })),
   ].sort((left, right) => noteTime(right) - noteTime(left)).slice(0, 6)
 
-  const openNote = (
-    order: OrderSummary,
-    type: 'delivery' | 'retention',
-    notes: DeliveryNoteSummary[] | RetentionNoteSummary[],
-  ) => {
-    const actionable = notes.find((note) =>
-      note.status === 'draft' || note.status === 'reopened' || note.status === 'pending_approval')
-
-    if (!actionable) {
-      if (order.status === 'open') {
-        window.location.assign(`/orders/${order.id}#create-${type}-note`)
-      } else if (notes[0]) {
-        window.location.assign(`/${type === 'delivery' ? 'delivery' : 'retention'}-notes/${notes[0].id}`)
-      }
-      return
-    }
-
-    window.location.assign(`/${type === 'delivery' ? 'delivery' : 'retention'}-notes/${actionable.id}`)
-  }
-
   const notesLoading = canManageNotes
     && (deliveryNotes.some((query) => query.isPending) || retentionNotes.some((query) => query.isPending))
   const supportingError = [
@@ -190,15 +170,19 @@ function OrdersPage() {
                       </td>
                       <td className="py-3.5 pl-3">
                         <div className="flex justify-end gap-2">
-                          <NoteButton
+                          <NoteActionLink
                             label={deliveryLoading ? 'Loading…' : 'Delivery note'}
+                            order={order}
+                            type="delivery"
+                            notes={delivery}
                             disabled={!canManageNotes || deliveryLoading || (order.status !== 'open' && delivery.length === 0)}
-                            onClick={() => openNote(order, 'delivery', delivery)}
                           />
-                          <NoteButton
+                          <NoteActionLink
                             label={retentionLoading ? 'Loading…' : 'Retention note'}
+                            order={order}
+                            type="retention"
+                            notes={retention}
                             disabled={!canManageNotes || retentionLoading || (order.status !== 'open' && retention.length === 0)}
-                            onClick={() => openNote(order, 'retention', retention)}
                           />
                         </div>
                       </td>
@@ -269,17 +253,44 @@ function SummaryCard({
   )
 }
 
-function NoteButton({ label, disabled, onClick }: { label: string; disabled: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      className="min-h-10 whitespace-nowrap rounded-lg border border-[#d6e0e2] bg-white px-4 text-xs font-semibold text-[#071c23] shadow-sm transition-colors hover:bg-[#f4f8f8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#078486] disabled:cursor-not-allowed disabled:opacity-50"
-      disabled={disabled}
-      onClick={onClick}
-    >
-      {label}
-    </button>
-  )
+const noteActionClassName = 'inline-flex min-h-10 items-center whitespace-nowrap rounded-lg border border-[#d6e0e2] bg-white px-4 text-xs font-semibold text-[#071c23] shadow-sm transition-colors hover:bg-[#f4f8f8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#078486]'
+
+function NoteActionLink({
+  label,
+  order,
+  type,
+  notes,
+  disabled,
+}: {
+  label: string
+  order: OrderSummary
+  type: 'delivery' | 'retention'
+  notes: DeliveryNoteSummary[] | RetentionNoteSummary[]
+  disabled: boolean
+}) {
+  if (disabled) {
+    return <span aria-disabled="true" className={`${noteActionClassName} cursor-not-allowed opacity-50`}>{label}</span>
+  }
+
+  const actionable = notes.find((note) =>
+    note.status === 'draft' || note.status === 'reopened' || note.status === 'pending_approval')
+  const selected = actionable ?? notes[0]
+
+  if (!selected && order.status === 'open') {
+    return <Link
+      to="/orders/$orderId"
+      params={{ orderId: order.id }}
+      hash={`create-${type}-note`}
+      preload="intent"
+      className={noteActionClassName}
+    >{label}</Link>
+  }
+  if (!selected) {
+    return <span aria-disabled="true" className={`${noteActionClassName} cursor-not-allowed opacity-50`}>{label}</span>
+  }
+  return type === 'delivery'
+    ? <Link to="/delivery-notes/$noteId" params={{ noteId: selected.id }} preload="intent" className={noteActionClassName}>{label}</Link>
+    : <Link to="/retention-notes/$noteId" params={{ noteId: selected.id }} preload="intent" className={noteActionClassName}>{label}</Link>
 }
 
 type DisplayStatus = 'awaiting_delivery' | 'delivered' | 'partially_returned' | 'closed' | 'cancelled'

@@ -33,6 +33,7 @@ export function ManualLinkShare({
   label: string
 }) {
   const [copied, setCopied] = useState(false)
+  const [copyError, setCopyError] = useState(false)
 
   return (
     <div className="mt-4 flex flex-col gap-3 rounded-xl border border-border bg-primary-soft p-4">
@@ -57,14 +58,20 @@ export function ManualLinkShare({
           className="button-primary"
           type="button"
           onClick={async () => {
-            await navigator.clipboard.writeText(link)
-            setCopied(true)
+            try {
+              await navigator.clipboard.writeText(link)
+              setCopied(true)
+              setCopyError(false)
+            } catch {
+              setCopyError(true)
+            }
           }}
         >
-          {copied ? 'Copied' : 'Copy link'}
+          <span aria-live="polite">{copied ? 'Copied' : 'Copy link'}</span>
         </button>
         <WhatsAppShareButton message={message} label={`Share ${label.toLowerCase()} via WhatsApp`} />
       </div>
+      {copyError && <p role="alert" className="text-xs text-danger">Copy failed. Select and copy the URL above manually.</p>}
     </div>
   )
 }

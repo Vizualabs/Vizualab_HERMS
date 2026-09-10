@@ -171,7 +171,11 @@ export type OrderDetail = OrderSummary & {
   currency: string
   timezone: string
   updatedAt: string
-  lines: CommercialLine[]
+  lines: Array<CommercialLine & {
+    allocatedDeliveryQty: number
+    approvedDeliveredQty: number
+    accountedRetentionQty: number
+  }>
 }
 
 export type Invoice = {
@@ -354,6 +358,7 @@ export type RetentionNoteLine = {
   equipmentName: string
   unitOfMeasure: string
   deliveredQty: number
+  availableQty?: number
   returnedQty: number
   balanceQty: number
   missingDamagedQty: number
@@ -431,9 +436,7 @@ export type ReconciliationLine = {
 
 export type TokenNote = DeliveryNoteDetail | RetentionNoteDetail
 
-export type SubmittedTokenNote = TokenNote & {
-  approvalPath: '/approvals'
-}
+export type SubmittedTokenNote = TokenNote
 
 export type NoteLink = { submissionLink: string; expiresAt: string }
 export type FieldStaffRecipient = {

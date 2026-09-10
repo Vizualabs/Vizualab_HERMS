@@ -39,6 +39,16 @@ export type DeliveryConfig = {
   publicAppUrl: string
 }
 
+export function deliveryFieldSubmissionIssue(status: string, hasPhysicalCount: boolean) {
+  if (!['draft', 'reopened', 'pending_approval'].includes(status)) {
+    return status === 'rejected'
+      ? 'The rejected delivery note must be reopened before creating a field link'
+      : 'The delivery note is not open for field submission'
+  }
+  if (hasPhysicalCount) return 'A field link cannot be created after physical counting has started'
+  return null
+}
+
 function snapshot(value: object | null): Record<string, unknown> | null {
   return value ? (JSON.parse(JSON.stringify(value)) as Record<string, unknown>) : null
 }
@@ -300,8 +310,12 @@ export function createDeliveryService(db: Database, config: DeliveryConfig) {
     getDeliveryNote: noteDetail,
 
     async getLink(id: string, actor: AuditActor) {
-      const note = await noteHeader(id, actor)
-      if (note.status === 'approved') throw new DataConflictError('An approved delivery note no longer accepts field submissions')
+      const note = await noteDetail(id, actor)
+      const issue = deliveryFieldSubmissionIssue(
+        note.status,
+        note.lines.some((line) => line.countedQty !== null),
+      )
+      if (issue) throw new DataConflictError(issue)
       let [token] = await db.select().from(noteTokens).where(and(
         eq(noteTokens.noteType, 'delivery_note'), eq(noteTokens.noteId, id), inArray(noteTokens.status, ['active', 'used']),
       )).limit(1)
@@ -322,8 +336,12 @@ export function createDeliveryService(db: Database, config: DeliveryConfig) {
     },
 
     async regenerateLink(id: string, input: NoteLinkRecipient, actor: AuditActor) {
-      const note = await noteHeader(id, actor)
-      if (note.status === 'approved') throw new DataConflictError('An approved delivery note cannot receive a new link')
+      const note = await noteDetail(id, actor)
+      const issue = deliveryFieldSubmissionIssue(
+        note.status,
+        note.lines.some((line) => line.countedQty !== null),
+      )
+      if (issue) throw new DataConflictError(issue)
       if (!note.storeId) throw new DataConflictError('The delivery note has no store')
       const recipient = await resolveFieldStaffRecipient(db, input.fieldStaffUserId, id, note.storeId)
       const now = new Date()
@@ -350,9 +368,11 @@ export function createDeliveryService(db: Database, config: DeliveryConfig) {
     async readByToken(raw: string, requestId: string) {
       const token = await tokenRecord(raw, requestId)
       const note = await noteDetail(token.noteId)
-      if (!['draft', 'reopened', 'pending_approval'].includes(note.status)) {
-        throw new DataConflictError('The delivery note is not open for field submission')
-      }
+      const issue = deliveryFieldSubmissionIssue(
+        note.status,
+        note.lines.some((line) => line.countedQty !== null),
+      )
+      if (issue) throw new DataConflictError(issue)
       await db.insert(auditLogs).values({
         actorType: 'token', actorId: token.id, action: 'note_token.read', entityType: 'delivery_note',
         entityId: note.id, before: null, after: { status: note.status }, requestId,

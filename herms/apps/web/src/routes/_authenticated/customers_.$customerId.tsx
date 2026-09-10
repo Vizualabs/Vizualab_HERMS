@@ -5,7 +5,7 @@ import { useState } from 'react'
 import { ApiError, api, formatMoney, type EquipmentItem } from '../../api'
 import { itemsQuery, queryKeys } from '../../queries'
 
-export const Route = createFileRoute('/_authenticated/customers/$customerId')({
+export const Route = createFileRoute('/_authenticated/customers_/$customerId')({
   component: CustomerDetailPage,
 })
 

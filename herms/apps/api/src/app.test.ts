@@ -971,8 +971,8 @@ describe('Phase 3 API', () => {
     expect(deliveryBody.data).toMatchObject({
       noteType: 'delivery_note',
       status: 'pending_approval',
-      approvalPath: '/approvals',
     })
+    expect(deliveryBody.data).not.toHaveProperty('approvalPath')
 
     const retentionResponse = await app.request('/api/notes/token/retention-token/submit', {
       method: 'POST',
@@ -994,8 +994,8 @@ describe('Phase 3 API', () => {
     expect(retentionBody.data).toMatchObject({
       noteType: 'retention_note',
       status: 'pending_approval',
-      approvalPath: '/approvals',
     })
+    expect(retentionBody.data).not.toHaveProperty('approvalPath')
 
     const storeCookie = await sessionCookie(app, 'store_admin')
     const approvalsResponse = await app.request('/api/approvals', {

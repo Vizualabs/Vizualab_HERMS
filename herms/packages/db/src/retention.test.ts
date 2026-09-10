@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { fileURLToPath } from 'node:url'
 
-import { reconciliationIsComplete } from './retention'
+import { fieldSubmissionIssue, reconciliationIsComplete } from './retention'
 
 describe('Phase 4 retention invariants', () => {
   test('reconciles delivered 100 from partial returns 60 + 30 and shortfall 8 + 2', () => {
@@ -44,5 +44,18 @@ describe('Phase 4 retention invariants', () => {
     )).text()
     expect(migration).toContain("'store_admin', 'system_admin', 'super_user'")
     expect(migration).toContain('write-off reversal must exactly offset its original ledger row')
+  })
+})
+
+describe('Retention Note field-link boundary', () => {
+  test('allows partial field corrections only before physical counting', () => {
+    expect(fieldSubmissionIssue('draft', false)).toBeNull()
+    expect(fieldSubmissionIssue('reopened', false)).toBeNull()
+    expect(fieldSubmissionIssue('pending_approval', true)).toContain('physical counting')
+  })
+
+  test('requires rejected notes to be reopened', () => {
+    expect(fieldSubmissionIssue('rejected', false)).toContain('must be reopened')
+    expect(fieldSubmissionIssue('approved', false)).toContain('not open')
   })
 })
