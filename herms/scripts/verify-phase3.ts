@@ -64,6 +64,7 @@ const storeCookie = await login('store_admin')
 const quotationResponse = await request('/api/quotations', salesCookie, {
   method: 'POST', body: JSON.stringify({
     customerId: '30000000-0000-4000-8000-000000000002',
+    pricingMode: 'custom',
     lines: [
       { equipmentItemId: '40000000-0000-4000-8000-000000000005', quantity: 3, manualUnitPriceCents: 68_000 },
       { equipmentItemId: '40000000-0000-4000-8000-000000000006', quantity: 2, manualUnitPriceCents: 95_000 },
@@ -71,16 +72,21 @@ const quotationResponse = await request('/api/quotations', salesCookie, {
   }),
 })
 assert(quotationResponse.status === 201, `Verification quotation creation failed: ${quotationResponse.status}`)
-const quotation = (await quotationResponse.json()) as { data: { id: string } }
-const orderResponseFromAccept = await request(`/api/quotations/${quotation.data.id}/accept`, salesCookie, { method: 'POST', body: '{}' })
-assert(orderResponseFromAccept.status === 200, `Verification order creation failed: ${orderResponseFromAccept.status}`)
-const acceptedOrder = (await orderResponseFromAccept.json()) as { data: { id: string } }
+const quotation = (await quotationResponse.json()) as { data: { id: string; submissionLink: string } }
+const quotationToken = tokenFromLink(quotation.data.submissionLink)
+const acceptResponse = await request(`/api/public/quotations/${encodeURIComponent(quotationToken)}/accept`, undefined, {
+  method: 'POST', body: '{}',
+})
+assert(acceptResponse.status === 200, `Verification quotation acceptance failed: ${acceptResponse.status}`)
+const orderResponse = await request(`/api/quotations/${quotation.data.id}/order`, salesCookie, { method: 'POST', body: '{}' })
+assert(orderResponse.status === 201, `Verification order creation failed: ${orderResponse.status}`)
+const acceptedOrder = (await orderResponse.json()) as { data: { id: string } }
 const openOrder = { id: acceptedOrder.data.id }
 
 const [ledgerBefore] = await db.select({ value: count() }).from(stockLedger)
-const orderResponse = await request(`/api/orders/${openOrder.id}`, salesCookie)
-assert(orderResponse.status === 200, 'Could not load the verification order')
-const orderDetail = (await orderResponse.json()) as { data: { lines: Array<{ equipmentItemId: string; quantity: number }> } }
+const orderDetailResponse = await request(`/api/orders/${openOrder.id}`, salesCookie)
+assert(orderDetailResponse.status === 200, 'Could not load the verification order')
+const orderDetail = (await orderDetailResponse.json()) as { data: { lines: Array<{ equipmentItemId: string; quantity: number }> } }
 const createInput = {
   fieldStaffUserId,
   lines: orderDetail.data.lines.map((line) => ({

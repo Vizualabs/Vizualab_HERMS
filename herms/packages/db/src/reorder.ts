@@ -83,7 +83,7 @@ function reconciliationSql(scope: ReorderScope, actor: AuditActor, now: Date) {
           'equipmentName', item.name,
           'currentQuantity', opened.opened_quantity,
           'threshold', opened.threshold,
-          'requestId', ${actor.requestId}
+          'requestId', ${actor.requestId}::text
         ),
         'reorder_threshold_breached:' || opened.id::text,
         'pending'::outbox_status, 0, ${now}, ${now}

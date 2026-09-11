@@ -57,6 +57,7 @@ const quotationResponse = await request('/api/quotations', salesCookie, {
   method: 'POST',
   body: JSON.stringify({
     customerId: '30000000-0000-4000-8000-000000000002',
+    pricingMode: 'custom',
     lines: [{
       equipmentItemId: '40000000-0000-4000-8000-000000000005',
       quantity: 100,
@@ -65,15 +66,22 @@ const quotationResponse = await request('/api/quotations', salesCookie, {
   }),
 })
 assert(quotationResponse.status === 201, `Quotation creation failed: ${quotationResponse.status}`)
-const quotation = (await quotationResponse.json()) as { data: { id: string } }
+const quotation = (await quotationResponse.json()) as { data: { id: string; submissionLink: string } }
+const quotationToken = tokenFromLink(quotation.data.submissionLink)
 
 const acceptedResponse = await request(
-  `/api/quotations/${quotation.data.id}/accept`,
+  `/api/public/quotations/${encodeURIComponent(quotationToken)}/accept`,
+  undefined,
+  { method: 'POST', body: '{}' },
+)
+assert(acceptedResponse.status === 200, `Quotation acceptance failed: ${acceptedResponse.status}`)
+const orderResponse = await request(
+  `/api/quotations/${quotation.data.id}/order`,
   salesCookie,
   { method: 'POST', body: '{}' },
 )
-assert(acceptedResponse.status === 200, `Order creation failed: ${acceptedResponse.status}`)
-const accepted = (await acceptedResponse.json()) as {
+assert(orderResponse.status === 201, `Order creation failed: ${orderResponse.status}`)
+const accepted = (await orderResponse.json()) as {
   data: { id: string; lines: Array<{ equipmentItemId: string }> }
 }
 const orderId = accepted.data.id

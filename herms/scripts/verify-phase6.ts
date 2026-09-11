@@ -43,6 +43,12 @@ async function request(path: string, cookie?: string, init?: RequestInit) {
   })
 }
 
+function tokenFromLink(link: string) {
+  const token = new URL(link).pathname.split('/').filter(Boolean).at(-1)
+  assert(token, 'Quotation link did not contain a token')
+  return decodeURIComponent(token)
+}
+
 function businessMonth(date: Date, timezone: string) {
   const parts = new Intl.DateTimeFormat('en-CA', {
     year: 'numeric',
@@ -83,6 +89,7 @@ const quotationResponse = await request('/api/quotations', salesCookie, {
   method: 'POST',
   body: JSON.stringify({
     customerId,
+    pricingMode: 'custom',
     lines: [{
       equipmentItemId,
       quantity: 3,
@@ -91,14 +98,21 @@ const quotationResponse = await request('/api/quotations', salesCookie, {
   }),
 })
 assert(quotationResponse.status === 201, 'Quotation creation failed')
-const quotation = (await quotationResponse.json()) as { data: { id: string } }
+const quotation = (await quotationResponse.json()) as { data: { id: string; submissionLink: string } }
+const quotationToken = tokenFromLink(quotation.data.submissionLink)
 
+const acceptResponse = await request(
+  `/api/public/quotations/${encodeURIComponent(quotationToken)}/accept`,
+  undefined,
+  { method: 'POST', body: '{}' },
+)
+assert(acceptResponse.status === 200, 'Quotation acceptance failed')
 const orderResponse = await request(
-  `/api/quotations/${quotation.data.id}/accept`,
+  `/api/quotations/${quotation.data.id}/order`,
   salesCookie,
   { method: 'POST', body: '{}' },
 )
-assert(orderResponse.status === 200, 'Quotation acceptance failed')
+assert(orderResponse.status === 201, 'Order creation failed')
 const order = (await orderResponse.json()) as { data: { id: string } }
 const invoiceValueCents = 37_035
 

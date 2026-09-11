@@ -27,4 +27,9 @@ describe('Phase 9 reorder alert boundaries', () => {
     expect(migration.toLowerCase()).not.toContain('backup')
     expect(migration.toLowerCase()).not.toContain('snapshot')
   })
+
+  test('casts request IDs passed to polymorphic JSON builders', async () => {
+    const reorderSource = await Bun.file(new URL('./reorder.ts', import.meta.url)).text()
+    expect(reorderSource).toContain("'requestId', ${actor.requestId}::text")
+  })
 })

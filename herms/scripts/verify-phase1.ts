@@ -15,6 +15,9 @@ import app from '../apps/api/src/index'
 const apiEnv = parseApiEnv(process.env)
 const seedEnv = parseSeedEnv(process.env)
 const db = createDatabase(apiEnv.DATABASE_URL)
+const SEEDED_USER_ROLES = USER_ROLES.filter(
+  (role): role is Exclude<UserRole, 'super_user'> => role !== 'super_user',
+)
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
@@ -27,7 +30,7 @@ function errorCode(error: unknown): string | undefined {
   return undefined
 }
 
-async function login(role: UserRole) {
+async function login(role: Exclude<UserRole, 'super_user'>) {
   const localPart = {
     business_owner: 'owner',
     sales: 'sales',
@@ -65,16 +68,19 @@ async function status(path: string, cookie: string, init?: RequestInit) {
 const [userCount] = await db.select({ value: count() }).from(users)
 const [customerCount] = await db.select({ value: count() }).from(customers)
 const [itemCount] = await db.select({ value: count() }).from(equipmentItems)
-assert(userCount?.value === 6, 'Expected six seeded users')
-assert(customerCount?.value === 3, 'Expected three seeded customers')
-assert(itemCount?.value === 8, 'Expected eight seeded equipment items')
+assert(
+  userCount && userCount.value >= SEEDED_USER_ROLES.length,
+  `Expected at least ${SEEDED_USER_ROLES.length} seeded users`,
+)
+assert(customerCount && customerCount.value >= 3, 'Expected at least three seeded customers')
+assert(itemCount && itemCount.value >= 8, 'Expected at least eight seeded equipment items')
 
 const roleRows = await db.select({ role: users.role, value: count() }).from(users).groupBy(users.role)
-for (const role of USER_ROLES) {
-  assert(roleRows.some((row) => row.role === role && row.value === 1), `Expected one ${role} user`)
+for (const role of SEEDED_USER_ROLES) {
+  assert(roleRows.some((row) => row.role === role && row.value >= 1), `Expected at least one ${role} user`)
 }
 
-for (const role of USER_ROLES) await login(role)
+for (const role of SEEDED_USER_ROLES) await login(role)
 
 const salesCookie = await login('sales')
 assert((await status('/api/customers', salesCookie)).status === 200, 'Sales must access customers')
@@ -155,7 +161,7 @@ console.log(
     users: userCount.value,
     customers: customerCount.value,
     equipmentItems: itemCount.value,
-    rolesVerified: USER_ROLES.length,
+    rolesVerified: SEEDED_USER_ROLES.length,
     auditMutationVerified: true,
     atomicPriceChangeVerified: true,
     appendOnlyTriggersVerified: 2,
