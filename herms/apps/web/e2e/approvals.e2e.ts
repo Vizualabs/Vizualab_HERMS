@@ -288,17 +288,54 @@ test('Approval queue keeps a note pending and supports retry when stock posting 
   expect(calls.map((call) => call.action)).toEqual(['count', 'approve', 'count', 'approve'])
 })
 
-test('Reopening a rejected queue item keeps the new field link available to share', async ({ page }) => {
-  const rejected: ApprovalNote = structuredClone(retentionNote)
-  rejected.status = 'rejected'
-  await mockApprovals(page, [rejected])
+for (const note of [deliveryNote, retentionNote]) {
+  const typeLabel = note.noteType === 'delivery_note' ? 'Delivery Note' : 'Retention Note'
+  const messageType = note.noteType === 'delivery_note' ? 'Delivery' : 'Retention'
+  const noteNumber = note.noteType === 'delivery_note' ? note.dnNumber : note.rnNumber
 
-  await page.goto('/approvals')
-  page.once('dialog', (dialog) => dialog.accept())
-  await page.getByRole('button', { name: 'Reopen & create link' }).click()
+  test(`Reopening a rejected ${typeLabel} keeps Copy and WhatsApp Web sharing`, async ({ context, page }) => {
+    const rejected: ApprovalNote = structuredClone(note)
+    rejected.status = 'rejected'
+    await mockApprovals(page, [rejected])
+    await context.grantPermissions(['clipboard-read', 'clipboard-write'], {
+      origin: 'http://localhost:3000',
+    })
+    await context.route('https://web.whatsapp.com/**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/html',
+        body: '<!doctype html><title>WhatsApp Web test destination</title>',
+      })
+    })
 
-  await expect(page.getByLabel('Retention Note submission link created URL')).toHaveValue(
-    `http://localhost:3000/notes/reopened-${retentionNote.id}`,
-  )
-  await expect(page.getByRole('button', { name: 'Copy link' })).toBeVisible()
-})
+    await page.goto('/approvals')
+    page.once('dialog', (dialog) => dialog.accept())
+    await page.getByRole('button', { name: 'Reopen & create link' }).click()
+
+    const submissionLink = `http://localhost:3000/notes/reopened-${note.id}`
+    await expect(page.getByLabel(`${typeLabel} submission link created URL`)).toHaveValue(submissionLink)
+
+    await page.getByRole('button', { name: 'Copy link' }).click()
+    await expect(page.getByRole('button', { name: 'Copied' })).toBeVisible()
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(submissionLink)
+
+    const whatsapp = page.getByRole('link', {
+      name: `Share ${typeLabel.toLowerCase()} submission link created via WhatsApp`,
+    })
+    await expect(whatsapp).toHaveAttribute('target', '_blank')
+    await expect(whatsapp).toHaveAttribute('rel', 'noopener noreferrer')
+
+    const whatsappUrl = new URL(await whatsapp.getAttribute('href') ?? '')
+    expect(whatsappUrl.origin).toBe('https://web.whatsapp.com')
+    expect(whatsappUrl.pathname).toBe('/send')
+    expect(whatsappUrl.searchParams.get('text')).toBe(
+      `${messageType} note ${noteNumber} for ${note.customerName} (${note.orderNumber}): ${submissionLink}`,
+    )
+
+    const popupPromise = page.waitForEvent('popup')
+    await whatsapp.click()
+    const whatsappPage = await popupPromise
+    await expect(whatsappPage).toHaveURL(whatsappUrl.toString())
+    await whatsappPage.close()
+  })
+}
