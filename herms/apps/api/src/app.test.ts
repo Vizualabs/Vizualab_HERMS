@@ -89,6 +89,7 @@ function createServices() {
     createCustomer: async (input: { name: string }) => ({ id: 'customer-1', ...input }),
     updateCustomer: async (id: string, input: object) => ({ id, ...input }),
     setRecurringCustomer: async (id: string, input: object) => ({ id, ...input }),
+    replaceCustomerPrices: async (id: string, input: object) => ({ id, ...input }),
     listItems: async () => [],
     getItem: async (id: string) => ({ id }),
     createItem: async (input: object) => ({ id: 'item-1', ...input }),
@@ -726,6 +727,42 @@ describe('Phase 1 API', () => {
       body: JSON.stringify({ name: 'Invalid recurring customer', type: 'recurring' }),
     })
     expect(response.status).toBe(400)
+  })
+
+  test('allows a recurring customer to remove every special-price exception', async () => {
+    const services = createServices()
+    let savedPrices: Array<{ equipmentItemId: string; unitPriceCents: number }> | undefined
+    services.masterData.replaceCustomerPrices = async (id, input, actor) => {
+      savedPrices = input.prices
+      return {
+        ...(await services.masterData.getCustomer(id, actor)),
+        type: 'recurring' as const,
+        prices: input.prices,
+      }
+    }
+    const { logger } = createTestLogger()
+    const app = createApp({
+      healthCheck: async () => 1,
+      ...services,
+      auth: TEST_AUTH,
+      logger,
+    })
+    const cookie = await sessionCookie(app, 'sales')
+
+    const response = await app.request('/api/customers/customer-1/prices', {
+      method: 'PUT',
+      headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prices: [] }),
+    })
+    expect(response.status).toBe(200)
+    expect(savedPrices).toEqual([])
+
+    const invalidTransition = await app.request('/api/customers/customer-1/recurring', {
+      method: 'PUT',
+      headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prices: [] }),
+    })
+    expect(invalidTransition.status).toBe(400)
   })
 
   test('composes the customer pricing register from existing services', async () => {

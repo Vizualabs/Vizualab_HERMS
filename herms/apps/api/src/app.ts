@@ -15,6 +15,7 @@ import {
 } from '@herms/db'
 import {
   customerInputSchema,
+  customerPricesInputSchema,
   customerUpdateSchema,
   dashboardExportQuerySchema,
   dashboardFilterQuerySchema,
@@ -295,10 +296,10 @@ export function createApp({
       return c.json({ data: customer.prices })
     })
     .put('/api/customers/:id/prices', requireRoles('business_owner', 'sales'), async (c) => {
-      const parsed = await validatedJson(c, recurringCustomerInputSchema)
+      const parsed = await validatedJson(c, customerPricesInputSchema)
       if ('response' in parsed) return parsed.response
       return c.json({
-        data: await masterData.setRecurringCustomer(c.req.param('id'), parsed.data, actor(c)),
+        data: await masterData.replaceCustomerPrices(c.req.param('id'), parsed.data, actor(c)),
       })
     })
 

@@ -1,6 +1,7 @@
 import { REQUEST_ID_HEADER } from '@herms/shared'
 import type {
   CustomerInput,
+  CustomerPricesInput,
   ClaimStatus,
   CustomerType,
   EquipmentInput,
@@ -559,6 +560,11 @@ export const api = {
     }),
   setRecurring: (id: string, input: RecurringCustomerInput) =>
     request<CustomerDetail>(`/api/customers/${id}/recurring`, {
+      method: 'PUT',
+      body: JSON.stringify(input),
+    }),
+  replaceCustomerPrices: (id: string, input: CustomerPricesInput) =>
+    request<CustomerDetail>(`/api/customers/${id}/prices`, {
       method: 'PUT',
       body: JSON.stringify(input),
     }),

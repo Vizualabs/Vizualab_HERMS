@@ -3,6 +3,7 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { useState } from 'react'
 
 import { ApiError, api, formatMoney, type EquipmentItem } from '../../api'
+import { parseMajorCurrencyToMinorUnits } from '../../money'
 import { itemsQuery, queryKeys } from '../../queries'
 
 export const Route = createFileRoute('/_authenticated/customers_/$customerId')({
@@ -29,13 +30,16 @@ function CustomerDetailPage() {
       ])
     },
   })
-  const setRecurring = useMutation({
+  const savePrices = useMutation({
     mutationFn: (prices: Array<{ equipmentItemId: string; unitPriceCents: number }>) =>
-      api.setRecurring(customerId, { prices }),
+      customer.data?.type === 'recurring'
+        ? api.replaceCustomerPrices(customerId, { prices })
+        : api.setRecurring(customerId, { prices }),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.customer(customerId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.customers }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.customerPricing }),
       ])
     },
   })
@@ -104,9 +108,10 @@ function CustomerDetailPage() {
               key={customer.data.updatedAt}
               items={items.data ?? []}
               currentPrices={currentPrices}
-              pending={setRecurring.isPending}
-              error={setRecurring.error}
-              onSave={(prices) => setRecurring.mutate(prices)}
+              requirePrice={customer.data.type !== 'recurring'}
+              pending={savePrices.isPending}
+              error={savePrices.error}
+              onSave={(prices) => savePrices.mutate(prices)}
             />
           )}
         </section>
@@ -115,23 +120,48 @@ function CustomerDetailPage() {
   )
 }
 
-function SpecialPriceForm({ items, currentPrices, pending, error, onSave }: {
+function SpecialPriceForm({ items, currentPrices, requirePrice, pending, error, onSave }: {
   items: EquipmentItem[]
   currentPrices: Map<string, number>
+  requirePrice: boolean
   pending: boolean
   error: Error | null
   onSave: (prices: Array<{ equipmentItemId: string; unitPriceCents: number }>) => void
 }) {
   const [selectedItemId, setSelectedItemId] = useState('')
-  const [prices, setPrices] = useState(() => [...currentPrices].map(([equipmentItemId, unitPriceCents]) => ({ equipmentItemId, unitPriceCents })))
+  const [prices, setPrices] = useState(() => [...currentPrices].map(
+    ([equipmentItemId, unitPriceCents]) => ({
+      equipmentItemId,
+      value: (unitPriceCents / 100).toFixed(2),
+    }),
+  ))
   const [selectionError, setSelectionError] = useState<string | null>(null)
   const selectedIds = new Set(prices.map((price) => price.equipmentItemId))
 
+  function parsePrices(candidatePrices: typeof prices) {
+    const parsedPrices: Array<{ equipmentItemId: string; unitPriceCents: number }> = []
+    for (const price of candidatePrices) {
+      const unitPriceCents = parseMajorCurrencyToMinorUnits(price.value)
+      if (unitPriceCents === null) {
+        const itemName = items.find((item) => item.id === price.equipmentItemId)?.name ?? 'equipment'
+        setSelectionError(`Enter a valid special price for ${itemName} with no more than two decimal places.`)
+        return null
+      }
+      parsedPrices.push({ equipmentItemId: price.equipmentItemId, unitPriceCents })
+    }
+    setSelectionError(null)
+    return parsedPrices
+  }
+
   return <form className="mt-6 space-y-3" onSubmit={(event) => {
     event.preventDefault()
-    if (prices.length === 0) { setSelectionError('Add at least one customer-specific price.'); return }
-    setSelectionError(null)
-    onSave(prices)
+    if (requirePrice && prices.length === 0) {
+      setSelectionError('Add at least one customer-specific price to make this customer recurring.')
+      return
+    }
+    const parsedPrices = parsePrices(prices)
+    if (!parsedPrices) return
+    onSave(parsedPrices)
   }}>
     <div className="flex gap-2">
       <select aria-label="Equipment for special price" className="input" value={selectedItemId} onChange={(event) => setSelectedItemId(event.currentTarget.value)}>
@@ -141,7 +171,10 @@ function SpecialPriceForm({ items, currentPrices, pending, error, onSave }: {
       <button className="button-secondary shrink-0" disabled={!selectedItemId} type="button" onClick={() => {
         const item = items.find((entry) => entry.id === selectedItemId)
         if (!item) return
-        setPrices((current) => [...current, { equipmentItemId: item.id, unitPriceCents: item.currentUnitPriceCents }])
+        setPrices((current) => [...current, {
+          equipmentItemId: item.id,
+          value: (item.currentUnitPriceCents / 100).toFixed(2),
+        }])
         setSelectedItemId('')
       }}>Add exception</button>
     </div>
@@ -151,8 +184,19 @@ function SpecialPriceForm({ items, currentPrices, pending, error, onSave }: {
       if (!item) return null
       return <div key={item.id} className="grid grid-cols-[1fr_9rem_auto] items-center gap-3 rounded-lg border border-border p-3 text-sm">
         <span><span className="font-medium">{item.name}</span><span className="block text-xs text-muted-foreground">Standard {formatMoney(item.currentUnitPriceCents)}</span></span>
-        <input aria-label={`${item.name} special price in LKR`} className="input" min="0.01" step="0.01" type="number" value={(price.unitPriceCents / 100).toFixed(2)} onChange={(event) => setPrices((current) => current.map((entry) => entry.equipmentItemId === item.id ? { ...entry, unitPriceCents: Math.round(event.currentTarget.valueAsNumber * 100) } : entry))} />
-        <button aria-label={`Remove ${item.name} special price`} className="text-xs font-medium text-danger hover:underline" type="button" onClick={() => setPrices((current) => current.filter((entry) => entry.equipmentItemId !== item.id))}>Remove</button>
+        <input aria-label={`${item.name} special price in LKR`} className="input" inputMode="decimal" min="0.01" step="0.01" type="number" value={price.value} onChange={(event) => {
+          const value = event.currentTarget.value
+          setSelectionError(null)
+          setPrices((current) => current.map((entry) => entry.equipmentItemId === item.id ? { ...entry, value } : entry))
+        }} />
+        <button aria-label={`Remove ${item.name} special price`} className="text-xs font-medium text-danger hover:underline" disabled={pending} type="button" onClick={() => {
+          const remainingPrices = prices.filter((entry) => entry.equipmentItemId !== item.id)
+          setPrices(remainingPrices)
+          if (!requirePrice) {
+            const parsedPrices = parsePrices(remainingPrices)
+            if (parsedPrices) onSave(parsedPrices)
+          }
+        }}>Remove</button>
       </div>
     })}
     {selectionError && <p role="alert" className="text-sm text-danger">{selectionError}</p>}

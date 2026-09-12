@@ -95,11 +95,20 @@ export const fixedPriceSchema = z.object({
   unitPriceCents: z.number().int().min(0),
 })
 
-export const recurringCustomerInputSchema = z.object({
-  prices: z.array(fixedPriceSchema).min(1).refine(
+const customerPriceListSchema = (minimum: number) => z
+  .array(fixedPriceSchema)
+  .min(minimum)
+  .refine(
     (prices) => new Set(prices.map((price) => price.equipmentItemId)).size === prices.length,
     'Each equipment item may appear only once',
-  ),
+  )
+
+export const recurringCustomerInputSchema = z.object({
+  prices: customerPriceListSchema(1),
+})
+
+export const customerPricesInputSchema = z.object({
+  prices: customerPriceListSchema(0),
 })
 
 export const quotationLineInputSchema = z.object({
@@ -277,6 +286,7 @@ export type EquipmentInput = z.infer<typeof equipmentInputSchema>
 export type EquipmentUpdate = z.infer<typeof equipmentUpdateSchema>
 export type PriceChangeInput = z.infer<typeof priceChangeInputSchema>
 export type RecurringCustomerInput = z.infer<typeof recurringCustomerInputSchema>
+export type CustomerPricesInput = z.infer<typeof customerPricesInputSchema>
 export type QuotationInput = z.infer<typeof quotationInputSchema>
 export type DeliveryNoteSubmission = z.infer<typeof deliveryNoteSubmissionSchema>
 export type DeliveryNoteCreate = z.infer<typeof deliveryNoteCreateSchema>

@@ -1,5 +1,6 @@
 import type {
   CustomerInput,
+  CustomerPricesInput,
   CustomerUpdate,
   EquipmentInput,
   EquipmentUpdate,
@@ -113,6 +114,70 @@ export function createMasterDataService(db: Database) {
     return item
   }
 
+  async function saveCustomerPrices(
+    id: string,
+    input: CustomerPricesInput,
+    actor: AuditActor,
+    requireRecurringCustomer: boolean,
+  ) {
+    const before = await customerForActor(id, actor)
+    if (requireRecurringCustomer && before.type !== 'recurring') {
+      throw new DataConflictError('Convert the customer to recurring before updating special prices')
+    }
+
+    const itemIds = input.prices.map((price) => price.equipmentItemId)
+    const knownItems = itemIds.length === 0
+      ? []
+      : await db
+        .select({ id: equipmentItems.id })
+        .from(equipmentItems)
+        .where(inArray(equipmentItems.id, itemIds))
+    if (knownItems.length !== itemIds.length) {
+      throw new DataNotFoundError('One or more equipment items were not found')
+    }
+
+    const effectiveFrom = new Date()
+    const updated = { ...before, type: 'recurring' as const, updatedAt: effectiveFrom }
+    const closeCurrentPrices = db
+      .update(customerPrices)
+      .set({ effectiveTo: effectiveFrom })
+      .where(and(eq(customerPrices.customerId, id), isNull(customerPrices.effectiveTo)))
+    const updateCustomer = db
+      .update(customers)
+      .set({ type: 'recurring', updatedAt: effectiveFrom })
+      .where(eq(customers.id, id))
+    const audit = db.insert(auditLogs).values(
+      auditValues(
+        actor,
+        requireRecurringCustomer ? 'customer.prices_update' : 'customer.set_recurring',
+        'customer',
+        id,
+        before,
+        { ...updated, prices: input.prices },
+      ),
+    )
+
+    if (input.prices.length === 0) {
+      await db.batch([closeCurrentPrices, updateCustomer, audit])
+    } else {
+      await db.batch([
+        closeCurrentPrices,
+        db.insert(customerPrices).values(
+          input.prices.map((price) => ({
+            customerId: id,
+            equipmentItemId: price.equipmentItemId,
+            unitPriceCents: price.unitPriceCents,
+            effectiveFrom,
+          })),
+        ),
+        updateCustomer,
+        audit,
+      ])
+    }
+
+    return { ...updated, prices: input.prices }
+  }
+
   return {
     async listCustomers(actor: SessionUser) {
       const query = db.select().from(customers).orderBy(customers.name)
@@ -196,39 +261,11 @@ export function createMasterDataService(db: Database) {
     },
 
     async setRecurringCustomer(id: string, input: RecurringCustomerInput, actor: AuditActor) {
-      const before = await customerForActor(id, actor)
-      const itemIds = input.prices.map((price) => price.equipmentItemId)
-      const knownItems = await db
-        .select({ id: equipmentItems.id })
-        .from(equipmentItems)
-        .where(inArray(equipmentItems.id, itemIds))
-      if (knownItems.length !== itemIds.length) {
-        throw new DataNotFoundError('One or more equipment items were not found')
-      }
-      const effectiveFrom = new Date()
-      const updated = { ...before, type: 'recurring' as const, updatedAt: effectiveFrom }
-      await db.batch([
-        db
-          .update(customerPrices)
-          .set({ effectiveTo: effectiveFrom })
-          .where(and(eq(customerPrices.customerId, id), isNull(customerPrices.effectiveTo))),
-        db.insert(customerPrices).values(
-          input.prices.map((price) => ({
-            customerId: id,
-            equipmentItemId: price.equipmentItemId,
-            unitPriceCents: price.unitPriceCents,
-            effectiveFrom,
-          })),
-        ),
-        db.update(customers).set({ type: 'recurring', updatedAt: effectiveFrom }).where(eq(customers.id, id)),
-        db.insert(auditLogs).values(
-          auditValues(actor, 'customer.set_recurring', 'customer', id, before, {
-            ...updated,
-            prices: input.prices,
-          }),
-        ),
-      ])
-      return { ...updated, prices: input.prices }
+      return saveCustomerPrices(id, input, actor, false)
+    },
+
+    async replaceCustomerPrices(id: string, input: CustomerPricesInput, actor: AuditActor) {
+      return saveCustomerPrices(id, input, actor, true)
     },
 
     async listItems() {
