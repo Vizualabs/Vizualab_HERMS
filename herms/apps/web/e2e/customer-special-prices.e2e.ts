@@ -78,6 +78,17 @@ test('edits and permanently removes a recurring customer price without crashing'
   await page.reload()
   await expect(page.getByLabel('Dinner Plate special price in LKR')).toHaveCount(0)
   expect(savedPrices).toEqual([])
+
+  await page.getByLabel('Equipment for special price').selectOption(equipmentItemId)
+  await expect(page.getByLabel('Dinner Plate special price in LKR')).toHaveValue('500.00')
+
+  const addRequest = page.waitForRequest((request) =>
+    request.method() === 'PUT'
+      && new URL(request.url()).pathname === `/api/customers/${customerId}/prices`)
+  await page.getByRole('button', { name: 'Save special prices' }).click()
+  expect((await addRequest).postDataJSON()).toEqual({
+    prices: [{ equipmentItemId, unitPriceCents: 50_000 }],
+  })
   expect(pageErrors).toEqual([])
 })
 

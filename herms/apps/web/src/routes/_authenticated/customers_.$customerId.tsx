@@ -128,7 +128,6 @@ function SpecialPriceForm({ items, currentPrices, requirePrice, pending, error, 
   error: Error | null
   onSave: (prices: Array<{ equipmentItemId: string; unitPriceCents: number }>) => void
 }) {
-  const [selectedItemId, setSelectedItemId] = useState('')
   const [prices, setPrices] = useState(() => [...currentPrices].map(
     ([equipmentItemId, unitPriceCents]) => ({
       equipmentItemId,
@@ -163,21 +162,18 @@ function SpecialPriceForm({ items, currentPrices, requirePrice, pending, error, 
     if (!parsedPrices) return
     onSave(parsedPrices)
   }}>
-    <div className="flex gap-2">
-      <select aria-label="Equipment for special price" className="input" value={selectedItemId} onChange={(event) => setSelectedItemId(event.currentTarget.value)}>
-        <option value="">Select equipment</option>
-        {items.map((item) => <option key={item.id} value={item.id} disabled={selectedIds.has(item.id)}>{item.name}</option>)}
-      </select>
-      <button className="button-secondary shrink-0" disabled={!selectedItemId} type="button" onClick={() => {
-        const item = items.find((entry) => entry.id === selectedItemId)
-        if (!item) return
-        setPrices((current) => [...current, {
-          equipmentItemId: item.id,
-          value: (item.currentUnitPriceCents / 100).toFixed(2),
-        }])
-        setSelectedItemId('')
-      }}>Add exception</button>
-    </div>
+    <select aria-label="Equipment for special price" className="input" value="" disabled={pending} onChange={(event) => {
+      const item = items.find((entry) => entry.id === event.currentTarget.value)
+      if (!item) return
+      setPrices((current) => [...current, {
+        equipmentItemId: item.id,
+        value: (item.currentUnitPriceCents / 100).toFixed(2),
+      }])
+      setSelectionError(null)
+    }}>
+      <option value="">Select equipment to add</option>
+      {items.map((item) => <option key={item.id} value={item.id} disabled={selectedIds.has(item.id)}>{item.name}</option>)}
+    </select>
     {prices.length === 0 && <p className="rounded-lg bg-muted px-4 py-3 text-sm text-muted-foreground">No exceptions selected. Add only equipment with a negotiated customer price.</p>}
     {prices.map((price) => {
       const item = items.find((entry) => entry.id === price.equipmentItemId)
