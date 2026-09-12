@@ -668,6 +668,36 @@ describe('Phase 1 API', () => {
     expect(logout.headers.get('set-cookie')).toContain('Max-Age=0')
   })
 
+  test('allows privileged test accounts to stay signed in across multiple browsers', async () => {
+    for (const role of ['super_user', 'business_owner'] as const) {
+      const app = createTestApp()
+      const [firstBrowserCookie, secondBrowserCookie] = await Promise.all([
+        sessionCookie(app, role),
+        sessionCookie(app, role),
+      ])
+
+      const [firstBrowserSession, secondBrowserSession] = await Promise.all([
+        app.request('/api/me', { headers: { Cookie: firstBrowserCookie } }),
+        app.request('/api/me', { headers: { Cookie: secondBrowserCookie } }),
+      ])
+      expect(firstBrowserSession.status).toBe(200)
+      expect(secondBrowserSession.status).toBe(200)
+
+      const logout = await app.request('/api/auth/logout', {
+        method: 'POST',
+        headers: { Cookie: firstBrowserCookie, 'Content-Type': 'application/json' },
+        body: '{}',
+      })
+      expect(logout.status).toBe(200)
+
+      const secondBrowserAfterLogout = await app.request('/api/me', {
+        headers: { Cookie: secondBrowserCookie },
+      })
+      expect(secondBrowserAfterLogout.status).toBe(200)
+      expect(await secondBrowserAfterLogout.json()).toEqual({ data: user(role) })
+    }
+  })
+
   test('rejects invalid credentials and malformed input', async () => {
     const app = createTestApp()
     const invalid = await app.request('/api/auth/login', {
