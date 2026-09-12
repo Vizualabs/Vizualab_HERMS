@@ -3,6 +3,7 @@ import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/r
 import { createFileRoute, Link } from '@tanstack/react-router'
 
 import { ApiError, api, formatMinorUnits } from '../../api'
+import { parseMajorCurrencyToMinorUnits } from '../../money'
 import { queryKeys, sessionQuery } from '../../queries'
 
 export const Route = createFileRoute('/_authenticated/items_/$itemId')({
@@ -67,7 +68,7 @@ function ItemDetailPage() {
             <p className="text-sm text-muted-foreground">{item.data.category}</p>
             <h1 className="mt-1 text-3xl font-semibold">{item.data.name}</h1>
             <p className="mt-4 font-mono text-2xl font-semibold text-primary-strong">
-              {formatMinorUnits(item.data.currentUnitPriceCents)}
+              LKR {formatMinorUnits(item.data.currentUnitPriceCents)}
             </p>
             <p className="text-xs text-muted-foreground">current unit price</p>
             <form
@@ -84,6 +85,7 @@ function ItemDetailPage() {
                 })
               }}
             >
+              <h2 className="text-lg font-semibold">Edit equipment details</h2>
               <Edit label="Name" name="name" defaultValue={item.data.name} />
               <Edit label="Category" name="category" defaultValue={item.data.category} />
               <Edit label="Unit" name="unitOfMeasure" defaultValue={item.data.unitOfMeasure} />
@@ -95,6 +97,11 @@ function ItemDetailPage() {
                 required={false}
               />
               {update.error && <ErrorText error={update.error} />}
+              {update.data && (
+                <p role="status" className="text-sm font-medium text-primary-strong">
+                  Equipment details saved.
+                </p>
+              )}
               <button type="submit" disabled={update.isPending} className="button-secondary w-full">
                 {update.isPending ? 'Saving…' : 'Save equipment'}
               </button>
@@ -109,17 +116,29 @@ function ItemDetailPage() {
                 onSubmit={(event) => {
                   event.preventDefault()
                   const form = new FormData(event.currentTarget)
+                  const priceInput = event.currentTarget.elements.namedItem('newPrice')
+                  if (!(priceInput instanceof HTMLInputElement)) return
+                  const newPriceCents = parseMajorCurrencyToMinorUnits(priceInput.value)
+                  if (newPriceCents === null) {
+                    priceInput.setCustomValidity('Enter a valid price with no more than two decimal places.')
+                    priceInput.reportValidity()
+                    return
+                  }
+                  priceInput.setCustomValidity('')
                   changePrice.mutate({
-                    newPriceCents: Number(form.get('newPriceCents')),
+                    newPriceCents,
                     reason: String(form.get('reason')) as ManualPriceChangeReason,
                   })
                 }}
               >
                 <Edit
-                  label="New price (minor units)"
-                  name="newPriceCents"
+                  label="New price (LKR)"
+                  name="newPrice"
                   type="number"
-                  defaultValue={String(item.data.currentUnitPriceCents)}
+                  min="0.01"
+                  step="0.01"
+                  placeholder="500.00"
+                  defaultValue={(item.data.currentUnitPriceCents / 100).toFixed(2)}
                 />
                 <label className="block text-sm font-medium">
                   Reason
@@ -150,7 +169,7 @@ function ItemDetailPage() {
               {history.data?.map((entry) => (
                 <li key={entry.id} className="rounded-xl bg-muted p-4">
                   <div className="flex items-center justify-between gap-4">
-                    <span className="font-semibold">{formatMinorUnits(entry.newPriceCents)}</span>
+                    <span className="font-semibold">LKR {formatMinorUnits(entry.newPriceCents)}</span>
                     <span className="text-xs capitalize text-muted-foreground">
                       {entry.reason.replaceAll('_', ' ')}
                     </span>
@@ -158,7 +177,7 @@ function ItemDetailPage() {
                   <p className="mt-2 text-xs text-muted-foreground">
                     {entry.oldPriceCents === null
                       ? 'Opening price'
-                      : `Changed from ${formatMinorUnits(entry.oldPriceCents)}`}{' '}
+                      : `Changed from LKR ${formatMinorUnits(entry.oldPriceCents)}`}{' '}
                     · {new Date(entry.effectiveDate).toLocaleString()}
                   </p>
                 </li>
@@ -177,12 +196,18 @@ function Edit({
   defaultValue,
   type = 'text',
   required = true,
+  min,
+  step,
+  placeholder,
 }: {
   label: string
   name: string
   defaultValue: string
   type?: string
   required?: boolean
+  min?: string
+  step?: string
+  placeholder?: string
 }) {
   return (
     <label className="block text-sm font-medium">
@@ -191,8 +216,10 @@ function Edit({
         className="input mt-2"
         name={name}
         type={type}
-        min={type === 'number' ? 0 : undefined}
-        step={type === 'number' ? 1 : undefined}
+        min={min ?? (type === 'number' ? '0' : undefined)}
+        step={step ?? (type === 'number' ? '1' : undefined)}
+        inputMode={type === 'number' ? (step === '0.01' ? 'decimal' : 'numeric') : undefined}
+        placeholder={placeholder}
         defaultValue={defaultValue}
         required={required}
       />
