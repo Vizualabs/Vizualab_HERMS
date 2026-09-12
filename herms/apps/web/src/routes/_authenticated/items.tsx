@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
 
 import { ApiError, api, formatMinorUnits } from '../../api'
+import { parseMajorCurrencyToMinorUnits } from '../../money'
 import {
   itemsQuery,
   priceEscalationQuery,
@@ -44,7 +45,7 @@ function ItemsPage() {
         <p className="text-sm font-semibold uppercase tracking-widest text-primary">Master data</p>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">Equipment</h1>
         <p className="mt-2 text-muted-foreground">
-          Current prices are cached here; immutable history remains the source of truth.
+          Enter prices in LKR. Select any equipment item to edit its details or change its price.
         </p>
         <div className="mt-6 overflow-hidden rounded-2xl border border-border bg-card">
           {items.isPending && <p className="p-6 text-muted-foreground">Loading equipment…</p>}
@@ -67,8 +68,11 @@ function ItemsPage() {
                       {item.category} · {item.unitOfMeasure}
                     </p>
                   </div>
-                  <span className="font-mono text-sm font-semibold">
-                    {formatMinorUnits(item.currentUnitPriceCents)}
+                  <span className="flex shrink-0 flex-col items-end gap-1">
+                    <span className="font-mono text-sm font-semibold">
+                      LKR {formatMinorUnits(item.currentUnitPriceCents)}
+                    </span>
+                    <span className="text-xs font-medium text-primary">Edit details</span>
                   </span>
                 </Link>
               </li>
@@ -83,21 +87,41 @@ function ItemsPage() {
           className="mt-5 space-y-4"
           onSubmit={(event) => {
             event.preventDefault()
-            const form = new FormData(event.currentTarget)
+            const formElement = event.currentTarget
+            const form = new FormData(formElement)
+            const priceInput = formElement.elements.namedItem('currentUnitPrice')
+            if (!(priceInput instanceof HTMLInputElement)) return
+            const currentUnitPriceCents = parseMajorCurrencyToMinorUnits(priceInput.value)
+            if (currentUnitPriceCents === null) {
+              priceInput.setCustomValidity('Enter a valid price with no more than two decimal places.')
+              priceInput.reportValidity()
+              return
+            }
+            priceInput.setCustomValidity('')
             const reorderThreshold = String(form.get('reorderThreshold') ?? '').trim()
             createItem.mutate({
               name: String(form.get('name') ?? ''),
               category: String(form.get('category') ?? ''),
               unitOfMeasure: String(form.get('unitOfMeasure') ?? 'unit'),
-              currentUnitPriceCents: Number(form.get('currentUnitPriceCents')),
+              currentUnitPriceCents,
               reorderThreshold: reorderThreshold === '' ? null : Number(reorderThreshold),
+            }, {
+              onSuccess: () => formElement.reset(),
             })
           }}
         >
           <ItemField label="Name" name="name" required />
           <ItemField label="Category" name="category" required />
           <ItemField label="Unit of measure" name="unitOfMeasure" defaultValue="unit" required />
-          <ItemField label="Opening price (minor units)" name="currentUnitPriceCents" type="number" required />
+          <ItemField
+            label="Opening price (LKR)"
+            name="currentUnitPrice"
+            type="number"
+            min="0.01"
+            step="0.01"
+            placeholder="500.00"
+            required
+          />
           <ItemField label="Reorder threshold (optional)" name="reorderThreshold" type="number" />
           <p className="text-xs text-muted-foreground">
             Store administrators are alerted when available stock drops below this quantity.
@@ -105,6 +129,11 @@ function ItemsPage() {
           {createItem.error && (
             <p role="alert" className="text-sm text-danger">
               {createItem.error instanceof ApiError ? createItem.error.message : 'Unable to create equipment'}
+            </p>
+          )}
+          {createItem.data && (
+            <p role="status" className="text-sm font-medium text-primary-strong">
+              Equipment created. Its displayed price includes the full LKR amount entered.
             </p>
           )}
           <button type="submit" disabled={createItem.isPending} className="button-primary w-full">
@@ -175,12 +204,18 @@ function ItemField({
   type = 'text',
   required = false,
   defaultValue,
+  min,
+  step,
+  placeholder,
 }: {
   label: string
   name: string
   type?: string
   required?: boolean
   defaultValue?: string
+  min?: string
+  step?: string
+  placeholder?: string
 }) {
   return (
     <label className="block text-sm font-medium">
@@ -189,8 +224,10 @@ function ItemField({
         className="input mt-2"
         name={name}
         type={type}
-        min={type === 'number' ? 0 : undefined}
-        step={type === 'number' ? 1 : undefined}
+        min={min ?? (type === 'number' ? '0' : undefined)}
+        step={step ?? (type === 'number' ? '1' : undefined)}
+        inputMode={type === 'number' ? (step === '0.01' ? 'decimal' : 'numeric') : undefined}
+        placeholder={placeholder}
         required={required}
         defaultValue={defaultValue}
       />
