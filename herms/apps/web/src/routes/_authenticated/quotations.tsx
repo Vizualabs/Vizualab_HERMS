@@ -166,7 +166,10 @@ function QuotationsPage() {
                     {items.data?.map((item) => <option key={item.id} value={item.id} disabled={selectedIds.has(item.id) && item.id !== line.equipmentItemId}>{item.name}</option>)}
                   </select>
                   <div className={`mt-3 grid gap-3 ${pricingMode === 'custom' ? 'sm:grid-cols-2' : ''}`}>
-                    <label className="text-xs font-medium text-[#071c23]">Quantity<input className="input mt-1" type="number" min="1" max="1000000" step="1" required value={line.quantity} onChange={(event) => setLines((current) => current.map((entry) => entry.key === line.key ? { ...entry, quantity: event.currentTarget.valueAsNumber } : entry))} /></label>
+                    <label className="text-xs font-medium text-[#071c23]">Quantity<input className="input mt-1" type="number" min="1" max="1000000" step="1" required value={line.quantity} onChange={(event) => {
+                      const quantity = event.currentTarget.valueAsNumber
+                      setLines((current) => current.map((entry) => entry.key === line.key ? { ...entry, quantity } : entry))
+                    }} /></label>
                     {pricingMode === 'custom' && <label className="text-xs font-medium text-[#071c23]">Unit price (LKR)<input className="input mt-1" type="number" min="0.01" max="20000000" step="0.01" required value={line.customPrice} onChange={(event) => setLines((current) => current.map((entry) => entry.key === line.key ? { ...entry, customPrice: event.currentTarget.value } : entry))} /></label>}
                   </div>
                   {line.equipmentItemId && <p className="mt-3 text-xs text-[#60727e]">{pricingMode === 'standard' ? 'Applied price' : 'Standard reference'}: {formatMoney(effectivePrice)}</p>}
