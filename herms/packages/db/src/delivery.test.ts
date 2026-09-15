@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { deliveryFieldSubmissionIssue } from './delivery'
 
 describe('Stock write boundary', () => {
-  test('keeps application stock-ledger inserts inside note approval/reversal services', async () => {
+  test('keeps application stock-ledger inserts inside receipt, approval, and reversal services', async () => {
     const files = new Bun.Glob('**/*.ts').scan({ cwd: fileURLToPath(new URL('../../..', import.meta.url)) })
     const insertLocations: string[] = []
     for await (const file of files) {
@@ -16,7 +16,8 @@ describe('Stock write boundary', () => {
     }
     expect(insertLocations).toEqual(expect.arrayContaining([expect.stringContaining('packages/db/src/delivery.ts')]))
     expect(insertLocations).toEqual(expect.arrayContaining([expect.stringContaining('packages/db/src/retention.ts')]))
-    expect(insertLocations).toHaveLength(2)
+    expect(insertLocations).toEqual(expect.arrayContaining([expect.stringContaining('packages/db/src/services.ts')]))
+    expect(insertLocations).toHaveLength(3)
   })
 
   test('requires approved, repeatable stock receipts before incoming stock is posted', async () => {
@@ -31,6 +32,18 @@ describe('Stock write boundary', () => {
     expect(migration).not.toContain('opening_balance_item_unique')
     expect(service).toContain("'opening_balance', note.id, 'in'::stock_direction")
     expect(service).toContain('line.counted_qty')
+  })
+
+  test('posts stock additions immediately without adding them to approvals', async () => {
+    const masterData = await Bun.file(new URL('./services.ts', import.meta.url)).text()
+    const delivery = await Bun.file(new URL('./delivery.ts', import.meta.url)).text()
+
+    expect(masterData).toContain("entryType: 'stock_addition' as const")
+    expect(masterData).toContain("status: 'approved' as const")
+    expect(masterData).toContain('countedQty: input.quantity')
+    expect(masterData).toContain('db.insert(stockLedger).values({')
+    expect(masterData).toContain("quantityDelta: input.quantity")
+    expect(delivery).toContain("eq(openingBalanceNotes.entryType, 'opening_balance')")
   })
 })
 

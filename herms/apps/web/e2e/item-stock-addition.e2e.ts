@@ -2,9 +2,9 @@ import { expect, test } from '@playwright/test'
 
 for (const role of ['system_admin', 'super_user'] as const) {
   const roleLabel = role === 'super_user' ? 'Super User' : 'System Admin'
-  test(`${roleLabel} adds 150 units and the equipment total reaches 225 after approval`, async ({ page }) => {
+  test(`${roleLabel} adds 150 units and the equipment total reaches 225 immediately`, async ({ page }) => {
   const itemId = '50000000-0000-4000-8000-000000000075'
-  let receiptStatus: 'none' | 'pending' | 'approved' = 'none'
+  let stockAdded = false
   let submittedBody: unknown
   const pageErrors: string[] = []
   page.on('pageerror', (error) => pageErrors.push(error.message))
@@ -31,10 +31,10 @@ for (const role of ['system_admin', 'super_user'] as const) {
         unitOfMeasure: 'unit',
         currentUnitPriceCents: 16_500,
         reorderThreshold: 20,
-        currentStockQty: receiptStatus === 'approved' ? 225 : 75,
+        currentStockQty: stockAdded ? 225 : 75,
         openingStockQty: 75,
-        totalReceivedQty: receiptStatus === 'approved' ? 225 : 75,
-        pendingReceiptQty: receiptStatus === 'pending' ? 150 : 0,
+        totalReceivedQty: stockAdded ? 225 : 75,
+        pendingReceiptQty: 0,
         createdAt: '2026-09-15T00:00:00.000Z',
         updatedAt: '2026-09-15T00:00:00.000Z',
       } } })
@@ -42,12 +42,12 @@ for (const role of ['system_admin', 'super_user'] as const) {
     }
     if (pathname === `/api/items/${itemId}/stock-additions` && request.method() === 'POST') {
       submittedBody = request.postDataJSON()
-      receiptStatus = 'pending'
+      stockAdded = true
       await route.fulfill({ status: 201, json: { data: {
         equipmentItemId: itemId,
         equipmentName: 'Dinner spoon',
         quantity: 150,
-        status: 'pending_approval',
+        status: 'approved',
         noteId: '70000000-0000-4000-8000-000000000150',
         noteNumber: 'OB-000150',
         entryType: 'stock_addition',
@@ -65,17 +65,12 @@ for (const role of ['system_admin', 'super_user'] as const) {
   await expect(page.getByText('Total stock received').locator('..')).toContainText('75')
 
   await page.getByLabel('New units received').fill('150')
-  await page.getByRole('button', { name: 'Submit stock addition' }).click()
+  await page.getByRole('button', { name: 'Add stock' }).click()
 
   expect(submittedBody).toEqual({ quantity: 150 })
   await expect(page.getByRole('status')).toContainText(
-    'OB-000150 created for 150 units and awaits Store Admin approval',
+    'Added 150 units successfully. Available stock is now updated.',
   )
-  await expect(page.getByText('Available now').locator('..')).toContainText('75')
-  await expect(page.getByText('Awaiting approval').locator('..')).toContainText('150')
-
-  receiptStatus = 'approved'
-  await page.reload()
   await expect(page.getByText('Available now').locator('..')).toContainText('225')
   await expect(page.getByText('Opening stock').locator('..')).toContainText('75')
   await expect(page.getByText('Total stock received').locator('..')).toContainText('225')

@@ -97,7 +97,7 @@ function createServices() {
       equipmentItemId: id,
       equipmentName: 'Test item',
       quantity: input.quantity,
-      status: 'pending_approval',
+      status: 'approved',
       noteId: '70000000-0000-4000-8000-000000000099',
       noteNumber: 'OB-000099',
       entryType: 'stock_addition',
@@ -910,7 +910,7 @@ describe('Phase 1 API', () => {
     expect(await addition.json()).toMatchObject({
       data: {
         quantity: 150,
-        status: 'pending_approval',
+        status: 'approved',
         entryType: 'stock_addition',
       },
     })

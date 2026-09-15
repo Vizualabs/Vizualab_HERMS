@@ -129,8 +129,8 @@ function ItemDetailPage() {
             <div className="rounded-2xl border border-border bg-card p-6">
               <h2 className="text-lg font-semibold">Add equipment stock</h2>
               <p className="mt-2 text-sm text-muted-foreground">
-                Register newly received units here. Available stock changes only after Store Admin
-                records the physical count and approves the receipt.
+                Register newly received units here. The quantity is added to available stock
+                immediately without an approval step.
               </p>
               <form
                 className="mt-4 space-y-4"
@@ -153,12 +153,11 @@ function ItemDetailPage() {
                 {addStock.error && <ErrorText error={addStock.error} />}
                 {addStock.data && (
                   <p role="status" className="text-sm font-medium text-primary-strong">
-                    {addStock.data.noteNumber} created for {addStock.data.quantity} units and awaits
-                    Store Admin approval.
+                    Added {addStock.data.quantity} units successfully. Available stock is now updated.
                   </p>
                 )}
                 <button type="submit" disabled={addStock.isPending} className="button-primary w-full">
-                  {addStock.isPending ? 'Creating receipt...' : 'Submit stock addition'}
+                  {addStock.isPending ? 'Adding stock...' : 'Add stock'}
                 </button>
               </form>
             </div>

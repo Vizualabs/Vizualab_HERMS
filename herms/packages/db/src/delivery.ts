@@ -277,8 +277,15 @@ export function createDeliveryService(db: Database, config: DeliveryConfig) {
 
     async ownsOpeningBalance(id: string, actor: SessionUser) {
       const condition = actor.storeId
-        ? and(eq(openingBalanceNotes.id, id), eq(openingBalanceNotes.storeId, actor.storeId))
-        : eq(openingBalanceNotes.id, id)
+        ? and(
+          eq(openingBalanceNotes.id, id),
+          eq(openingBalanceNotes.storeId, actor.storeId),
+          eq(openingBalanceNotes.entryType, 'opening_balance'),
+        )
+        : and(
+          eq(openingBalanceNotes.id, id),
+          eq(openingBalanceNotes.entryType, 'opening_balance'),
+        )
       const [note] = await db
         .select({ id: openingBalanceNotes.id })
         .from(openingBalanceNotes)
@@ -289,8 +296,15 @@ export function createDeliveryService(db: Database, config: DeliveryConfig) {
 
     async getApprovalNote(id: string, actor: SessionUser) {
       const condition = actor.storeId
-        ? and(eq(openingBalanceNotes.id, id), eq(openingBalanceNotes.storeId, actor.storeId))
-        : eq(openingBalanceNotes.id, id)
+        ? and(
+          eq(openingBalanceNotes.id, id),
+          eq(openingBalanceNotes.storeId, actor.storeId),
+          eq(openingBalanceNotes.entryType, 'opening_balance'),
+        )
+        : and(
+          eq(openingBalanceNotes.id, id),
+          eq(openingBalanceNotes.entryType, 'opening_balance'),
+        )
       const [opening] = await db
         .select({ id: openingBalanceNotes.id })
         .from(openingBalanceNotes)
@@ -660,6 +674,7 @@ export function createDeliveryService(db: Database, config: DeliveryConfig) {
         }).from(openingBalanceNotes)
           .where(and(
             eq(openingBalanceNotes.storeId, storeId),
+            eq(openingBalanceNotes.entryType, 'opening_balance'),
             inArray(openingBalanceNotes.status, ['pending_approval', 'rejected']),
           )),
       ])
@@ -707,7 +722,10 @@ export function createDeliveryService(db: Database, config: DeliveryConfig) {
           openingBalanceNoteLines,
           eq(openingBalanceNoteLines.openingBalanceNoteId, openingBalanceNotes.id),
         )
-        .where(eq(openingBalanceNotes.storeId, storeId))
+        .where(and(
+          eq(openingBalanceNotes.storeId, storeId),
+          eq(openingBalanceNotes.entryType, 'opening_balance'),
+        ))
       return {
         pendingApproval: (deliveryMetrics?.pendingApproval ?? 0)
           + (openingMetrics?.pendingApproval ?? 0),

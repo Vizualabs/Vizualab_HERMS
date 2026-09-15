@@ -87,7 +87,7 @@ export type StockAdditionReceipt = {
   equipmentItemId: string
   equipmentName: string
   quantity: number
-  status: 'pending_approval'
+  status: 'approved'
   noteId: string
   noteNumber: string
   entryType: 'stock_addition'

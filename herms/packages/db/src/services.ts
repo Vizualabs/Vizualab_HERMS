@@ -12,7 +12,7 @@ import type {
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 
 import type { Database } from './client'
-import { reconcileReorderAlertsForItem } from './reorder'
+import { reconcileReorderAlertsForItem, reconcileReorderAlertsForLedger } from './reorder'
 import {
   auditLogs,
   customerPrices,
@@ -419,16 +419,17 @@ export function createMasterDataService(db: Database) {
     async addItemStock(id: string, input: StockAdditionInput, actor: AuditActor) {
       const item = await getItem(id)
       const now = new Date()
+      const storeId = await resolveStoreId(actor)
       const note = {
         id: crypto.randomUUID(),
         obNumber: await nextOpeningBalanceNumber(),
-        storeId: await resolveStoreId(actor),
+        storeId,
         entryType: 'stock_addition' as const,
-        status: 'pending_approval' as const,
+        status: 'approved' as const,
         submittedBy: actor.id,
-        approvedBy: null,
+        approvedBy: actor.id,
         submittedAt: now,
-        approvedAt: null,
+        approvedAt: now,
         createdAt: now,
         updatedAt: now,
       }
@@ -437,14 +438,25 @@ export function createMasterDataService(db: Database) {
         openingBalanceNoteId: note.id,
         equipmentItemId: id,
         requestedQty: input.quantity,
-        countedQty: null,
+        countedQty: input.quantity,
       }
       await db.batch([
         db.insert(openingBalanceNotes).values(note),
         db.insert(openingBalanceNoteLines).values(line),
+        db.insert(stockLedger).values({
+          equipmentItemId: id,
+          storeId,
+          sourceType: 'opening_balance',
+          sourceNoteId: note.id,
+          direction: 'in',
+          quantityDelta: input.quantity,
+          createdBy: actor.id,
+          createdAt: now,
+        }),
+        db.execute(reconcileReorderAlertsForLedger('opening_balance', note.id, now, actor)),
         db.insert(auditLogs).values(auditValues(
           actor,
-          'stock_addition_note.create',
+          'stock_addition.post',
           'opening_balance_note',
           note.id,
           null,
