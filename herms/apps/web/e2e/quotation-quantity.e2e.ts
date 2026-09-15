@@ -65,6 +65,10 @@ test('selects equipment and edits its quotation quantity without crashing', asyn
 
   await expect(quantity).toHaveValue('3')
   await expect(page.getByText('Applied price: LKR 500.00')).toBeVisible()
+  await page.getByText('Custom pricing', { exact: true }).click()
+  const customPrice = page.getByLabel('Unit price (LKR)')
+  await customPrice.fill('475.50')
+  await expect(customPrice).toHaveValue('475.50')
   expect(pageErrors).toEqual([])
 })
 

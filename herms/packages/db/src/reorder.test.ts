@@ -9,6 +9,9 @@ describe('Phase 9 reorder alert boundaries', () => {
     expect(deliverySource).toContain(
       "reconcileReorderAlertsForLedger('delivery_note', id, now, actor)",
     )
+    expect(deliverySource).toContain(
+      "reconcileReorderAlertsForLedger('opening_balance', id, now, actor)",
+    )
     expect(retentionSource).toContain(
       "reconcileReorderAlertsForLedger('retention_note', id, now, actor)",
     )

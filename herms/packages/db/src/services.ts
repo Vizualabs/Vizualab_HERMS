@@ -7,6 +7,7 @@ import type {
   PriceChangeInput,
   RecurringCustomerInput,
   SessionUser,
+  StockAdditionInput,
 } from '@herms/shared'
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 
@@ -17,7 +18,10 @@ import {
   customerPrices,
   customers,
   equipmentItems,
+  openingBalanceNoteLines,
+  openingBalanceNotes,
   priceHistory,
+  stockLedger,
   stores,
   users,
 } from './schema'
@@ -112,6 +116,15 @@ export function createMasterDataService(db: Database) {
     const [item] = await db.select().from(equipmentItems).where(eq(equipmentItems.id, id)).limit(1)
     if (!item) throw new DataNotFoundError('Equipment item not found')
     return item
+  }
+
+  async function nextOpeningBalanceNumber() {
+    const sequence = await db.execute<{ value: string }>(
+      sql`SELECT nextval('opening_balance_note_number_seq')::text AS value`,
+    )
+    const value = sequence.rows[0]?.value
+    if (!value) throw new Error('Could not allocate an opening balance note number')
+    return `OB-${BigInt(value).toString().padStart(6, '0')}`
   }
 
   async function saveCustomerPrices(
@@ -272,7 +285,57 @@ export function createMasterDataService(db: Database) {
       return db.select().from(equipmentItems).orderBy(equipmentItems.name)
     },
 
-    getItem,
+    async getItem(id: string, actor: SessionUser) {
+      const item = await getItem(id)
+      const storeId = await resolveStoreId(actor)
+      const totals = await db.execute<{
+        currentStockQty: number | string
+        openingStockQty: number | string
+        totalReceivedQty: number | string
+        pendingReceiptQty: number | string
+      }>(sql`
+        SELECT
+          COALESCE((
+            SELECT SUM(ledger.quantity_delta)
+            FROM ${stockLedger} ledger
+            WHERE ledger.equipment_item_id = ${id}::uuid
+              AND ledger.store_id = ${storeId}::uuid
+          ), 0)::int AS "currentStockQty",
+          COALESCE((
+            SELECT SUM(line.counted_qty)
+            FROM ${openingBalanceNoteLines} line
+            JOIN ${openingBalanceNotes} note ON note.id = line.opening_balance_note_id
+            WHERE line.equipment_item_id = ${id}::uuid
+              AND note.store_id = ${storeId}::uuid
+              AND note.entry_type = 'opening_balance'
+              AND note.status = 'approved'
+          ), 0)::int AS "openingStockQty",
+          COALESCE((
+            SELECT SUM(line.counted_qty)
+            FROM ${openingBalanceNoteLines} line
+            JOIN ${openingBalanceNotes} note ON note.id = line.opening_balance_note_id
+            WHERE line.equipment_item_id = ${id}::uuid
+              AND note.store_id = ${storeId}::uuid
+              AND note.status = 'approved'
+          ), 0)::int AS "totalReceivedQty",
+          COALESCE((
+            SELECT SUM(line.requested_qty)
+            FROM ${openingBalanceNoteLines} line
+            JOIN ${openingBalanceNotes} note ON note.id = line.opening_balance_note_id
+            WHERE line.equipment_item_id = ${id}::uuid
+              AND note.store_id = ${storeId}::uuid
+              AND note.status = 'pending_approval'
+          ), 0)::int AS "pendingReceiptQty"
+      `)
+      const summary = totals.rows[0]
+      return {
+        ...item,
+        currentStockQty: Number(summary?.currentStockQty ?? 0),
+        openingStockQty: Number(summary?.openingStockQty ?? 0),
+        totalReceivedQty: Number(summary?.totalReceivedQty ?? 0),
+        pendingReceiptQty: Number(summary?.pendingReceiptQty ?? 0),
+      }
+    },
 
     async createItem(input: EquipmentInput, actor: AuditActor) {
       const now = new Date()
@@ -286,7 +349,7 @@ export function createMasterDataService(db: Database) {
         createdAt: now,
         updatedAt: now,
       }
-      await db.batch([
+      const commonWrites = [
         db.insert(equipmentItems).values(created),
         db.insert(priceHistory).values({
           equipmentItemId: created.id,
@@ -298,10 +361,105 @@ export function createMasterDataService(db: Database) {
         }),
         db
           .insert(auditLogs)
-          .values(auditValues(actor, 'equipment_item.create', 'equipment_item', created.id, null, created)),
+          .values(auditValues(actor, 'equipment_item.create', 'equipment_item', created.id, null, {
+            ...created,
+            openingQuantity: input.openingQuantity,
+          })),
         db.execute(reconcileReorderAlertsForItem(created.id, actor, now)),
+      ] as const
+
+      if (input.openingQuantity === 0) {
+        await db.batch(commonWrites)
+        return { ...created, openingQuantity: 0, openingBalanceStatus: null }
+      }
+
+      const storeId = await resolveStoreId(actor)
+      const openingNote = {
+        id: crypto.randomUUID(),
+        obNumber: await nextOpeningBalanceNumber(),
+        storeId,
+        entryType: 'opening_balance' as const,
+        status: 'pending_approval' as const,
+        submittedBy: actor.id,
+        approvedBy: null,
+        submittedAt: now,
+        approvedAt: null,
+        createdAt: now,
+        updatedAt: now,
+      }
+      const openingLine = {
+        id: crypto.randomUUID(),
+        openingBalanceNoteId: openingNote.id,
+        equipmentItemId: created.id,
+        requestedQty: input.openingQuantity,
+        countedQty: null,
+      }
+      await db.batch([
+        ...commonWrites,
+        db.insert(openingBalanceNotes).values(openingNote),
+        db.insert(openingBalanceNoteLines).values(openingLine),
+        db.insert(auditLogs).values(auditValues(
+          actor,
+          'opening_balance_note.create',
+          'opening_balance_note',
+          openingNote.id,
+          null,
+          { ...openingNote, lines: [openingLine] },
+        )),
       ])
-      return created
+      return {
+        ...created,
+        openingQuantity: input.openingQuantity,
+        openingBalanceStatus: openingNote.status,
+        openingBalanceNoteId: openingNote.id,
+        openingBalanceNoteNumber: openingNote.obNumber,
+      }
+    },
+
+    async addItemStock(id: string, input: StockAdditionInput, actor: AuditActor) {
+      const item = await getItem(id)
+      const now = new Date()
+      const note = {
+        id: crypto.randomUUID(),
+        obNumber: await nextOpeningBalanceNumber(),
+        storeId: await resolveStoreId(actor),
+        entryType: 'stock_addition' as const,
+        status: 'pending_approval' as const,
+        submittedBy: actor.id,
+        approvedBy: null,
+        submittedAt: now,
+        approvedAt: null,
+        createdAt: now,
+        updatedAt: now,
+      }
+      const line = {
+        id: crypto.randomUUID(),
+        openingBalanceNoteId: note.id,
+        equipmentItemId: id,
+        requestedQty: input.quantity,
+        countedQty: null,
+      }
+      await db.batch([
+        db.insert(openingBalanceNotes).values(note),
+        db.insert(openingBalanceNoteLines).values(line),
+        db.insert(auditLogs).values(auditValues(
+          actor,
+          'stock_addition_note.create',
+          'opening_balance_note',
+          note.id,
+          null,
+          { ...note, equipmentName: item.name, lines: [line] },
+        )),
+      ])
+      return {
+        equipmentItemId: item.id,
+        equipmentName: item.name,
+        quantity: input.quantity,
+        status: note.status,
+        noteId: note.id,
+        noteNumber: note.obNumber,
+        entryType: note.entryType,
+      }
     },
 
     async updateItem(id: string, input: EquipmentUpdate, actor: AuditActor) {

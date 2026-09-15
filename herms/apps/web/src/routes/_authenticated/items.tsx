@@ -24,6 +24,7 @@ function ItemsPage() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.items }),
         queryClient.invalidateQueries({ queryKey: queryKeys.stock }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.approvals }),
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboard }),
       ])
     },
@@ -99,12 +100,14 @@ function ItemsPage() {
             }
             priceInput.setCustomValidity('')
             const reorderThreshold = String(form.get('reorderThreshold') ?? '').trim()
+            const openingQuantity = Number(form.get('openingQuantity'))
             createItem.mutate({
               name: String(form.get('name') ?? ''),
               category: String(form.get('category') ?? ''),
               unitOfMeasure: String(form.get('unitOfMeasure') ?? 'unit'),
               currentUnitPriceCents,
               reorderThreshold: reorderThreshold === '' ? null : Number(reorderThreshold),
+              openingQuantity,
             }, {
               onSuccess: () => formElement.reset(),
             })
@@ -123,8 +126,18 @@ function ItemsPage() {
             required
           />
           <ItemField label="Reorder threshold (optional)" name="reorderThreshold" type="number" />
+          <ItemField
+            label="Opening quantity"
+            name="openingQuantity"
+            type="number"
+            defaultValue="0"
+            max="1000000"
+            required
+          />
           <p className="text-xs text-muted-foreground">
-            Store administrators are alerted when available stock drops below this quantity.
+            Opening quantity is sent to Store Admin approval. Stock appears only after the
+            physical opening count is approved. Administrators are alerted when stock drops
+            below the reorder threshold.
           </p>
           {createItem.error && (
             <p role="alert" className="text-sm text-danger">
@@ -133,7 +146,9 @@ function ItemsPage() {
           )}
           {createItem.data && (
             <p role="status" className="text-sm font-medium text-primary-strong">
-              Equipment created. Its displayed price includes the full LKR amount entered.
+              {createItem.data.openingBalanceStatus
+                ? `Equipment created. ${createItem.data.openingBalanceNoteNumber} now awaits opening-stock approval.`
+                : 'Equipment created with zero opening stock.'}
             </p>
           )}
           <button type="submit" disabled={createItem.isPending} className="button-primary w-full">
@@ -205,6 +220,7 @@ function ItemField({
   required = false,
   defaultValue,
   min,
+  max,
   step,
   placeholder,
 }: {
@@ -214,6 +230,7 @@ function ItemField({
   required?: boolean
   defaultValue?: string
   min?: string
+  max?: string
   step?: string
   placeholder?: string
 }) {
@@ -225,6 +242,7 @@ function ItemField({
         name={name}
         type={type}
         min={min ?? (type === 'number' ? '0' : undefined)}
+        max={max}
         step={step ?? (type === 'number' ? '1' : undefined)}
         inputMode={type === 'number' ? (step === '0.01' ? 'decimal' : 'numeric') : undefined}
         placeholder={placeholder}

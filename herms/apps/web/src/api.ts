@@ -69,6 +69,30 @@ export type EquipmentItem = {
   updatedAt: string
 }
 
+export type EquipmentItemDetail = EquipmentItem & {
+  currentStockQty: number
+  openingStockQty: number
+  totalReceivedQty: number
+  pendingReceiptQty: number
+}
+
+export type CreatedEquipmentItem = EquipmentItem & {
+  openingQuantity: number
+  openingBalanceStatus: 'pending_approval' | null
+  openingBalanceNoteId?: string
+  openingBalanceNoteNumber?: string
+}
+
+export type StockAdditionReceipt = {
+  equipmentItemId: string
+  equipmentName: string
+  quantity: number
+  status: 'pending_approval'
+  noteId: string
+  noteNumber: string
+  entryType: 'stock_addition'
+}
+
 export type PriceEscalationItem = {
   itemId: string
   itemName: string
@@ -176,6 +200,7 @@ export type OrderDetail = OrderSummary & {
     allocatedDeliveryQty: number
     approvedDeliveredQty: number
     accountedRetentionQty: number
+    availableStockQty: number
   }>
 }
 
@@ -406,14 +431,69 @@ export type RetentionNoteDetail = RetentionNoteSummary & {
   tokenExpiresAt?: string
 }
 
+export type DiscrepancyRecord = {
+  id: string
+  sourceType: 'delivery_note' | 'retention_note'
+  sourceNoteId: string
+  sourceNoteNumber: string
+  sourceNoteStatus: NoteStatus
+  orderId: string | null
+  orderNumber: string | null
+  customerId: string | null
+  customerName: string | null
+  equipmentItemId: string
+  equipmentName: string
+  quantity: number
+  discrepancyType: DiscrepancyType
+  reason: string | null
+  responsibleParty: 'customer' | 'staff_member' | 'business' | null
+  status: 'open' | 'resolved' | 'written_off' | 'claimed'
+  recordedAt: string
+  resolvedAt: string | null
+  unitPriceCents: number
+  valueCents: number
+}
+
+export type OpeningBalanceNoteLine = {
+  id: string
+  equipmentItemId: string
+  equipmentName: string
+  unitOfMeasure: string
+  requestedQty: number
+  countedQty: number | null
+  countDifference: number | null
+}
+
+export type OpeningBalanceNoteDetail = {
+  id: string
+  noteType: 'opening_balance'
+  obNumber: string
+  entryType: 'opening_balance' | 'stock_addition'
+  storeId: string
+  storeName: string
+  storeAddress: string | null
+  status: NoteStatus
+  submittedBy: string
+  submittedByName: string | null
+  approvedBy: string | null
+  approvedByName: string | null
+  submittedAt: string
+  approvedAt: string | null
+  createdAt: string
+  updatedAt: string
+  lines: OpeningBalanceNoteLine[]
+}
+
 export type ApprovalSummary = {
   id: string
-  noteType: 'delivery_note' | 'retention_note'
+  noteType: 'delivery_note' | 'retention_note' | 'opening_balance'
   dnNumber?: string
   rnNumber?: string
-  orderId: string
-  orderNumber: string
-  customerName: string
+  obNumber?: string
+  entryType?: 'opening_balance' | 'stock_addition' | null
+  orderId: string | null
+  orderNumber: string | null
+  customerName: string | null
   status: NoteStatus
   submittedAt: string | null
   createdAt: string
@@ -436,6 +516,8 @@ export type ReconciliationLine = {
 }
 
 export type TokenNote = DeliveryNoteDetail | RetentionNoteDetail
+
+export type ApprovalNote = TokenNote | OpeningBalanceNoteDetail
 
 export type SubmittedTokenNote = TokenNote
 
@@ -569,13 +651,18 @@ export const api = {
       body: JSON.stringify(input),
     }),
   items: () => request<EquipmentItem[]>('/api/items'),
-  item: (id: string) => request<EquipmentItem>(`/api/items/${id}`),
+  item: (id: string) => request<EquipmentItemDetail>(`/api/items/${id}`),
   createItem: (input: EquipmentInput) =>
-    request<EquipmentItem>('/api/items', { method: 'POST', body: JSON.stringify(input) }),
-  updateItem: (id: string, input: Partial<Omit<EquipmentInput, 'currentUnitPriceCents'>>) =>
+    request<CreatedEquipmentItem>('/api/items', { method: 'POST', body: JSON.stringify(input) }),
+  updateItem: (id: string, input: Partial<Omit<EquipmentInput, 'currentUnitPriceCents' | 'openingQuantity'>>) =>
     request<EquipmentItem>(`/api/items/${id}`, {
       method: 'PUT',
       body: JSON.stringify(input),
+    }),
+  addItemStock: (id: string, quantity: number) =>
+    request<StockAdditionReceipt>(`/api/items/${id}/stock-additions`, {
+      method: 'POST',
+      body: JSON.stringify({ quantity }),
     }),
   changePrice: (id: string, newPriceCents: number, reason: ManualPriceChangeReason) =>
     request<EquipmentItem>(`/api/items/${id}/price`, {
@@ -622,6 +709,7 @@ export const api = {
     request<MonthlyFinance>(`/api/finance/monthly?month=${encodeURIComponent(month)}`),
   claimableDiscrepancies: () =>
     request<ClaimableDiscrepancy[]>('/api/discrepancies/claimable'),
+  discrepancies: () => request<DiscrepancyRecord[]>('/api/discrepancies'),
   claims: () => request<DamageClaim[]>('/api/claims'),
   draftClaim: (discrepancyId: string) =>
     request<DamageClaim>(`/api/discrepancies/${discrepancyId}/claim`, {
@@ -655,7 +743,7 @@ export const api = {
     }),
   approvals: () => request<ApprovalSummary[]>('/api/approvals'),
   approvalMetrics: () => request<ApprovalMetrics>('/api/approvals/metrics'),
-  approvalNote: (id: string) => request<TokenNote>(`/api/approvals/${id}`),
+  approvalNote: (id: string) => request<ApprovalNote>(`/api/approvals/${id}`),
   countDeliveryNote: (id: string, input: DeliveryNoteCount) => request<DeliveryNoteDetail>(`/api/approvals/${id}/count`, { method: 'POST', body: JSON.stringify(input) }),
   approveDeliveryNote: (id: string) => request<DeliveryNoteDetail>(`/api/approvals/${id}/approve`, { method: 'POST', body: '{}' }),
   rejectDeliveryNote: (id: string) => request<DeliveryNoteDetail>(`/api/approvals/${id}/reject`, { method: 'POST', body: '{}' }),
@@ -664,6 +752,10 @@ export const api = {
   approveRetentionNote: (id: string) => request<RetentionNoteDetail>(`/api/approvals/${id}/approve`, { method: 'POST', body: '{}' }),
   rejectRetentionNote: (id: string) => request<RetentionNoteDetail>(`/api/approvals/${id}/reject`, { method: 'POST', body: '{}' }),
   reopenRetentionNote: (id: string) => request<RetentionNoteDetail>(`/api/approvals/${id}/reopen`, { method: 'POST', body: '{}' }),
+  countOpeningBalance: (id: string, input: DeliveryNoteCount) => request<OpeningBalanceNoteDetail>(`/api/approvals/${id}/count`, { method: 'POST', body: JSON.stringify(input) }),
+  approveOpeningBalance: (id: string) => request<OpeningBalanceNoteDetail>(`/api/approvals/${id}/approve`, { method: 'POST', body: '{}' }),
+  rejectOpeningBalance: (id: string) => request<OpeningBalanceNoteDetail>(`/api/approvals/${id}/reject`, { method: 'POST', body: '{}' }),
+  reopenOpeningBalance: (id: string) => request<OpeningBalanceNoteDetail>(`/api/approvals/${id}/reopen`, { method: 'POST', body: '{}' }),
   closeOrder: (id: string) => request<{ order: OrderDetail; reconciliation: ReconciliationLine[] }>(`/api/orders/${id}/close`, { method: 'POST', body: '{}' }),
   reverseWriteOff: (id: string, reason: string) => request<{ discrepancy: { id: string; status: string }; reversalLedgerId: string }>(`/api/discrepancies/${id}/write-off-reverse`, { method: 'POST', body: JSON.stringify({ reason }) }),
   stock: () => request<StockItem[]>('/api/stock'),

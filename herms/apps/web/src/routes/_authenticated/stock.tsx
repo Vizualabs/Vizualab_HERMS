@@ -36,7 +36,7 @@ function StockPage() {
       <header>
         <h1 id="stock-ledger-title">Stock Ledger</h1>
         <p className="mt-1 text-sm text-[#60727e]">
-          Updated only from approved delivery and retention notes
+          Updated only from approved stock receipts, delivery notes, and retention notes
         </p>
       </header>
 

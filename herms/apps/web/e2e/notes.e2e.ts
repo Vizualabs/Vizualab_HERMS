@@ -49,6 +49,27 @@ const retentionNote = {
   lines: [retentionLine],
 }
 
+const deliveryLine = {
+  id: '81000000-0000-4000-8000-000000000001',
+  equipmentItemId: retentionLine.equipmentItemId,
+  equipmentName: retentionLine.equipmentName,
+  unitOfMeasure: 'unit',
+  issuedQty: 10,
+  handedOverQty: 10,
+  countedQty: null,
+  mismatchReason: null,
+  mismatchDetail: null,
+  countDifference: null,
+}
+
+const deliveryNote = {
+  ...retentionNote,
+  id: '80000000-0000-4000-8000-000000000001',
+  dnNumber: 'DN-2026-000001',
+  noteType: 'delivery_note' as const,
+  lines: [deliveryLine],
+}
+
 test.describe('public field-note workflow', () => {
   test.use({ storageState: { cookies: [], origins: [] } })
 
@@ -109,6 +130,41 @@ test.describe('public field-note workflow', () => {
     await expect(page.getByRole('alert')).toContainText('only 40 remains')
     await expect(page.getByRole('button', { name: 'Submit note' })).toBeDisabled()
   })
+
+  test('edits delivery and retention discrepancy fields without crashing', async ({ page }) => {
+    const pageErrors: string[] = []
+    const consoleErrors: string[] = []
+    page.on('pageerror', (error) => pageErrors.push(error.message))
+    page.on('console', (message) => {
+      if (message.type() === 'error') consoleErrors.push(message.text())
+    })
+    await page.route('**/api/notes/token/delivery-fields-token', (route) => route.fulfill({
+      status: 200,
+      json: { data: deliveryNote },
+    }))
+    await page.route('**/api/notes/token/retention-fields-token', (route) => route.fulfill({
+      status: 200,
+      json: { data: retentionNote },
+    }))
+
+    await page.goto('/notes/delivery-fields-token')
+    await page.getByLabel('Quantity handed over').fill('8')
+    await page.getByLabel('Reason for difference').selectOption('damaged')
+    await expect(page.getByLabel('Reason for difference')).toHaveValue('damaged')
+    await expect(page.getByText('Something went wrong')).toHaveCount(0)
+
+    await page.goto('/notes/retention-fields-token')
+    await page.getByLabel('Returned').fill('8')
+    await page.getByLabel('Balance accounted').fill('1')
+    await page.getByLabel('Missing / damaged').fill('1')
+    await page.getByLabel('Shortfall type').selectOption('damaged')
+    await page.getByLabel('Responsible party').selectOption('customer')
+    await expect(page.getByLabel('Shortfall type')).toHaveValue('damaged')
+    await expect(page.getByLabel('Responsible party')).toHaveValue('customer')
+    await expect(page.getByText('Something went wrong')).toHaveCount(0)
+    expect(pageErrors, `Page errors:\n${pageErrors.join('\n')}`).toEqual([])
+    expect(consoleErrors, `Console errors:\n${consoleErrors.join('\n')}`).toEqual([])
+  })
 })
 
 test('order note forms use computed remaining quantities and hide ineligible items', async ({ page }) => {
@@ -156,6 +212,7 @@ test('order note forms use computed remaining quantities and hide ineligible ite
               allocatedDeliveryQty: 40,
               approvedDeliveredQty: 60,
               accountedRetentionQty: 20,
+              availableStockQty: 35,
             },
             {
               id: '40000000-0000-4000-8000-000000000002',
@@ -168,6 +225,7 @@ test('order note forms use computed remaining quantities and hide ineligible ite
               allocatedDeliveryQty: 50,
               approvedDeliveredQty: 0,
               accountedRetentionQty: 0,
+              availableStockQty: 0,
             },
           ],
         } },
@@ -196,8 +254,8 @@ test('order note forms use computed remaining quantities and hide ineligible ite
   const deliverySection = page.getByRole('heading', { name: 'Create delivery note' }).locator('..')
   const retentionSection = page.getByRole('heading', { name: 'Create retention note' }).locator('..')
 
-  await expect(deliverySection.getByRole('spinbutton')).toHaveValue('60')
-  await expect(deliverySection.getByText('remaining 60')).toBeVisible()
+  await expect(deliverySection.getByRole('spinbutton')).toHaveValue('35')
+  await expect(deliverySection.getByText('stock 35 · deliverable 35')).toBeVisible()
   await expect(deliverySection.getByText('Undelivered jack')).toHaveCount(0)
   await expect(retentionSection.getByRole('checkbox')).toHaveCount(1)
   await expect(retentionSection.getByText('available 40')).toBeVisible()

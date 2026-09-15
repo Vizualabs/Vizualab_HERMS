@@ -32,6 +32,7 @@ export const queryKeys = {
   customerBalance: (id: string) => ['finance', 'customers', id, 'balance'] as const,
   monthlyFinance: (month: string) => ['finance', 'monthly', month] as const,
   claims: ['claims'] as const,
+  discrepancies: ['discrepancies'] as const,
   claimableDiscrepancies: ['discrepancies', 'claimable'] as const,
   dashboard: ['dashboard'] as const,
   dashboardFilterOptions: ['dashboard', 'filter-options'] as const,
@@ -136,6 +137,13 @@ export const claimsQuery = queryOptions({
   queryKey: queryKeys.claims,
   queryFn: api.claims,
   staleTime: 5_000,
+})
+
+export const discrepanciesQuery = queryOptions({
+  queryKey: queryKeys.discrepancies,
+  queryFn: api.discrepancies,
+  staleTime: 5_000,
+  refetchOnWindowFocus: 'always',
 })
 
 export const claimableDiscrepanciesQuery = queryOptions({

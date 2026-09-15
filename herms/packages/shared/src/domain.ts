@@ -73,16 +73,21 @@ export const equipmentInputSchema = z.object({
   category: z.string().trim().min(1).max(120),
   unitOfMeasure: z.string().trim().min(1).max(40).default('unit'),
   currentUnitPriceCents: z.number().int().min(0),
+  openingQuantity: z.number().int().min(0).max(1_000_000).default(0),
   reorderThreshold: z.number().int().min(0).nullable().optional(),
 })
 
 export const equipmentUpdateSchema = equipmentInputSchema
-  .omit({ currentUnitPriceCents: true })
+  .omit({ currentUnitPriceCents: true, openingQuantity: true })
   .partial()
   .refine(
   (value) => Object.keys(value).length > 0,
   'At least one field is required',
 )
+
+export const stockAdditionInputSchema = z.object({
+  quantity: z.number().int().positive().max(1_000_000),
+})
 
 export const priceChangeInputSchema = z.object({
   newPriceCents: z.number().int().min(0),
@@ -284,6 +289,7 @@ export type CustomerInput = z.infer<typeof customerInputSchema>
 export type CustomerUpdate = z.infer<typeof customerUpdateSchema>
 export type EquipmentInput = z.infer<typeof equipmentInputSchema>
 export type EquipmentUpdate = z.infer<typeof equipmentUpdateSchema>
+export type StockAdditionInput = z.infer<typeof stockAdditionInputSchema>
 export type PriceChangeInput = z.infer<typeof priceChangeInputSchema>
 export type RecurringCustomerInput = z.infer<typeof recurringCustomerInputSchema>
 export type CustomerPricesInput = z.infer<typeof customerPricesInputSchema>

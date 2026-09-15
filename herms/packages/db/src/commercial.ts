@@ -19,6 +19,7 @@ import {
   quotations,
   retentionNoteLines,
   retentionNotes,
+  stockLedger,
   stores,
 } from './schema'
 import { DataConflictError, DataNotFoundError, type AuditActor } from './services'
@@ -228,6 +229,7 @@ export function createCommercialService(db: Database, config: CommercialConfig) 
         quotationId: orders.quotationId,
         customerId: orders.customerId,
         customerName: customers.name,
+        storeId: customers.storeId,
         status: orders.status,
         totalValueCents: orders.totalValueCents,
         createdBy: orders.createdBy,
@@ -520,13 +522,34 @@ export function createCommercialService(db: Database, config: CommercialConfig) 
             AND delivery_line.equipment_item_id = ${orderLines.equipmentItemId}
         ), 0)::int`,
         accountedRetentionQty: sql<number>`COALESCE((
-          SELECT SUM(return_line.returned_qty + return_line.balance_qty + return_line.missing_damaged_qty)
+          SELECT SUM(
+            CASE WHEN return_note.status = 'approved'
+              THEN return_line.counted_returned_qty
+              ELSE COALESCE(return_line.counted_returned_qty, return_line.returned_qty)
+            END + return_line.balance_qty + return_line.missing_damaged_qty
+          )
           FROM ${retentionNoteLines} return_line
           JOIN ${retentionNotes} return_note ON return_note.id = return_line.retention_note_id
           WHERE return_note.order_id = ${id}::uuid
             AND return_note.status <> 'rejected'
             AND return_line.equipment_item_id = ${orderLines.equipmentItemId}
         ), 0)::int`,
+        availableStockQty: sql<number>`GREATEST(
+          COALESCE((
+            SELECT SUM(ledger.quantity_delta)
+            FROM ${stockLedger} ledger
+            WHERE ledger.store_id = ${header.storeId}::uuid
+              AND ledger.equipment_item_id = ${orderLines.equipmentItemId}
+          ), 0) - COALESCE((
+            SELECT SUM(active_line.issued_qty)
+            FROM ${deliveryNoteLines} active_line
+            JOIN ${deliveryNotes} active_note
+              ON active_note.id = active_line.delivery_note_id
+            WHERE active_note.store_id = ${header.storeId}::uuid
+              AND active_note.status IN ('draft', 'reopened', 'pending_approval')
+              AND active_line.equipment_item_id = ${orderLines.equipmentItemId}
+          ), 0), 0
+        )::int`,
       }).from(orderLines).innerJoin(equipmentItems, eq(orderLines.equipmentItemId, equipmentItems.id))
         .where(eq(orderLines.orderId, id)).orderBy(equipmentItems.name)
       return { ...header, currency: config.currency, timezone: config.timezone, lines }

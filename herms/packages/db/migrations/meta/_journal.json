@@ -92,6 +92,13 @@
       "when": 1787529612000,
       "tag": "0012_quotation_token_type",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1789441213000,
+      "tag": "0013_opening_balance_inventory",
+      "breakpoints": true
     }
   ]
 }

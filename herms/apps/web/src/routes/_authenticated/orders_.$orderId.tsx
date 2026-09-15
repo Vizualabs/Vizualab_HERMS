@@ -95,7 +95,10 @@ function OrderDetailPage() {
   const data = order.data
   const deliveryLines = data.lines.map((line) => ({
     ...line,
-    remainingQty: Math.max(0, line.quantity - (line.allocatedDeliveryQty ?? 0)),
+    remainingQty: Math.min(
+      Math.max(0, line.quantity - (line.allocatedDeliveryQty ?? 0)),
+      line.availableStockQty,
+    ),
   })).filter((line) => line.remainingQty > 0)
   const retentionLines = data.lines.map((line) => ({
     ...line,
@@ -165,7 +168,7 @@ function OrderDetailPage() {
       {canUseSales && <aside className="flex h-fit flex-col gap-6">
         <section id="create-delivery-note" className="scroll-mt-6 rounded-2xl border border-border bg-card p-6">
           <h2 className="text-lg font-semibold">Create delivery note</h2>
-          <p className="mt-2 text-sm text-muted-foreground">Only quantities not already allocated to another active Delivery Note are shown.</p>
+          <p className="mt-2 text-sm text-muted-foreground">Deliverable quantities are limited by both the order balance and unallocated store stock.</p>
           <form className="mt-4 flex flex-col gap-3" onSubmit={(event) => {
             event.preventDefault()
             const form = new FormData(event.currentTarget)
@@ -195,10 +198,10 @@ function OrderDetailPage() {
               </select>
             </label>
             {deliveryLines.map((line) => <label key={line.id} className="grid grid-cols-[1fr_6rem] items-center gap-3 text-sm">
-              <span>{line.equipmentName}<span className="block text-xs text-muted-foreground">Ordered {line.quantity} · already allocated {line.allocatedDeliveryQty ?? 0} · remaining {line.remainingQty}</span></span>
+              <span>{line.equipmentName}<span className="block text-xs text-muted-foreground">Ordered {line.quantity} · allocated {line.allocatedDeliveryQty ?? 0} · stock {line.availableStockQty} · deliverable {line.remainingQty}</span></span>
               <input className="input" name={`delivery-${line.equipmentItemId}`} type="number" inputMode="numeric" min="0" max={line.remainingQty} step="1" defaultValue={line.remainingQty} autoComplete="off" />
             </label>)}
-            {deliveryLines.length === 0 && <p className="text-sm text-muted-foreground">All ordered quantities are already allocated.</p>}
+            {deliveryLines.length === 0 && <p className="text-sm text-muted-foreground">No ordered quantity currently has unallocated stock available.</p>}
             <button className="button-primary w-full text-sm" disabled={createDelivery.isPending || data.status !== 'open' || deliveryLines.length === 0 || !hasFieldStaff}>
               {createDelivery.isPending ? 'Creating...' : 'Create delivery note'}
             </button>

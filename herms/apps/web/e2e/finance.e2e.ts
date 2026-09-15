@@ -1,6 +1,106 @@
 import { expect, test, type Page } from '@playwright/test'
 
 const password = process.env.SEED_USER_PASSWORD
+const reportOrderId = '60000000-0000-4000-8000-000000000099'
+const reportCustomerId = '10000000-0000-4000-8000-000000000099'
+
+async function routeStableFinanceReport(page: Page) {
+  await page.route('**/api/orders', (route) => route.fulfill({
+    status: 200,
+    json: {
+      data: [{
+        id: reportOrderId,
+        orderNumber: 'ORD-REPORT-001',
+        quotationId: null,
+        customerId: reportCustomerId,
+        customerName: 'Report Customer',
+        status: 'open',
+        totalValueCents: 100_000,
+        createdAt: '2026-09-01T00:00:00.000Z',
+      }],
+    },
+  }))
+  await page.route(`**/api/orders/${reportOrderId}/invoice`, (route) => route.fulfill({
+    status: 200,
+    json: {
+      data: {
+        id: reportOrderId,
+        orderNumber: 'ORD-REPORT-001',
+        quotationId: null,
+        customerId: reportCustomerId,
+        customerName: 'Report Customer',
+        status: 'open',
+        createdAt: '2026-09-01T00:00:00.000Z',
+        orderValueCents: 100_000,
+        claimAmountCents: 0,
+        invoiceValueCents: 100_000,
+        paidAmountCents: 25_000,
+        outstandingBalanceCents: 75_000,
+        currency: 'LKR',
+        lines: [],
+      },
+    },
+  }))
+  await page.route(`**/api/customers/${reportCustomerId}/balance`, (route) => route.fulfill({
+    status: 200,
+    json: {
+      data: {
+        id: reportCustomerId,
+        name: 'Report Customer',
+        outstandingBalanceCents: 75_000,
+        currency: 'LKR',
+        orders: [],
+      },
+    },
+  }))
+  await page.route('**/api/finance/monthly?*', (route) => {
+    const month = new URL(route.request().url()).searchParams.get('month') ?? '2026-09'
+    return route.fulfill({
+      status: 200,
+      json: {
+        data: {
+          month,
+          incomeCents: 25_000,
+          expenseCents: 5_000,
+          outstandingCents: 525_000,
+          netPositionCents: 20_000,
+          currency: 'LKR',
+          timezone: 'Asia/Colombo',
+          history: ['2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09'].map(
+            (historyMonth, index) => ({
+              month: historyMonth,
+              incomeCents: (index + 1) * 10_000,
+              expenseCents: (index + 1) * 2_000,
+            }),
+          ),
+          recentPayments: [{
+            id: 'payment-report-1',
+            paymentDate: '2026-09-10T00:00:00.000Z',
+            customerName: 'Report Customer',
+            orderNumber: 'ORD-REPORT-001',
+            method: 'bank_transfer',
+            amountCents: 25_000,
+          }],
+          recentExpenses: [{
+            id: 'expense-report-1',
+            expenseDate: '2026-09-10T00:00:00.000Z',
+            category: 'Transport',
+            description: 'Delivery fuel',
+            amountCents: 5_000,
+          }],
+          outstandingBalances: Array.from({ length: 7 }, (_, index) => ({
+            id: `customer-report-${index + 1}`,
+            customerName: `Outstanding Customer ${index + 1}`,
+            openOrders: 1,
+            invoicedCents: 100_000,
+            paidCents: 25_000,
+            outstandingCents: 75_000,
+          })),
+        },
+      },
+    })
+  })
+}
 
 async function signInAsFinance(page: Page) {
   if (!password) throw new Error('SEED_USER_PASSWORD is required for finance E2E tests')
@@ -16,6 +116,7 @@ async function signInAsFinance(page: Page) {
 test.describe('Payments & Finance report', () => {
   test('renders the report, preserves finance tools, and exports CSV', async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 1900, height: 1000 })
+    await routeStableFinanceReport(page)
     await signInAsFinance(page)
 
     const consoleErrors: string[] = []

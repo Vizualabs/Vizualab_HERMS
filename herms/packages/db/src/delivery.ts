@@ -18,6 +18,8 @@ import {
   discrepancies,
   equipmentItems,
   noteTokens,
+  openingBalanceNoteLines,
+  openingBalanceNotes,
   orderLines,
   orders,
   outboxEvents,
@@ -170,6 +172,67 @@ export function createDeliveryService(db: Database, config: DeliveryConfig) {
     }
   }
 
+  async function openingBalanceDetail(id: string, actor?: SessionUser) {
+    const storeScope = actor?.storeId
+      ? eq(openingBalanceNotes.storeId, actor.storeId)
+      : undefined
+    const [note] = await db
+      .select({
+        id: openingBalanceNotes.id,
+        obNumber: openingBalanceNotes.obNumber,
+        storeId: openingBalanceNotes.storeId,
+        entryType: openingBalanceNotes.entryType,
+        storeName: stores.name,
+        storeAddress: stores.address,
+        status: openingBalanceNotes.status,
+        submittedBy: openingBalanceNotes.submittedBy,
+        submittedByName: sql<string | null>`(
+          SELECT name FROM ${users} WHERE id = ${openingBalanceNotes.submittedBy}
+        )`,
+        approvedBy: openingBalanceNotes.approvedBy,
+        approvedByName: sql<string | null>`(
+          SELECT name FROM ${users} WHERE id = ${openingBalanceNotes.approvedBy}
+        )`,
+        submittedAt: openingBalanceNotes.submittedAt,
+        approvedAt: openingBalanceNotes.approvedAt,
+        createdAt: openingBalanceNotes.createdAt,
+        updatedAt: openingBalanceNotes.updatedAt,
+      })
+      .from(openingBalanceNotes)
+      .innerJoin(stores, eq(openingBalanceNotes.storeId, stores.id))
+      .where(storeScope
+        ? and(eq(openingBalanceNotes.id, id), storeScope)
+        : eq(openingBalanceNotes.id, id))
+      .limit(1)
+    if (!note) throw new DataNotFoundError('Opening balance note not found')
+    const lines = await db
+      .select({
+        id: openingBalanceNoteLines.id,
+        equipmentItemId: openingBalanceNoteLines.equipmentItemId,
+        equipmentName: equipmentItems.name,
+        unitOfMeasure: equipmentItems.unitOfMeasure,
+        requestedQty: openingBalanceNoteLines.requestedQty,
+        countedQty: openingBalanceNoteLines.countedQty,
+      })
+      .from(openingBalanceNoteLines)
+      .innerJoin(
+        equipmentItems,
+        eq(openingBalanceNoteLines.equipmentItemId, equipmentItems.id),
+      )
+      .where(eq(openingBalanceNoteLines.openingBalanceNoteId, id))
+      .orderBy(equipmentItems.name)
+    return {
+      ...note,
+      noteType: 'opening_balance' as const,
+      lines: lines.map((line) => ({
+        ...line,
+        countDifference: line.countedQty === null
+          ? null
+          : line.countedQty - line.requestedQty,
+      })),
+    }
+  }
+
   async function tokenRecord(raw: string, requestId: string) {
     const hash = await sha256(raw)
     const [token] = await db.select().from(noteTokens).where(eq(noteTokens.tokenHash, hash)).limit(1)
@@ -212,6 +275,30 @@ export function createDeliveryService(db: Database, config: DeliveryConfig) {
       return token.noteType as 'delivery_note' | 'retention_note'
     },
 
+    async ownsOpeningBalance(id: string, actor: SessionUser) {
+      const condition = actor.storeId
+        ? and(eq(openingBalanceNotes.id, id), eq(openingBalanceNotes.storeId, actor.storeId))
+        : eq(openingBalanceNotes.id, id)
+      const [note] = await db
+        .select({ id: openingBalanceNotes.id })
+        .from(openingBalanceNotes)
+        .where(condition)
+        .limit(1)
+      return Boolean(note)
+    },
+
+    async getApprovalNote(id: string, actor: SessionUser) {
+      const condition = actor.storeId
+        ? and(eq(openingBalanceNotes.id, id), eq(openingBalanceNotes.storeId, actor.storeId))
+        : eq(openingBalanceNotes.id, id)
+      const [opening] = await db
+        .select({ id: openingBalanceNotes.id })
+        .from(openingBalanceNotes)
+        .where(condition)
+        .limit(1)
+      return opening ? openingBalanceDetail(id, actor) : noteDetail(id, actor)
+    },
+
     async createFromOrder(orderId: string, input: DeliveryNoteCreate, actor: AuditActor) {
       const [order] = await db
         .select({ id: orders.id, status: orders.status, customerId: orders.customerId, storeId: customers.storeId })
@@ -239,6 +326,49 @@ export function createDeliveryService(db: Database, config: DeliveryConfig) {
           throw new DataConflictError('Delivery quantities exceed the remaining ordered quantity')
         }
       }
+      const itemIds = input.lines.map((line) => line.equipmentItemId)
+      const [stockRows, reservedRows] = await Promise.all([
+        db.select({
+          equipmentItemId: equipmentItems.id,
+          equipmentName: equipmentItems.name,
+          quantity: sql<number>`COALESCE(SUM(${stockLedger.quantityDelta}), 0)::int`,
+        })
+          .from(equipmentItems)
+          .leftJoin(stockLedger, and(
+            eq(stockLedger.equipmentItemId, equipmentItems.id),
+            eq(stockLedger.storeId, order.storeId),
+          ))
+          .where(inArray(equipmentItems.id, itemIds))
+          .groupBy(equipmentItems.id),
+        db.select({
+          equipmentItemId: deliveryNoteLines.equipmentItemId,
+          quantity: sql<number>`COALESCE(SUM(${deliveryNoteLines.issuedQty}), 0)::int`,
+        })
+          .from(deliveryNoteLines)
+          .innerJoin(deliveryNotes, eq(deliveryNoteLines.deliveryNoteId, deliveryNotes.id))
+          .where(and(
+            eq(deliveryNotes.storeId, order.storeId),
+            inArray(deliveryNotes.status, ['draft', 'reopened', 'pending_approval']),
+            inArray(deliveryNoteLines.equipmentItemId, itemIds),
+          ))
+          .groupBy(deliveryNoteLines.equipmentItemId),
+      ])
+      const stockByItem = new Map(stockRows.map((line) => [line.equipmentItemId, line.quantity]))
+      const reservedByItem = new Map(
+        reservedRows.map((line) => [line.equipmentItemId, line.quantity]),
+      )
+      for (const line of input.lines) {
+        const available = (stockByItem.get(line.equipmentItemId) ?? 0)
+          - (reservedByItem.get(line.equipmentItemId) ?? 0)
+        if (line.issuedQty > available) {
+          const itemName = stockRows.find(
+            (item) => item.equipmentItemId === line.equipmentItemId,
+          )?.equipmentName ?? 'Equipment'
+          throw new DataConflictError(
+            `${itemName} has only ${Math.max(available, 0)} unallocated units in stock`,
+          )
+        }
+      }
       const now = new Date()
       const noteId = crypto.randomUUID()
       const dnNumber = await nextDnNumber(now)
@@ -261,6 +391,12 @@ export function createDeliveryService(db: Database, config: DeliveryConfig) {
       }))
       await db.batch([
         db.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${orderId}))`),
+        db.execute(sql`SELECT pg_advisory_xact_lock(hashtext(
+            ${order.storeId}::text || ':' || requested.equipment_item_id::text
+          ))
+          FROM jsonb_to_recordset(${JSON.stringify(requestedLines)}::jsonb)
+            AS requested(id uuid, equipment_item_id uuid, issued_qty integer)
+          ORDER BY requested.equipment_item_id`),
         db.insert(deliveryNotes).values(note),
         db.execute(sql`INSERT INTO ${deliveryNoteLines} (id, delivery_note_id, equipment_item_id, issued_qty, handed_over_qty, counted_qty, mismatch_reason, mismatch_detail)
           SELECT requested.id, ${noteId}::uuid, requested.equipment_item_id, requested.issued_qty, requested.issued_qty, NULL, NULL, NULL
@@ -271,6 +407,20 @@ export function createDeliveryService(db: Database, config: DeliveryConfig) {
             JOIN ${deliveryNotes} existing_note ON existing_note.id = existing_line.delivery_note_id
             WHERE existing_note.order_id = ${orderId}::uuid AND existing_note.status <> 'rejected'
               AND existing_line.equipment_item_id = requested.equipment_item_id
+          ), 0)
+          AND requested.issued_qty <= COALESCE((
+            SELECT SUM(ledger.quantity_delta)
+            FROM ${stockLedger} ledger
+            WHERE ledger.store_id = ${order.storeId}::uuid
+              AND ledger.equipment_item_id = requested.equipment_item_id
+          ), 0) - COALESCE((
+            SELECT SUM(reserved_line.issued_qty)
+            FROM ${deliveryNoteLines} reserved_line
+            JOIN ${deliveryNotes} reserved_note
+              ON reserved_note.id = reserved_line.delivery_note_id
+            WHERE reserved_note.store_id = ${order.storeId}::uuid
+              AND reserved_note.status IN ('draft', 'reopened', 'pending_approval')
+              AND reserved_line.equipment_item_id = requested.equipment_item_id
           ), 0)`),
         db.insert(noteTokens).values(token.row),
         db.insert(outboxEvents).values({
@@ -475,18 +625,52 @@ export function createDeliveryService(db: Database, config: DeliveryConfig) {
 
     async listApprovals(actor: SessionUser) {
       const storeId = requireStore(actor)
-      return db.select({
-        id: deliveryNotes.id, dnNumber: deliveryNotes.dnNumber, orderId: deliveryNotes.orderId,
-        orderNumber: orders.orderNumber, customerName: customers.name, status: deliveryNotes.status,
-        submittedAt: deliveryNotes.submittedAt, createdAt: deliveryNotes.createdAt,
-      }).from(deliveryNotes).innerJoin(orders, eq(deliveryNotes.orderId, orders.id)).innerJoin(customers, eq(orders.customerId, customers.id))
-        .where(and(eq(deliveryNotes.storeId, storeId), inArray(deliveryNotes.status, ['pending_approval', 'rejected', 'reopened'])))
-        .orderBy(desc(deliveryNotes.submittedAt), desc(deliveryNotes.createdAt))
+      const [deliveryRows, openingRows] = await Promise.all([
+        db.select({
+          id: deliveryNotes.id,
+          noteType: sql<'delivery_note'>`'delivery_note'`,
+          dnNumber: deliveryNotes.dnNumber,
+          obNumber: sql<string | null>`NULL`,
+          entryType: sql<'opening_balance' | 'stock_addition' | null>`NULL`,
+          orderId: deliveryNotes.orderId,
+          orderNumber: orders.orderNumber,
+          customerName: customers.name,
+          status: deliveryNotes.status,
+          submittedAt: deliveryNotes.submittedAt,
+          createdAt: deliveryNotes.createdAt,
+        }).from(deliveryNotes)
+          .innerJoin(orders, eq(deliveryNotes.orderId, orders.id))
+          .innerJoin(customers, eq(orders.customerId, customers.id))
+          .where(and(
+            eq(deliveryNotes.storeId, storeId),
+            inArray(deliveryNotes.status, ['pending_approval', 'rejected', 'reopened']),
+          )),
+        db.select({
+          id: openingBalanceNotes.id,
+          noteType: sql<'opening_balance'>`'opening_balance'`,
+          dnNumber: sql<string | null>`NULL`,
+          obNumber: openingBalanceNotes.obNumber,
+          entryType: openingBalanceNotes.entryType,
+          orderId: sql<string | null>`NULL`,
+          orderNumber: sql<string | null>`NULL`,
+          customerName: sql<string | null>`NULL`,
+          status: openingBalanceNotes.status,
+          submittedAt: openingBalanceNotes.submittedAt,
+          createdAt: openingBalanceNotes.createdAt,
+        }).from(openingBalanceNotes)
+          .where(and(
+            eq(openingBalanceNotes.storeId, storeId),
+            inArray(openingBalanceNotes.status, ['pending_approval', 'rejected']),
+          )),
+      ])
+      return [...deliveryRows, ...openingRows].sort((left, right) =>
+        new Date(right.submittedAt ?? right.createdAt).getTime()
+        - new Date(left.submittedAt ?? left.createdAt).getTime())
     },
 
     async approvalMetrics(actor: SessionUser) {
       const storeId = requireStore(actor)
-      const [metrics] = await db.select({
+      const [deliveryMetrics] = await db.select({
         pendingApproval: sql<number>`COUNT(DISTINCT ${deliveryNotes.id}) FILTER (
           WHERE ${deliveryNotes.status} = 'pending_approval'
         )::int`,
@@ -503,7 +687,202 @@ export function createDeliveryService(db: Database, config: DeliveryConfig) {
         .from(deliveryNotes)
         .leftJoin(deliveryNoteLines, eq(deliveryNoteLines.deliveryNoteId, deliveryNotes.id))
         .where(eq(deliveryNotes.storeId, storeId))
-      return metrics ?? { pendingApproval: 0, approvedToday: 0, mismatchesFlagged: 0 }
+      const [openingMetrics] = await db.select({
+        pendingApproval: sql<number>`COUNT(DISTINCT ${openingBalanceNotes.id}) FILTER (
+          WHERE ${openingBalanceNotes.status} = 'pending_approval'
+        )::int`,
+        approvedToday: sql<number>`COUNT(DISTINCT ${openingBalanceNotes.id}) FILTER (
+          WHERE ${openingBalanceNotes.status} = 'approved'
+            AND (${openingBalanceNotes.approvedAt} AT TIME ZONE ${config.timezone})::date
+              = (CURRENT_TIMESTAMP AT TIME ZONE ${config.timezone})::date
+        )::int`,
+        mismatchesFlagged: sql<number>`COUNT(${openingBalanceNoteLines.id}) FILTER (
+          WHERE ${openingBalanceNotes.status} = 'pending_approval'
+            AND ${openingBalanceNoteLines.countedQty} IS NOT NULL
+            AND ${openingBalanceNoteLines.requestedQty} <> ${openingBalanceNoteLines.countedQty}
+        )::int`,
+      })
+        .from(openingBalanceNotes)
+        .leftJoin(
+          openingBalanceNoteLines,
+          eq(openingBalanceNoteLines.openingBalanceNoteId, openingBalanceNotes.id),
+        )
+        .where(eq(openingBalanceNotes.storeId, storeId))
+      return {
+        pendingApproval: (deliveryMetrics?.pendingApproval ?? 0)
+          + (openingMetrics?.pendingApproval ?? 0),
+        approvedToday: (deliveryMetrics?.approvedToday ?? 0)
+          + (openingMetrics?.approvedToday ?? 0),
+        mismatchesFlagged: (deliveryMetrics?.mismatchesFlagged ?? 0)
+          + (openingMetrics?.mismatchesFlagged ?? 0),
+      }
+    },
+
+    async countOpeningBalance(id: string, input: DeliveryNoteCount, actor: AuditActor) {
+      const before = await openingBalanceDetail(id, actor)
+      if (before.status !== 'pending_approval') {
+        throw new DataConflictError('Only a pending opening balance may be counted')
+      }
+      const knownIds = new Set(before.lines.map((line) => line.id))
+      if (input.lines.length !== before.lines.length
+        || input.lines.some((line) => !knownIds.has(line.lineId))) {
+        throw new DataConflictError(
+          'Physical count must include every opening balance line exactly once',
+        )
+      }
+      const now = new Date()
+      const mutationQuery = db.execute<{ id: string }>(sql`
+        WITH updated_note AS (
+          UPDATE ${openingBalanceNotes} SET updated_at = ${now}
+          WHERE id = ${id}::uuid AND store_id = ${requireStore(actor)}::uuid
+            AND status = 'pending_approval'
+          RETURNING id
+        ), input_lines AS (
+          SELECT * FROM jsonb_to_recordset(${JSON.stringify(input.lines)}::jsonb)
+            AS x("lineId" uuid, "countedQty" integer)
+        ), updated_lines AS (
+          UPDATE ${openingBalanceNoteLines} line SET counted_qty = input."countedQty"
+          FROM input_lines input, updated_note note
+          WHERE line.id = input."lineId" AND line.opening_balance_note_id = note.id
+        ) SELECT id FROM updated_note
+      `)
+      const [mutation] = await db.batch([
+        mutationQuery,
+        db.execute(sql`INSERT INTO ${auditLogs} (
+            actor_type, actor_id, action, entity_type, entity_id,
+            before, after, request_id
+          )
+          SELECT 'user'::audit_actor_type, ${actor.id}::uuid,
+            'opening_balance_note.count', 'opening_balance_note', note.id,
+            ${JSON.stringify(snapshot(before))}::jsonb, to_jsonb(note.*), ${actor.requestId}
+          FROM ${openingBalanceNotes} note
+          WHERE note.id = ${id}::uuid AND note.status = 'pending_approval'
+            AND note.updated_at = ${now}`),
+      ])
+      if (!mutation.rows[0]) {
+        throw new DataConflictError('The opening balance changed; reload and retry')
+      }
+      return openingBalanceDetail(id, actor)
+    },
+
+    async approveOpeningBalance(id: string, actor: AuditActor) {
+      const before = await openingBalanceDetail(id, actor)
+      if (before.status !== 'pending_approval') {
+        throw new DataConflictError('Only a pending opening balance may be approved')
+      }
+      if (before.lines.some((line) => line.countedQty === null)) {
+        throw new DataConflictError('Physical count is required for every line before approval')
+      }
+      const now = new Date()
+      const [updated] = await db.batch([
+        db.update(openingBalanceNotes)
+          .set({ status: 'approved', approvedBy: actor.id, approvedAt: now, updatedAt: now })
+          .where(and(
+            eq(openingBalanceNotes.id, id),
+            eq(openingBalanceNotes.storeId, requireStore(actor)),
+            eq(openingBalanceNotes.status, 'pending_approval'),
+            sql`NOT EXISTS (
+              SELECT 1 FROM ${openingBalanceNoteLines}
+              WHERE opening_balance_note_id = ${id}::uuid AND counted_qty IS NULL
+            )`,
+          ))
+          .returning(),
+        db.execute(sql`INSERT INTO ${stockLedger} (
+            id, equipment_item_id, store_id, source_type, source_note_id,
+            direction, quantity_delta, created_by, created_at
+          )
+          SELECT gen_random_uuid(), line.equipment_item_id, note.store_id,
+            'opening_balance', note.id, 'in'::stock_direction, line.counted_qty,
+            ${actor.id}::uuid, ${now}
+          FROM ${openingBalanceNoteLines} line
+          JOIN ${openingBalanceNotes} note ON note.id = line.opening_balance_note_id
+          WHERE note.id = ${id}::uuid AND note.status = 'approved'
+            AND note.updated_at = ${now} AND line.counted_qty > 0`),
+        db.execute(reconcileReorderAlertsForLedger('opening_balance', id, now, actor)),
+        db.execute(sql`INSERT INTO ${auditLogs} (
+            actor_type, actor_id, action, entity_type, entity_id,
+            before, after, request_id
+          )
+          SELECT 'user'::audit_actor_type, ${actor.id}::uuid,
+            'stock_ledger.post', 'stock_ledger', ledger.id,
+            NULL, to_jsonb(ledger.*), ${actor.requestId}
+          FROM ${stockLedger} ledger
+          WHERE ledger.source_type = 'opening_balance'
+            AND ledger.source_note_id = ${id}::uuid AND ledger.created_at = ${now}`),
+        db.execute(sql`INSERT INTO ${auditLogs} (
+            actor_type, actor_id, action, entity_type, entity_id,
+            before, after, request_id
+          )
+          SELECT 'user'::audit_actor_type, ${actor.id}::uuid,
+            'opening_balance_note.approve', 'opening_balance_note', note.id,
+            ${JSON.stringify(snapshot(before))}::jsonb, to_jsonb(note.*), ${actor.requestId}
+          FROM ${openingBalanceNotes} note
+          WHERE note.id = ${id}::uuid AND note.status = 'approved'
+            AND note.updated_at = ${now}`),
+      ])
+      if (!updated[0]) {
+        throw new DataConflictError('The opening balance changed; reload and retry')
+      }
+      return openingBalanceDetail(id, actor)
+    },
+
+    async rejectOpeningBalance(id: string, actor: AuditActor) {
+      const before = await openingBalanceDetail(id, actor)
+      if (before.status !== 'pending_approval') {
+        throw new DataConflictError('Only a pending opening balance may be rejected')
+      }
+      const now = new Date()
+      const [updated] = await db.batch([
+        db.update(openingBalanceNotes)
+          .set({ status: 'rejected', updatedAt: now })
+          .where(and(
+            eq(openingBalanceNotes.id, id),
+            eq(openingBalanceNotes.storeId, requireStore(actor)),
+            eq(openingBalanceNotes.status, 'pending_approval'),
+          ))
+          .returning(),
+        db.insert(auditLogs).values({
+          actorType: 'user', actorId: actor.id,
+          action: 'opening_balance_note.reject', entityType: 'opening_balance_note',
+          entityId: id, before: snapshot(before), after: { status: 'rejected' },
+          requestId: actor.requestId,
+        }),
+      ])
+      if (!updated[0]) {
+        throw new DataConflictError('The opening balance changed; reload and retry')
+      }
+      return openingBalanceDetail(id, actor)
+    },
+
+    async reopenOpeningBalance(id: string, actor: AuditActor) {
+      const before = await openingBalanceDetail(id, actor)
+      if (before.status !== 'rejected') {
+        throw new DataConflictError('Only a rejected opening balance may be reopened')
+      }
+      const now = new Date()
+      const [updated] = await db.batch([
+        db.update(openingBalanceNotes)
+          .set({ status: 'pending_approval', approvedBy: null, approvedAt: null, updatedAt: now })
+          .where(and(
+            eq(openingBalanceNotes.id, id),
+            eq(openingBalanceNotes.storeId, requireStore(actor)),
+            eq(openingBalanceNotes.status, 'rejected'),
+          ))
+          .returning(),
+        db.update(openingBalanceNoteLines)
+          .set({ countedQty: null })
+          .where(eq(openingBalanceNoteLines.openingBalanceNoteId, id)),
+        db.insert(auditLogs).values({
+          actorType: 'user', actorId: actor.id,
+          action: 'opening_balance_note.reopen', entityType: 'opening_balance_note',
+          entityId: id, before: snapshot(before), after: { status: 'pending_approval' },
+          requestId: actor.requestId,
+        }),
+      ])
+      if (!updated[0]) {
+        throw new DataConflictError('The opening balance changed; reload and retry')
+      }
+      return openingBalanceDetail(id, actor)
     },
 
     async countNote(id: string, input: DeliveryNoteCount, actor: AuditActor) {
@@ -511,6 +890,14 @@ export function createDeliveryService(db: Database, config: DeliveryConfig) {
       if (before.status !== 'pending_approval') throw new DataConflictError('Only a pending delivery note may be counted')
       const knownIds = new Set(before.lines.map((line) => line.id))
       if (input.lines.length !== before.lines.length || input.lines.some((line) => !knownIds.has(line.lineId))) throw new DataConflictError('Physical count must include every delivery note line exactly once')
+      for (const line of input.lines) {
+        const issued = before.lines.find((candidate) => candidate.id === line.lineId)!
+        if (line.countedQty > issued.issuedQty) {
+          throw new DataConflictError(
+            `${issued.equipmentName} physical count cannot exceed the issued quantity ${issued.issuedQty}`,
+          )
+        }
+      }
       const now = new Date()
       const mutationQuery = db.execute<{ id: string }>(sql`
         WITH updated_note AS (
@@ -599,8 +986,14 @@ export function createDeliveryService(db: Database, config: DeliveryConfig) {
       if (before.status !== 'rejected') throw new DataConflictError('Only a rejected delivery note may be reopened')
       const now = new Date()
       const created = await tokenValues(id, actor.id, now)
-      const [, updated] = await db.batch([
+      const [, , updated] = await db.batch([
         db.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${before.orderId}))`),
+        db.execute(sql`SELECT pg_advisory_xact_lock(hashtext(
+            ${before.storeId}::text || ':' || line.equipment_item_id::text
+          ))
+          FROM ${deliveryNoteLines} line
+          WHERE line.delivery_note_id = ${id}::uuid
+          ORDER BY line.equipment_item_id`),
         db.update(deliveryNotes).set({ status: 'reopened', submittedAt: null, updatedAt: now }).where(and(eq(deliveryNotes.id, id), eq(deliveryNotes.storeId, requireStore(actor)), eq(deliveryNotes.status, 'rejected'))).returning(),
         db.update(deliveryNoteLines).set({ countedQty: null }).where(eq(deliveryNoteLines.deliveryNoteId, id)),
         db.update(noteTokens).set({ status: 'revoked' }).where(and(eq(noteTokens.noteType, 'delivery_note'), eq(noteTokens.noteId, id), inArray(noteTokens.status, ['active', 'used']))),
@@ -615,6 +1008,20 @@ export function createDeliveryService(db: Database, config: DeliveryConfig) {
           GROUP BY issued.equipment_item_id, ordered.quantity
           HAVING SUM(issued.issued_qty) > ordered.quantity
         ) over_issued`),
+        db.execute(sql`SELECT 1 / CASE WHEN COUNT(*) = 0 THEN 1 ELSE 0 END FROM (
+          SELECT active_line.equipment_item_id
+          FROM ${deliveryNoteLines} active_line
+          JOIN ${deliveryNotes} active_note ON active_note.id = active_line.delivery_note_id
+          WHERE active_note.store_id = ${before.storeId}::uuid
+            AND active_note.status IN ('draft', 'reopened', 'pending_approval')
+          GROUP BY active_line.equipment_item_id
+          HAVING SUM(active_line.issued_qty) > COALESCE((
+            SELECT SUM(ledger.quantity_delta)
+            FROM ${stockLedger} ledger
+            WHERE ledger.store_id = ${before.storeId}::uuid
+              AND ledger.equipment_item_id = active_line.equipment_item_id
+          ), 0)
+        ) over_reserved`),
       ])
       if (!updated[0]) throw new DataConflictError('The delivery note changed; reload and retry')
       return { ...(await noteDetail(id, actor)), submissionLink: submissionLink(created.raw), tokenExpiresAt: created.row.expiresAt }
@@ -666,6 +1073,7 @@ export function createDeliveryService(db: Database, config: DeliveryConfig) {
         sourceNoteId: stockLedger.sourceNoteId,
         deliveryNoteNumber: deliveryNotes.dnNumber,
         retentionNoteNumber: retentionNotes.rnNumber,
+        openingBalanceNoteNumber: openingBalanceNotes.obNumber,
       })
         .from(stockLedger)
         .innerJoin(equipmentItems, eq(stockLedger.equipmentItemId, equipmentItems.id))
@@ -676,6 +1084,10 @@ export function createDeliveryService(db: Database, config: DeliveryConfig) {
         .leftJoin(retentionNotes, and(
           eq(stockLedger.sourceType, 'retention_note'),
           eq(stockLedger.sourceNoteId, retentionNotes.id),
+        ))
+        .leftJoin(openingBalanceNotes, and(
+          eq(stockLedger.sourceType, 'opening_balance'),
+          eq(stockLedger.sourceNoteId, openingBalanceNotes.id),
         ))
         .where(eq(stockLedger.storeId, storeId))
         .orderBy(desc(stockLedger.createdAt), desc(stockLedger.id))
@@ -690,6 +1102,7 @@ export function createDeliveryService(db: Database, config: DeliveryConfig) {
         createdAt: movement.createdAt,
         source: movement.deliveryNoteNumber
           ?? movement.retentionNoteNumber
+          ?? movement.openingBalanceNoteNumber
           ?? `${movement.sourceType.replaceAll('_', ' ')} ${movement.sourceNoteId.slice(0, 8)}`,
       }))
     },

@@ -290,7 +290,12 @@ export function createRetentionService(db: Database, config: RetentionConfig) {
         GROUP BY line.equipment_item_id
       ), accounted_elsewhere AS (
         SELECT line.equipment_item_id,
-          SUM(line.returned_qty + line.balance_qty + line.missing_damaged_qty)::int AS quantity
+          SUM(
+            CASE WHEN note.status = 'approved'
+              THEN line.counted_returned_qty
+              ELSE COALESCE(line.counted_returned_qty, line.returned_qty)
+            END + line.balance_qty + line.missing_damaged_qty
+          )::int AS quantity
         FROM ${retentionNoteLines} line
         JOIN ${retentionNotes} note ON note.id = line.retention_note_id
         WHERE note.order_id = ${orderId}::uuid
@@ -647,7 +652,8 @@ export function createRetentionService(db: Database, config: RetentionConfig) {
               AND retention.status <> 'rejected'
             GROUP BY retained.equipment_item_id
             HAVING SUM(
-              retained.returned_qty + retained.balance_qty + retained.missing_damaged_qty
+              COALESCE(retained.counted_returned_qty, retained.returned_qty)
+                + retained.balance_qty + retained.missing_damaged_qty
             ) > COALESCE((
               SELECT SUM(delivered.counted_qty)
               FROM ${deliveryNoteLines} delivered
@@ -738,6 +744,19 @@ export function createRetentionService(db: Database, config: RetentionConfig) {
         || input.lines.some((line) => !known.has(line.lineId))) {
         throw new DataConflictError('Physical count must include every retention note line exactly once')
       }
+      const availableByItem = await availableQuantities(before.id, before.orderId)
+      for (const line of input.lines) {
+        const submitted = before.lines.find((candidate) => candidate.id === line.lineId)!
+        const accounted = line.countedReturnedQty
+          + submitted.balanceQty
+          + submitted.missingDamagedQty
+        const available = availableByItem.get(submitted.equipmentItemId) ?? 0
+        if (accounted > available) {
+          throw new DataConflictError(
+            `${submitted.equipmentName} physical count accounts for ${accounted}, but only ${available} remains`,
+          )
+        }
+      }
       const now = new Date()
       const mutationQuery = db.execute<{ id: string }>(sql`
         WITH updated_note AS (
@@ -761,8 +780,37 @@ export function createRetentionService(db: Database, config: RetentionConfig) {
         )
         SELECT id FROM updated_note
       `)
-      const [mutation] = await db.batch([
+      const [, mutation] = await db.batch([
+        db.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${before.orderId}))`),
         mutationQuery,
+        db.execute(sql`SELECT 1 / CASE WHEN COUNT(*) = 0 THEN 1 ELSE 0 END
+          FROM ${retentionNoteLines} current_line
+          WHERE current_line.retention_note_id = ${id}::uuid
+            AND COALESCE(current_line.counted_returned_qty, current_line.returned_qty)
+              + current_line.balance_qty + current_line.missing_damaged_qty >
+              COALESCE((
+                SELECT SUM(delivery_line.counted_qty)
+                FROM ${deliveryNoteLines} delivery_line
+                JOIN ${deliveryNotes} delivery_note
+                  ON delivery_note.id = delivery_line.delivery_note_id
+                WHERE delivery_note.order_id = ${before.orderId}::uuid
+                  AND delivery_note.status = 'approved'
+                  AND delivery_line.equipment_item_id = current_line.equipment_item_id
+              ), 0) - COALESCE((
+                SELECT SUM(
+                  CASE WHEN other_note.status = 'approved'
+                    THEN other_line.counted_returned_qty
+                    ELSE COALESCE(other_line.counted_returned_qty, other_line.returned_qty)
+                  END + other_line.balance_qty + other_line.missing_damaged_qty
+                )
+                FROM ${retentionNoteLines} other_line
+                JOIN ${retentionNotes} other_note
+                  ON other_note.id = other_line.retention_note_id
+                WHERE other_note.order_id = ${before.orderId}::uuid
+                  AND other_note.id <> ${id}::uuid
+                  AND other_note.status <> 'rejected'
+                  AND other_line.equipment_item_id = current_line.equipment_item_id
+              ), 0)`),
         db.execute(sql`INSERT INTO ${auditLogs} (
             actor_type, actor_id, action, entity_type, entity_id, before, after, request_id
           )

@@ -170,7 +170,10 @@ function QuotationsPage() {
                       const quantity = event.currentTarget.valueAsNumber
                       setLines((current) => current.map((entry) => entry.key === line.key ? { ...entry, quantity } : entry))
                     }} /></label>
-                    {pricingMode === 'custom' && <label className="text-xs font-medium text-[#071c23]">Unit price (LKR)<input className="input mt-1" type="number" min="0.01" max="20000000" step="0.01" required value={line.customPrice} onChange={(event) => setLines((current) => current.map((entry) => entry.key === line.key ? { ...entry, customPrice: event.currentTarget.value } : entry))} /></label>}
+                    {pricingMode === 'custom' && <label className="text-xs font-medium text-[#071c23]">Unit price (LKR)<input className="input mt-1" type="number" min="0.01" max="20000000" step="0.01" required value={line.customPrice} onChange={(event) => {
+                      const customPrice = event.currentTarget.value
+                      setLines((current) => current.map((entry) => entry.key === line.key ? { ...entry, customPrice } : entry))
+                    }} /></label>}
                   </div>
                   {line.equipmentItemId && <p className="mt-3 text-xs text-[#60727e]">{pricingMode === 'standard' ? 'Applied price' : 'Standard reference'}: {formatMoney(effectivePrice)}</p>}
                 </div>

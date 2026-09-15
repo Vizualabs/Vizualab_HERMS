@@ -2,7 +2,14 @@ import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/r
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useState } from 'react'
 
-import { ApiError, api, type DeliveryNoteDetail, type RetentionNoteDetail } from '../../api'
+import {
+  ApiError,
+  api,
+  type ApprovalNote,
+  type DeliveryNoteDetail,
+  type OpeningBalanceNoteDetail,
+  type RetentionNoteDetail,
+} from '../../api'
 import { ManualLinkShare } from '../../components/ManualShareActions'
 import { queryKeys } from '../../queries'
 import { createNoteShareMessage } from '../../whatsapp'
@@ -31,6 +38,11 @@ function ApprovalDetailPage() {
       client.invalidateQueries({ queryKey: queryKeys.approvals }),
       client.invalidateQueries({ queryKey: queryKeys.stock }),
       client.invalidateQueries({ queryKey: queryKeys.dashboard }),
+      client.invalidateQueries({ queryKey: queryKeys.claims }),
+      client.invalidateQueries({ queryKey: queryKeys.discrepancies }),
+      client.invalidateQueries({ queryKey: queryKeys.claimableDiscrepancies }),
+      client.invalidateQueries({ queryKey: queryKeys.orders }),
+      client.invalidateQueries({ queryKey: queryKeys.finance }),
     ])
   }
   const countDelivery = useMutation({
@@ -43,27 +55,38 @@ function ApprovalDetailPage() {
       api.countRetentionNote(noteId, input),
     onSuccess: refresh,
   })
-  const approve = useMutation<DeliveryNoteDetail | RetentionNoteDetail, Error, 'delivery_note' | 'retention_note'>({
-    mutationFn: (noteType: 'delivery_note' | 'retention_note') =>
+  const countOpening = useMutation({
+    mutationFn: (input: Parameters<typeof api.countOpeningBalance>[1]) =>
+      api.countOpeningBalance(noteId, input),
+    onSuccess: refresh,
+  })
+  const approve = useMutation<ApprovalNote, Error, ApprovalNote['noteType']>({
+    mutationFn: (noteType) =>
       noteType === 'retention_note'
         ? api.approveRetentionNote(noteId)
-        : api.approveDeliveryNote(noteId),
+        : noteType === 'opening_balance'
+          ? api.approveOpeningBalance(noteId)
+          : api.approveDeliveryNote(noteId),
     onSuccess: refresh,
   })
-  const reject = useMutation<DeliveryNoteDetail | RetentionNoteDetail, Error, 'delivery_note' | 'retention_note'>({
-    mutationFn: (noteType: 'delivery_note' | 'retention_note') =>
+  const reject = useMutation<ApprovalNote, Error, ApprovalNote['noteType']>({
+    mutationFn: (noteType) =>
       noteType === 'retention_note'
         ? api.rejectRetentionNote(noteId)
-        : api.rejectDeliveryNote(noteId),
+        : noteType === 'opening_balance'
+          ? api.rejectOpeningBalance(noteId)
+          : api.rejectDeliveryNote(noteId),
     onSuccess: refresh,
   })
-  const reopen = useMutation<DeliveryNoteDetail | RetentionNoteDetail, Error, 'delivery_note' | 'retention_note'>({
-    mutationFn: (noteType: 'delivery_note' | 'retention_note') =>
+  const reopen = useMutation<ApprovalNote, Error, ApprovalNote['noteType']>({
+    mutationFn: (noteType) =>
       noteType === 'retention_note'
         ? api.reopenRetentionNote(noteId)
-        : api.reopenDeliveryNote(noteId),
+        : noteType === 'opening_balance'
+          ? api.reopenOpeningBalance(noteId)
+          : api.reopenDeliveryNote(noteId),
     onSuccess: async (reopenedNote) => {
-      if (reopenedNote.submissionLink) {
+      if (reopenedNote.noteType !== 'opening_balance' && reopenedNote.submissionLink) {
         setReopenedLink({
           noteType: reopenedNote.noteType === 'retention_note' ? 'Retention' : 'Delivery',
           noteNumber: reopenedNote.noteType === 'retention_note' ? reopenedNote.rnNumber : reopenedNote.dnNumber,
@@ -87,7 +110,7 @@ function ApprovalDetailPage() {
       {note.error instanceof ApiError ? note.error.message : 'Approval note not found'}
     </p>
   }
-  const error = countDelivery.error || countRetention.error || approve.error
+  const error = countDelivery.error || countRetention.error || countOpening.error || approve.error
     || reject.error || reopen.error || reverse.error
   return <div>
     <Link to="/approvals" className="text-sm font-medium text-primary hover:underline">
@@ -105,7 +128,17 @@ function ApprovalDetailPage() {
           onReopen={() => reopen.mutate('retention_note')}
           onReverse={(id, reason) => reverse.mutate({ id, reason })}
         />
-      : <DeliveryApproval
+      : note.data.noteType === 'opening_balance'
+        ? <OpeningBalanceApproval
+          note={note.data}
+          countPending={countOpening.isPending}
+          actionPending={countOpening.isPending || approve.isPending || reject.isPending || reopen.isPending}
+          onCount={countOpening.mutate}
+          onApprove={() => approve.mutate('opening_balance')}
+          onReject={() => reject.mutate('opening_balance')}
+          onReopen={() => reopen.mutate('opening_balance')}
+        />
+        : <DeliveryApproval
           note={note.data}
           countPending={countDelivery.isPending}
           actionPending={countDelivery.isPending || approve.isPending || reject.isPending || reopen.isPending}
@@ -134,13 +167,17 @@ function ApprovalDetailPage() {
 function Header({ label, number, note }: {
   label: string
   number: string
-  note: DeliveryNoteDetail | RetentionNoteDetail
+  note: ApprovalNote
 }) {
   return <div className="flex items-start justify-between gap-4">
     <div>
       <p className="text-sm text-muted-foreground">{label}</p>
       <h1 className="mt-1 text-3xl font-semibold">{number}</h1>
-      <p className="mt-2 text-muted-foreground">{note.customerName} · {note.orderNumber}</p>
+      <p className="mt-2 text-muted-foreground">
+        {note.noteType === 'opening_balance'
+          ? note.storeName
+          : `${note.customerName} · ${note.orderNumber}`}
+      </p>
     </div>
     <span className="rounded-full bg-primary-soft px-3 py-1 text-sm font-semibold capitalize text-primary-strong">
       {note.status.replaceAll('_', ' ')}
@@ -187,6 +224,59 @@ function DeliveryApproval({
           </span>
         </span>
         <input className="input" name={line.id} type="number" inputMode="numeric" min="0" max="1000000" step="1" required autoComplete="off" disabled={actionPending} defaultValue={line.countedQty ?? line.handedOverQty} aria-label={`${line.equipmentName} physical count`} />
+      </label>)}
+      <button className="button-secondary" disabled={actionPending}>
+        {countPending ? 'Saving count...' : allCounted ? 'Update physical count' : 'Save physical count'}
+      </button>
+    </form>}
+    <ApprovalActions note={note} allCounted={allCounted} pending={actionPending} onApprove={onApprove} onReject={onReject} onReopen={onReopen} />
+  </section>
+}
+
+function OpeningBalanceApproval({
+  note,
+  countPending,
+  actionPending,
+  onCount,
+  onApprove,
+  onReject,
+  onReopen,
+}: {
+  note: OpeningBalanceNoteDetail
+  countPending: boolean
+  actionPending: boolean
+  onCount: (input: Parameters<typeof api.countOpeningBalance>[1]) => void
+  onApprove: () => void
+  onReject: () => void
+  onReopen: () => void
+}) {
+  const allCounted = note.lines.every((line) => line.countedQty !== null)
+  const isAddition = note.entryType === 'stock_addition'
+  return <section className="mt-5 rounded-2xl border border-border bg-card p-6">
+    <Header
+      label={isAddition ? 'Physical stock-addition approval' : 'Physical opening-stock approval'}
+      number={note.obNumber}
+      note={note}
+    />
+    {note.status === 'pending_approval' && <form className="mt-7 flex flex-col gap-4" onSubmit={(event) => {
+      event.preventDefault()
+      const form = new FormData(event.currentTarget)
+      onCount({ lines: note.lines.map((line) => ({
+        lineId: line.id,
+        countedQty: Number(form.get(line.id)),
+      })) })
+    }}>
+      {note.lines.map((line) => <label key={line.id} className="grid gap-2 rounded-xl border border-border p-4 sm:grid-cols-[1fr_10rem] sm:items-center">
+        <span>
+          <span className="font-medium">{line.equipmentName}</span>
+          <span className="block text-sm text-muted-foreground">
+            Registered {isAddition ? 'additional' : 'opening'} quantity {line.requestedQty}
+            {line.countDifference !== null && <strong className={line.countDifference === 0 ? 'text-primary-strong' : 'text-danger'}>
+              {' '}· difference {line.countDifference}
+            </strong>}
+          </span>
+        </span>
+        <input className="input" name={line.id} type="number" inputMode="numeric" min="0" max="1000000" step="1" required autoComplete="off" disabled={actionPending} defaultValue={line.countedQty ?? line.requestedQty} aria-label={`${line.equipmentName} ${isAddition ? 'stock addition' : 'opening'} physical count`} />
       </label>)}
       <button className="button-secondary" disabled={actionPending}>
         {countPending ? 'Saving count...' : allCounted ? 'Update physical count' : 'Save physical count'}
@@ -281,7 +371,7 @@ function ApprovalActions({
   onReject,
   onReopen,
 }: {
-  note: DeliveryNoteDetail | RetentionNoteDetail
+  note: ApprovalNote
   allCounted: boolean
   pending: boolean
   onApprove: () => void
@@ -296,13 +386,17 @@ function ApprovalActions({
         Approve and post stock
       </button>
       <button type="button" className="button-secondary" disabled={pending} onClick={() => {
-        if (window.confirm('Reject this note and revoke its field link?')) onReject()
+      if (window.confirm(note.noteType === 'opening_balance'
+        ? 'Reject this opening-stock registration?'
+        : 'Reject this note and revoke its field link?')) onReject()
       }}>Reject</button>
     </>}
     {note.status === 'rejected' && <button type="button" className="button-primary" disabled={pending} onClick={() => {
-      if (window.confirm('Reopen this note and create a new field link?')) onReopen()
+      if (window.confirm(note.noteType === 'opening_balance'
+        ? 'Reopen this opening balance for a new physical count?'
+        : 'Reopen this note and create a new field link?')) onReopen()
     }}>
-      Reopen and create link
+      {note.noteType === 'opening_balance' ? 'Reopen count' : 'Reopen and create link'}
     </button>}
   </div>
 }

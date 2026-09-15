@@ -71,7 +71,7 @@ function DeliveryForm({
   error: string | null
   onSubmit: (input: DeliveryNoteSubmission) => void
 }) {
-  const [quantities, setQuantities] = useState<Record<string, number>>(() => Object.fromEntries(
+  const [quantities, setQuantities] = useState<Record<string, number | ''>>(() => Object.fromEntries(
     note.lines.map((line) => [line.id, line.handedOverQty]),
   ))
   const [reasons, setReasons] = useState<Record<string, DeliveryNoteSubmission['lines'][number]['mismatchReason']>>(() => Object.fromEntries(
@@ -86,7 +86,7 @@ function DeliveryForm({
       event.preventDefault()
       onSubmit({
         lines: note.lines.map((line) => {
-          const handedOverQty = quantities[line.id] ?? 0
+          const handedOverQty = Number(quantities[line.id] || 0)
           const mismatched = handedOverQty !== line.issuedQty
           return {
             lineId: line.id,
@@ -98,8 +98,8 @@ function DeliveryForm({
       })
     }}>
       {note.lines.map((line) => {
-        const quantity = quantities[line.id] ?? 0
-        const mismatched = quantity !== line.issuedQty
+        const quantity = quantities[line.id] ?? ''
+        const mismatched = Number(quantity || 0) !== line.issuedQty
         return (
           <section key={line.id} className="rounded-xl border border-[#d6e0e2] bg-white p-5">
             <div className="flex items-start justify-between gap-4">
@@ -119,10 +119,12 @@ function DeliveryForm({
                 required
                 autoComplete="off"
                 value={quantity}
-                onChange={(event) => setQuantities((current) => ({
-                  ...current,
-                  [line.id]: event.currentTarget.valueAsNumber,
-                }))}
+                onChange={(event) => {
+                  const quantity = event.currentTarget.value === ''
+                    ? ''
+                    : event.currentTarget.valueAsNumber
+                  setQuantities((current) => ({ ...current, [line.id]: quantity }))
+                }}
               />
             </label>
             {mismatched && (
@@ -134,10 +136,10 @@ function DeliveryForm({
                   required
                   autoComplete="off"
                   value={reasons[line.id] ?? ''}
-                  onChange={(event) => setReasons((current) => ({
-                    ...current,
-                    [line.id]: event.currentTarget.value as DeliveryNoteSubmission['lines'][number]['mismatchReason'],
-                  }))}
+                  onChange={(event) => {
+                    const reason = event.currentTarget.value as DeliveryNoteSubmission['lines'][number]['mismatchReason']
+                    setReasons((current) => ({ ...current, [line.id]: reason }))
+                  }}
                 >
                   <option value="">Select reason</option>
                   <option value="missing">Missing</option>
@@ -171,7 +173,12 @@ function RetentionForm({
   error: string | null
   onSubmit: (input: RetentionNoteSubmission) => void
 }) {
-  type RetentionValue = { returned: number; balance: number; shortfall: number }
+  type QuantityValue = number | ''
+  type RetentionValue = {
+    returned: QuantityValue
+    balance: QuantityValue
+    shortfall: QuantityValue
+  }
   const [values, setValues] = useState<Record<string, RetentionValue>>(() => Object.fromEntries(
     note.lines.map((line) => [line.id, {
       returned: line.returnedQty,
@@ -187,17 +194,19 @@ function RetentionForm({
   ))
   const [remarks, setRemarks] = useState(note.lines.find((line) => line.reasonDetail)?.reasonDetail ?? '')
   const hasOtherReason = note.lines.some((line) =>
-    (values[line.id]?.shortfall ?? 0) > 0 && reasons[line.id] === 'other')
+    Number(values[line.id]?.shortfall || 0) > 0 && reasons[line.id] === 'other')
   const hasOverAccountedLine = note.lines.some((line) => {
     const value = values[line.id] ?? { returned: 0, balance: 0, shortfall: 0 }
-    return value.returned + value.balance + value.shortfall > (line.availableQty ?? line.deliveredQty)
+    return Number(value.returned || 0) + Number(value.balance || 0)
+      + Number(value.shortfall || 0) > (line.availableQty ?? line.deliveredQty)
   })
   const hasNoAccountedQuantity = note.lines.every((line) => {
     const value = values[line.id] ?? { returned: 0, balance: 0, shortfall: 0 }
-    return value.returned + value.balance + value.shortfall === 0
+    return Number(value.returned || 0) + Number(value.balance || 0)
+      + Number(value.shortfall || 0) === 0
   })
 
-  const updateValue = (lineId: string, field: keyof RetentionValue, value: number) => {
+  const updateValue = (lineId: string, field: keyof RetentionValue, value: QuantityValue) => {
     setValues((current) => ({
       ...current,
       [lineId]: { ...current[lineId], [field]: value },
@@ -212,12 +221,12 @@ function RetentionForm({
           const value = values[line.id] ?? { returned: 0, balance: 0, shortfall: 0 }
           return {
             lineId: line.id,
-            returnedQty: value.returned,
-            balanceQty: value.balance,
-            missingDamagedQty: value.shortfall,
-            mismatchReason: value.shortfall > 0 ? reasons[line.id] ?? null : null,
-            responsibleParty: value.shortfall > 0 ? responsible[line.id] ?? null : null,
-            reasonDetail: value.shortfall > 0 ? remarks.trim() || null : null,
+            returnedQty: Number(value.returned || 0),
+            balanceQty: Number(value.balance || 0),
+            missingDamagedQty: Number(value.shortfall || 0),
+            mismatchReason: Number(value.shortfall || 0) > 0 ? reasons[line.id] ?? null : null,
+            responsibleParty: Number(value.shortfall || 0) > 0 ? responsible[line.id] ?? null : null,
+            reasonDetail: Number(value.shortfall || 0) > 0 ? remarks.trim() || null : null,
           }
         }),
       })
@@ -227,7 +236,8 @@ function RetentionForm({
       </p>
       {note.lines.map((line) => {
         const value = values[line.id] ?? { returned: 0, balance: 0, shortfall: 0 }
-        const accounted = value.returned + value.balance + value.shortfall
+        const accounted = Number(value.returned || 0) + Number(value.balance || 0)
+          + Number(value.shortfall || 0)
         const available = line.availableQty ?? line.deliveredQty
         const remainingAfterThisNote = available - accounted
         return (
@@ -255,7 +265,7 @@ function RetentionForm({
                   : 'This item is fully accounted for.'}
               </p>
             )}
-            {value.shortfall > 0 && (
+            {Number(value.shortfall || 0) > 0 && (
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <label className="text-xs font-semibold text-[#071c23]">
                   Shortfall type
@@ -265,10 +275,10 @@ function RetentionForm({
                     required
                     autoComplete="off"
                     value={reasons[line.id] ?? ''}
-                    onChange={(event) => setReasons((current) => ({
-                      ...current,
-                      [line.id]: event.currentTarget.value as RetentionNoteSubmission['lines'][number]['mismatchReason'],
-                    }))}
+                    onChange={(event) => {
+                      const reason = event.currentTarget.value as RetentionNoteSubmission['lines'][number]['mismatchReason']
+                      setReasons((current) => ({ ...current, [line.id]: reason }))
+                    }}
                   >
                     <option value="">Select type</option>
                     <option value="missing">Missing</option>
@@ -284,10 +294,10 @@ function RetentionForm({
                     required
                     autoComplete="off"
                     value={responsible[line.id] ?? ''}
-                    onChange={(event) => setResponsible((current) => ({
-                      ...current,
-                      [line.id]: event.currentTarget.value as RetentionNoteSubmission['lines'][number]['responsibleParty'],
-                    }))}
+                    onChange={(event) => {
+                      const party = event.currentTarget.value as RetentionNoteSubmission['lines'][number]['responsibleParty']
+                      setResponsible((current) => ({ ...current, [line.id]: party }))
+                    }}
                   >
                     <option value="">Select party</option>
                     <option value="customer">Customer</option>
@@ -321,9 +331,9 @@ function QuantityInput({
 }: {
   name: string
   label: string
-  value: number
+  value: number | ''
   max: number
-  onChange: (value: number) => void
+  onChange: (value: number | '') => void
 }) {
   return (
     <label className="text-xs font-semibold text-[#071c23]">
@@ -339,7 +349,9 @@ function QuantityInput({
         required
         autoComplete="off"
         value={value}
-        onChange={(event) => onChange(event.currentTarget.valueAsNumber)}
+        onChange={(event) => onChange(
+          event.currentTarget.value === '' ? '' : event.currentTarget.valueAsNumber,
+        )}
       />
     </label>
   )

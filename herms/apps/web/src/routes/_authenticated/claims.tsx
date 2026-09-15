@@ -2,11 +2,17 @@ import type { DashboardRanking, DiscrepancyStatus } from '@herms/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
 
-import { ApiError, api, formatMoney, type DamageClaim } from '../../api'
+import {
+  ApiError,
+  api,
+  formatMoney,
+  type DamageClaim,
+  type DiscrepancyRecord,
+} from '../../api'
 import {
   claimableDiscrepanciesQuery,
   claimsQuery,
-  dashboardDiscrepanciesQuery,
+  discrepanciesQuery,
   dashboardRankingsQuery,
   queryKeys,
   sessionQuery,
@@ -25,7 +31,10 @@ type RegistryRow = {
   customerName: string | null
   equipmentName: string
   quantity: number
-  discrepancyType: 'missing' | 'damaged'
+  discrepancyType: DiscrepancyRecord['discrepancyType']
+  sourceType: DiscrepancyRecord['sourceType']
+  sourceNoteNumber: string
+  sourceNoteStatus: DiscrepancyRecord['sourceNoteStatus']
   reason: string | null
   responsibleParty: 'customer' | 'staff_member' | 'business' | null
   unitPriceCents: number
@@ -52,13 +61,14 @@ function ClaimsPage() {
   const canView = isFinance || session.data?.role === 'business_owner'
   const claims = useQuery({ ...claimsQuery, enabled: canView })
   const claimable = useQuery({ ...claimableDiscrepanciesQuery, enabled: isFinance })
-  const discrepancies = useQuery({ ...dashboardDiscrepanciesQuery(registryFilters), enabled: canView })
+  const discrepancies = useQuery({ ...discrepanciesQuery, enabled: canView })
   const rankings = useQuery({ ...dashboardRankingsQuery(registryFilters), enabled: canView })
 
   const refresh = async (claim?: DamageClaim) => {
     const invalidations: Array<Promise<unknown>> = [
       queryClient.invalidateQueries({ queryKey: queryKeys.claims }),
       queryClient.invalidateQueries({ queryKey: queryKeys.claimableDiscrepancies }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.discrepancies }),
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard }),
       queryClient.invalidateQueries({ queryKey: queryKeys.finance }),
     ]
@@ -91,13 +101,9 @@ function ClaimsPage() {
   const claimableByDiscrepancy = new Map(
     (claimable.data ?? []).map((row) => [row.id, row] as const),
   )
-  const registeredIds = new Set<string>()
-  const registryRows: RegistryRow[] = []
-
-  for (const row of discrepancies.data?.rows ?? []) {
+  const registryRows: RegistryRow[] = (discrepancies.data ?? []).map((row) => {
     const claim = claimByDiscrepancy.get(row.id) ?? null
-    registeredIds.add(row.id)
-    registryRows.push({
+    return {
       discrepancyId: row.id,
       orderId: row.orderId,
       orderNumber: row.orderNumber,
@@ -105,6 +111,9 @@ function ClaimsPage() {
       equipmentName: row.equipmentName,
       quantity: row.quantity,
       discrepancyType: row.discrepancyType,
+      sourceType: row.sourceType,
+      sourceNoteNumber: row.sourceNoteNumber,
+      sourceNoteStatus: row.sourceNoteStatus,
       reason: row.reason,
       responsibleParty: row.responsibleParty,
       unitPriceCents: row.unitPriceCents,
@@ -113,61 +122,21 @@ function ClaimsPage() {
       status: claim?.status ?? row.status,
       claim,
       claimable: claimableByDiscrepancy.has(row.id),
-    })
-  }
-
-  for (const row of claimable.data ?? []) {
-    if (registeredIds.has(row.id)) continue
-    registeredIds.add(row.id)
-    registryRows.push({
-      discrepancyId: row.id,
-      orderId: row.orderId,
-      orderNumber: row.orderNumber,
-      customerName: row.customerName,
-      equipmentName: row.equipmentName,
-      quantity: row.quantity,
-      discrepancyType: 'damaged',
-      reason: row.reason,
-      responsibleParty: 'customer',
-      unitPriceCents: row.unitPriceCents,
-      valueCents: row.claimAmountCents,
-      recordedAt: row.damageRecordedAt,
-      status: row.status,
-      claim: null,
-      claimable: true,
-    })
-  }
-
-  for (const claim of claims.data ?? []) {
-    if (registeredIds.has(claim.discrepancyId)) continue
-    registeredIds.add(claim.discrepancyId)
-    registryRows.push({
-      discrepancyId: claim.discrepancyId,
-      orderId: claim.orderId,
-      orderNumber: claim.orderNumber,
-      customerName: claim.customerName,
-      equipmentName: claim.equipmentName,
-      quantity: claim.quantity,
-      discrepancyType: 'damaged',
-      reason: claim.reason,
-      responsibleParty: 'customer',
-      unitPriceCents: claim.unitPriceCents,
-      valueCents: claim.claimAmountCents,
-      recordedAt: claim.damageRecordedAt,
-      status: claim.status,
-      claim,
-      claimable: false,
-    })
-  }
+    }
+  })
 
   registryRows.sort((left, right) => Date.parse(right.recordedAt) - Date.parse(left.recordedAt))
 
   const confirmedClaimValue = (claims.data ?? [])
     .filter((claim) => claim.status === 'confirmed')
     .reduce((total, claim) => total + claim.claimAmountCents, 0)
-  const customerResponsibleCount = (discrepancies.data?.rows ?? [])
+  const activeDiscrepancies = (discrepancies.data ?? [])
+    .filter((row) => ['open', 'written_off'].includes(row.status))
+  const openLossValue = activeDiscrepancies
+    .reduce((total, row) => total + row.valueCents, 0)
+  const customerResponsibleCount = activeDiscrepancies
     .filter((row) => row.responsibleParty === 'customer').length
-  const currency = discrepancies.data?.currency ?? rankings.data?.currency ?? 'LKR'
+  const currency = rankings.data?.currency ?? 'LKR'
   const firstError = [discrepancies.error, rankings.error, claims.error, claimable.error].find(Boolean)
 
   return (
@@ -175,7 +144,7 @@ function ClaimsPage() {
       <header className="border-b border-border pb-5">
         <h1>Discrepancy &amp; Damage Registry</h1>
         <p className="mt-1 text-sm leading-6 text-muted-foreground">
-          Every approved mismatch raised at delivery or return, with its responsible party and claim status.
+          Every submitted mismatch raised at delivery or return, with source approval, responsibility, resolution, and claim status.
         </p>
       </header>
 
@@ -184,12 +153,12 @@ function ClaimsPage() {
       <section aria-label="Discrepancy summary" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard
           label="Open records"
-          value={discrepancies.isPending ? '—' : String(discrepancies.data?.openCount ?? 0)}
+          value={discrepancies.isPending ? '—' : String(activeDiscrepancies.length)}
           tone="warning"
         />
         <SummaryCard
           label="Open loss value"
-          value={discrepancies.isPending ? '—' : formatMoney(discrepancies.data?.totalValueCents ?? 0, currency)}
+          value={discrepancies.isPending ? '—' : formatMoney(openLossValue, currency)}
           tone="danger"
         />
         <SummaryCard
@@ -212,7 +181,7 @@ function ClaimsPage() {
           <div>
             <h2 className="font-semibold">Registry</h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              Open discrepancies and customer damage claims are shown together.
+              Submitted delivery and retention discrepancies remain visible through their full lifecycle.
             </p>
           </div>
           <span className="rounded-full bg-muted px-3 py-1 text-xs font-semibold text-muted-foreground">
@@ -257,15 +226,19 @@ function ClaimsPage() {
                     </td>
                     <td className="whitespace-nowrap px-3 py-3.5 text-muted-foreground">{formatDate(row.recordedAt)}</td>
                     <td className="whitespace-nowrap px-3 py-3.5">
-                      {row.orderId && row.orderNumber ? (
+                      <p className="font-medium">{row.sourceNoteNumber}</p>
+                      <p className="mt-1 text-xs capitalize text-muted-foreground">
+                        {row.sourceType.replaceAll('_', ' ')} · {row.sourceNoteStatus.replaceAll('_', ' ')}
+                      </p>
+                      {row.orderId && row.orderNumber && (
                         <Link
                           to="/orders/$orderId"
                           params={{ orderId: row.orderId }}
-                          className="font-medium text-primary-strong hover:underline"
+                          className="mt-1 block text-xs font-medium text-primary-strong hover:underline"
                         >
                           {row.orderNumber}
                         </Link>
-                      ) : '—'}
+                      )}
                     </td>
                     <td className="px-3 py-3.5 font-medium">{row.customerName ?? 'No customer'}</td>
                     <td className="px-3 py-3.5">
@@ -449,7 +422,7 @@ function TypeBadge({ type }: { type: RegistryRow['discrepancyType'] }) {
     : 'bg-warning-soft text-foreground'
   return (
     <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${className}`}>
-      {type}
+      {type.replaceAll('_', ' ')}
     </span>
   )
 }

@@ -37,6 +37,7 @@ import {
   retentionNoteCountSchema,
   retentionNoteCreateSchema,
   retentionNoteSubmissionSchema,
+  stockAdditionInputSchema,
   writeOffReversalSchema,
   REQUEST_ID_HEADER,
 } from '@herms/shared'
@@ -313,8 +314,15 @@ export function createApp({
       if ('response' in parsed) return parsed.response
       return c.json({ data: await masterData.createItem(parsed.data, actor(c)) }, 201)
     })
+    .post('/api/items/:id/stock-additions', async (c) => {
+      const parsed = await validatedJson(c, stockAdditionInputSchema)
+      if ('response' in parsed) return parsed.response
+      return c.json({
+        data: await masterData.addItemStock(c.req.param('id'), parsed.data, actor(c)),
+      }, 201)
+    })
     .get('/api/items/:id', async (c) =>
-      c.json({ data: await masterData.getItem(c.req.param('id')) }),
+      c.json({ data: await masterData.getItem(c.req.param('id'), c.get('user')) }),
     )
     .put('/api/items/:id', async (c) => {
       const parsed = await validatedJson(c, equipmentUpdateSchema)
@@ -418,6 +426,9 @@ export function createApp({
     )
     .post('/api/price-escalation', requireRoles('business_owner'), async (c) =>
       c.json({ data: await priceEscalation.apply(actor(c)) }),
+    )
+    .get('/api/discrepancies', requireRoles('finance', 'business_owner'), async (c) =>
+      c.json({ data: await claims.listDiscrepancies(c.get('user')) }),
     )
     .get('/api/discrepancies/claimable', requireRoles('finance'), async (c) =>
       c.json({ data: await claims.listClaimableDiscrepancies(c.get('user')) }),
@@ -590,7 +601,7 @@ export function createApp({
         retention.listApprovals(c.get('user')),
       ])
       const data = [
-        ...deliveryRows.map((row) => ({ ...row, noteType: 'delivery_note' as const })),
+        ...deliveryRows,
         ...retentionRows,
       ].sort((left, right) =>
         new Date(right.submittedAt ?? right.createdAt).getTime()
@@ -615,7 +626,7 @@ export function createApp({
       const noteId = c.req.param('noteId')
       const data = await retention.ownsNote(noteId, c.get('user'))
         ? retention.getRetentionNote(noteId, c.get('user'))
-        : delivery.getDeliveryNote(noteId, c.get('user'))
+        : delivery.getApprovalNote(noteId, c.get('user'))
       return c.json({ data: await data })
     })
     .post('/api/approvals/:noteId/count', requireStoreApprover(), async (c) => {
@@ -630,29 +641,49 @@ export function createApp({
       }
       const parsed = await validatedJson(c, deliveryNoteCountSchema)
       if ('response' in parsed) return parsed.response
+      if (await delivery.ownsOpeningBalance(noteId, c.get('user'))) {
+        return c.json({
+          data: await delivery.countOpeningBalance(noteId, parsed.data, actor(c)),
+        })
+      }
       return c.json({
         data: await delivery.countNote(noteId, parsed.data, actor(c)),
       })
     })
     .post('/api/approvals/:noteId/approve', requireStoreApprover(), async (c) => {
       const noteId = c.req.param('noteId')
-      const data = await retention.ownsNote(noteId, c.get('user'))
+      const isRetention = await retention.ownsNote(noteId, c.get('user'))
+      const isOpening = !isRetention
+        && await delivery.ownsOpeningBalance(noteId, c.get('user'))
+      const data = isRetention
         ? retention.approveNote(noteId, actor(c))
-        : delivery.approveNote(noteId, actor(c))
+        : isOpening
+          ? delivery.approveOpeningBalance(noteId, actor(c))
+          : delivery.approveNote(noteId, actor(c))
       return c.json({ data: await data })
     })
     .post('/api/approvals/:noteId/reject', requireStoreApprover(), async (c) => {
       const noteId = c.req.param('noteId')
-      const data = await retention.ownsNote(noteId, c.get('user'))
+      const isRetention = await retention.ownsNote(noteId, c.get('user'))
+      const isOpening = !isRetention
+        && await delivery.ownsOpeningBalance(noteId, c.get('user'))
+      const data = isRetention
         ? retention.rejectNote(noteId, actor(c))
-        : delivery.rejectNote(noteId, actor(c))
+        : isOpening
+          ? delivery.rejectOpeningBalance(noteId, actor(c))
+          : delivery.rejectNote(noteId, actor(c))
       return c.json({ data: await data })
     })
     .post('/api/approvals/:noteId/reopen', requireStoreApprover(), async (c) => {
       const noteId = c.req.param('noteId')
-      const data = await retention.ownsNote(noteId, c.get('user'))
+      const isRetention = await retention.ownsNote(noteId, c.get('user'))
+      const isOpening = !isRetention
+        && await delivery.ownsOpeningBalance(noteId, c.get('user'))
+      const data = isRetention
         ? retention.reopenNote(noteId, actor(c))
-        : delivery.reopenNote(noteId, actor(c))
+        : isOpening
+          ? delivery.reopenOpeningBalance(noteId, actor(c))
+          : delivery.reopenNote(noteId, actor(c))
       return c.json({ data: await data })
     })
     .post('/api/orders/:id/close', requireRoles('store_admin'), async (c) =>

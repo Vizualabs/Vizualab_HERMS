@@ -18,6 +18,20 @@ describe('Stock write boundary', () => {
     expect(insertLocations).toEqual(expect.arrayContaining([expect.stringContaining('packages/db/src/retention.ts')]))
     expect(insertLocations).toHaveLength(2)
   })
+
+  test('requires approved, repeatable stock receipts before incoming stock is posted', async () => {
+    const migration = await Bun.file(
+      new URL('../migrations/0013_opening_balance_inventory.sql', import.meta.url),
+    ).text()
+    const service = await Bun.file(new URL('./delivery.ts', import.meta.url)).text()
+
+    expect(migration).toContain("NEW.source_type = 'opening_balance'")
+    expect(migration).toContain("status = 'approved'")
+    expect(migration).toContain("'stock_addition'")
+    expect(migration).not.toContain('opening_balance_item_unique')
+    expect(service).toContain("'opening_balance', note.id, 'in'::stock_direction")
+    expect(service).toContain('line.counted_qty')
+  })
 })
 
 describe('Delivery Note field-link boundary', () => {

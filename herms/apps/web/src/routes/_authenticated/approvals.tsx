@@ -5,10 +5,11 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import {
   ApiError,
   api,
+  type ApprovalNote,
   type ApprovalSummary,
   type DeliveryNoteDetail,
+  type OpeningBalanceNoteDetail,
   type RetentionNoteDetail,
-  type TokenNote,
 } from '../../api'
 import { ManualLinkShare } from '../../components/ManualShareActions'
 import { approvalMetricsQuery, approvalsQuery, queryKeys } from '../../queries'
@@ -124,11 +125,11 @@ function MetricCard({
   )
 }
 
-function ApprovalCard({ note }: { note: TokenNote }) {
+function ApprovalCard({ note }: { note: ApprovalNote }) {
   if (note.status !== 'pending_approval') return <WaitingApprovalCard note={note} />
-  return note.noteType === 'retention_note'
-    ? <PendingRetentionCard note={note} />
-    : <PendingDeliveryCard note={note} />
+  if (note.noteType === 'retention_note') return <PendingRetentionCard note={note} />
+  if (note.noteType === 'opening_balance') return <PendingOpeningCard note={note} />
+  return <PendingDeliveryCard note={note} />
 }
 
 function PendingDeliveryCard({ note }: { note: DeliveryNoteDetail }) {
@@ -198,6 +199,41 @@ function PendingRetentionCard({ note }: { note: RetentionNoteDetail }) {
   )
 }
 
+function PendingOpeningCard({ note }: { note: OpeningBalanceNoteDetail }) {
+  const initialCounts = () => Object.fromEntries(
+    note.lines.map((line) => [line.id, line.countedQty ?? line.requestedQty]),
+  )
+  const [counts, setCounts] = useState<Record<string, number | ''>>(initialCounts)
+
+  useEffect(() => setCounts(initialCounts()), [note])
+
+  const actions = useApprovalActions(note)
+  return (
+    <ApprovalFormCard
+      note={note}
+      rows={note.lines.map((line) => ({
+        id: line.id,
+        itemName: line.equipmentName,
+        issuedQuantity: line.requestedQty,
+        submittedQuantity: line.requestedQty,
+        reason: null,
+      }))}
+      counts={counts}
+      setCount={(lineId, count) => setCounts((current) => ({ ...current, [lineId]: count }))}
+      approvePending={actions.approve.isPending}
+      rejectPending={actions.reject.isPending}
+      error={actions.approve.error ?? actions.reject.error}
+      onApprove={() => actions.approve.mutate({
+        lines: note.lines.map((line) => ({
+          lineId: line.id,
+          countedQty: Number(counts[line.id]),
+        })),
+      })}
+      onReject={() => actions.reject.mutate()}
+    />
+  )
+}
+
 type ApprovalRow = {
   id: string
   itemName: string
@@ -217,7 +253,7 @@ function ApprovalFormCard({
   onApprove,
   onReject,
 }: {
-  note: TokenNote
+  note: ApprovalNote
   rows: ApprovalRow[]
   counts: Record<string, number | ''>
   setCount: (lineId: string, count: number | '') => void
@@ -228,8 +264,7 @@ function ApprovalFormCard({
   onReject: () => void
 }) {
   const actionPending = approvePending || rejectPending
-  const number = note.noteType === 'retention_note' ? note.rnNumber : note.dnNumber
-  const typeLabel = note.noteType === 'retention_note' ? 'Retention Note' : 'Delivery Note'
+  const { number, typeLabel } = approvalIdentity(note)
 
   return (
     <form
@@ -250,7 +285,9 @@ function ApprovalFormCard({
             className="min-h-10 rounded-lg border border-[#d6e0e2] bg-white px-4 text-xs font-semibold text-[#071c23] shadow-sm transition-colors hover:bg-[#f4f8f8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#078486]"
             disabled={actionPending}
             onClick={() => {
-              if (window.confirm('Reject this note and revoke its field link?')) onReject()
+              if (window.confirm(note.noteType === 'opening_balance'
+                ? 'Reject this opening-stock registration?'
+                : 'Reject this note and revoke its field link?')) onReject()
             }}
           >
             {rejectPending ? 'Rejecting…' : 'Reject'}
@@ -271,8 +308,14 @@ function ApprovalFormCard({
           <thead>
             <tr className="border-b border-[#d6e0e2]">
               <th className="w-[16%] py-4 pr-4">Item</th>
-              <th className="w-[21%] px-3 py-4">Issued from store</th>
-              <th className="w-[17%] px-3 py-4">Submitted qty</th>
+              <th className="w-[21%] px-3 py-4">
+                {note.noteType === 'opening_balance' ? 'Registered qty' : 'Issued from store'}
+              </th>
+              <th className="w-[17%] px-3 py-4">
+                {note.noteType === 'opening_balance'
+                  ? note.entryType === 'stock_addition' ? 'Addition qty' : 'Opening qty'
+                  : 'Submitted qty'}
+              </th>
               <th className="w-[13%] px-3 py-4">Reason</th>
               <th className="w-[22%] px-3 py-4">Admin physical count</th>
               <th className="w-[11%] py-4 pl-3 text-right">Check</th>
@@ -334,7 +377,7 @@ function ApprovalIdentity({
   number,
   typeLabel,
 }: {
-  note: TokenNote
+  note: ApprovalNote
   number: string
   typeLabel: string
 }) {
@@ -351,36 +394,47 @@ function ApprovalIdentity({
         </Link>
       </h2>
       <p className="mt-0.5 truncate text-xs text-[#526977]">
-        {note.orderNumber} · {note.customerName} · submitted by {note.submittedByName ?? 'Field staff'}
+        {note.noteType === 'opening_balance'
+          ? `${note.storeName} · submitted by ${note.submittedByName ?? 'Equipment creator'}`
+          : `${note.orderNumber} · ${note.customerName} · submitted by ${note.submittedByName ?? 'Field staff'}`}
         {note.submittedAt ? ` — ${dateTimeFormatter.format(new Date(note.submittedAt))}` : ''}
       </p>
     </div>
   )
 }
 
-function WaitingApprovalCard({ note }: { note: TokenNote }) {
+function WaitingApprovalCard({ note }: { note: ApprovalNote }) {
   const client = useQueryClient()
   const [reopenedLink, setReopenedLink] = useState<string | null>(null)
-  const reopen = useMutation<DeliveryNoteDetail | RetentionNoteDetail, Error, void>({
+  const reopen = useMutation<ApprovalNote, Error, void>({
     mutationFn: () => note.noteType === 'retention_note'
       ? api.reopenRetentionNote(note.id)
-      : api.reopenDeliveryNote(note.id),
+      : note.noteType === 'opening_balance'
+        ? api.reopenOpeningBalance(note.id)
+        : api.reopenDeliveryNote(note.id),
     onSuccess: async (reopenedNote) => {
-      setReopenedLink(reopenedNote.submissionLink ?? null)
+      setReopenedLink(reopenedNote.noteType === 'opening_balance'
+        ? null
+        : reopenedNote.submissionLink ?? null)
       await client.invalidateQueries({ queryKey: queryKeys.approvals })
     },
   })
-  const number = note.noteType === 'retention_note' ? note.rnNumber : note.dnNumber
-  const typeLabel = note.noteType === 'retention_note' ? 'Retention Note' : 'Delivery Note'
+  const { number, typeLabel } = approvalIdentity(note)
   const status = note.status.replaceAll('_', ' ')
   return (
     <article className="rounded-xl border border-[#d6e0e2] bg-white px-5 py-4">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-[#071c23]">{number} · {typeLabel}</h2>
-          <p className="mt-0.5 text-xs text-[#526977]">{note.orderNumber} · {note.customerName}</p>
+          <p className="mt-0.5 text-xs text-[#526977]">
+            {note.noteType === 'opening_balance'
+              ? note.storeName
+              : `${note.orderNumber} · ${note.customerName}`}
+          </p>
           <p className="mt-2 text-xs text-[#60727e]">
-            {note.status === 'reopened'
+            {note.noteType === 'opening_balance'
+              ? 'This opening balance must be reopened before it can be counted again.'
+              : note.status === 'reopened'
               ? 'Waiting for field staff to resubmit this note.'
               : 'This note must be reopened before field staff can resubmit it.'}
           </p>
@@ -403,10 +457,14 @@ function WaitingApprovalCard({ note }: { note: TokenNote }) {
               className="min-h-10 rounded-lg border border-[#078486] bg-[#078486] px-4 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#096f72] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#078486] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
               disabled={reopen.isPending}
               onClick={() => {
-                if (window.confirm('Reopen this note and create a new field link?')) reopen.mutate()
+                if (window.confirm(note.noteType === 'opening_balance'
+                  ? 'Reopen this opening balance for a new physical count?'
+                  : 'Reopen this note and create a new field link?')) reopen.mutate()
               }}
             >
-              {reopen.isPending ? 'Reopening…' : 'Reopen & create link'}
+              {reopen.isPending
+                ? 'Reopening…'
+                : note.noteType === 'opening_balance' ? 'Reopen count' : 'Reopen & create link'}
             </button>
           )}
         </div>
@@ -416,7 +474,7 @@ function WaitingApprovalCard({ note }: { note: TokenNote }) {
           {getErrorMessage(reopen.error, 'Unable to reopen this note')}
         </p>
       )}
-      {reopenedLink && <ManualLinkShare
+      {reopenedLink && note.noteType !== 'opening_balance' && <ManualLinkShare
         label={`${typeLabel} submission link created`}
         link={reopenedLink}
         message={createNoteShareMessage({
@@ -440,13 +498,19 @@ function ApprovalCardFallback({
   error: Error | null | undefined
   pending: boolean
 }) {
-  const number = summary.rnNumber ?? summary.dnNumber ?? 'Approval note'
+  const number = summary.rnNumber ?? summary.dnNumber ?? summary.obNumber ?? 'Approval note'
   return (
     <article className="rounded-xl border border-[#d6e0e2] bg-white px-5 py-5">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h2 className="text-[#071c23]">{number}</h2>
-          <p className="mt-1 text-xs text-[#526977]">{summary.orderNumber} · {summary.customerName}</p>
+          <p className="mt-1 text-xs text-[#526977]">
+            {summary.orderNumber && summary.customerName
+              ? `${summary.orderNumber} · ${summary.customerName}`
+              : summary.entryType === 'stock_addition'
+                ? 'Additional stock receipt'
+                : 'Opening stock registration'}
+          </p>
           <p className={`mt-2 text-xs ${error ? 'text-danger' : 'text-[#60727e]'}`}>
             {pending ? 'Loading note details…' : getErrorMessage(error, 'Unable to load note details')}
           </p>
@@ -484,13 +548,18 @@ function CheckBadge({ matches }: { matches: boolean }) {
   )
 }
 
-function useApprovalActions(note: TokenNote) {
+function useApprovalActions(note: ApprovalNote) {
   const client = useQueryClient()
   const refresh = async () => {
     await Promise.all([
       client.invalidateQueries({ queryKey: queryKeys.approvals }),
       client.invalidateQueries({ queryKey: queryKeys.stock }),
       client.invalidateQueries({ queryKey: queryKeys.dashboard }),
+      client.invalidateQueries({ queryKey: queryKeys.claims }),
+      client.invalidateQueries({ queryKey: queryKeys.discrepancies }),
+      client.invalidateQueries({ queryKey: queryKeys.claimableDiscrepancies }),
+      client.invalidateQueries({ queryKey: queryKeys.orders }),
+      client.invalidateQueries({ queryKey: queryKeys.finance }),
     ])
   }
 
@@ -507,6 +576,13 @@ function useApprovalActions(note: TokenNote) {
         )
         return api.approveRetentionNote(note.id)
       }
+      if (note.noteType === 'opening_balance') {
+        await api.countOpeningBalance(
+          note.id,
+          countInput as Parameters<typeof api.countOpeningBalance>[1],
+        )
+        return api.approveOpeningBalance(note.id)
+      }
       await api.countDeliveryNote(
         note.id,
         countInput as Parameters<typeof api.countDeliveryNote>[1],
@@ -519,14 +595,29 @@ function useApprovalActions(note: TokenNote) {
     },
   })
 
-  const reject = useMutation<DeliveryNoteDetail | RetentionNoteDetail, Error, void>({
+  const reject = useMutation<ApprovalNote, Error, void>({
     mutationFn: () => note.noteType === 'retention_note'
       ? api.rejectRetentionNote(note.id)
-      : api.rejectDeliveryNote(note.id),
+      : note.noteType === 'opening_balance'
+        ? api.rejectOpeningBalance(note.id)
+        : api.rejectDeliveryNote(note.id),
     onSuccess: refresh,
   })
 
   return { approve, reject }
+}
+
+function approvalIdentity(note: ApprovalNote) {
+  if (note.noteType === 'retention_note') {
+    return { number: note.rnNumber, typeLabel: 'Retention Note' }
+  }
+  if (note.noteType === 'opening_balance') {
+    return {
+      number: note.obNumber,
+      typeLabel: note.entryType === 'stock_addition' ? 'Stock Addition' : 'Opening Balance',
+    }
+  }
+  return { number: note.dnNumber, typeLabel: 'Delivery Note' }
 }
 
 function getErrorMessage(error: unknown, fallback: string) {

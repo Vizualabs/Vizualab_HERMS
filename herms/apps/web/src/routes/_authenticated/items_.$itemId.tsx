@@ -17,6 +17,10 @@ function ItemDetailPage() {
   const canChangePrice = session.data?.role === 'business_owner'
     || session.data?.role === 'sales'
     || session.data?.role === 'super_user'
+  const canAddStock = session.data?.role === 'business_owner'
+    || session.data?.role === 'sales'
+    || session.data?.role === 'system_admin'
+    || session.data?.role === 'super_user'
   const item = useQuery(
     queryOptions({ queryKey: queryKeys.item(itemId), queryFn: () => api.item(itemId) }),
   )
@@ -37,6 +41,10 @@ function ItemDetailPage() {
       api.changePrice(itemId, input.newPriceCents, input.reason),
     onSuccess: invalidateItem,
   })
+  const addStock = useMutation({
+    mutationFn: (quantity: number) => api.addItemStock(itemId, quantity),
+    onSuccess: invalidateItem,
+  })
 
   async function invalidateItem() {
     await Promise.all([
@@ -45,6 +53,9 @@ function ItemDetailPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.items }),
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard }),
       queryClient.invalidateQueries({ queryKey: queryKeys.stock }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.approvals }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.approvalMetrics }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.orders }),
     ])
   }
 
@@ -71,6 +82,12 @@ function ItemDetailPage() {
               LKR {formatMinorUnits(item.data.currentUnitPriceCents)}
             </p>
             <p className="text-xs text-muted-foreground">current unit price</p>
+            <dl className="mt-6 grid grid-cols-2 gap-3 border-t border-border pt-6">
+              <StockTotal label="Available now" value={item.data.currentStockQty} />
+              <StockTotal label="Opening stock" value={item.data.openingStockQty} />
+              <StockTotal label="Total stock received" value={item.data.totalReceivedQty} />
+              <StockTotal label="Awaiting approval" value={item.data.pendingReceiptQty} />
+            </dl>
             <form
               className="mt-7 space-y-4 border-t border-border pt-6"
               onSubmit={(event) => {
@@ -107,6 +124,45 @@ function ItemDetailPage() {
               </button>
             </form>
           </div>
+
+          {canAddStock && (
+            <div className="rounded-2xl border border-border bg-card p-6">
+              <h2 className="text-lg font-semibold">Add equipment stock</h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Register newly received units here. Available stock changes only after Store Admin
+                records the physical count and approves the receipt.
+              </p>
+              <form
+                className="mt-4 space-y-4"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  const form = new FormData(event.currentTarget)
+                  addStock.mutate(Number(form.get('stockAdditionQuantity')))
+                }}
+              >
+                <Edit
+                  label="New units received"
+                  name="stockAdditionQuantity"
+                  type="number"
+                  min="1"
+                  max="1000000"
+                  step="1"
+                  placeholder="150"
+                  defaultValue=""
+                />
+                {addStock.error && <ErrorText error={addStock.error} />}
+                {addStock.data && (
+                  <p role="status" className="text-sm font-medium text-primary-strong">
+                    {addStock.data.noteNumber} created for {addStock.data.quantity} units and awaits
+                    Store Admin approval.
+                  </p>
+                )}
+                <button type="submit" disabled={addStock.isPending} className="button-primary w-full">
+                  {addStock.isPending ? 'Creating receipt...' : 'Submit stock addition'}
+                </button>
+              </form>
+            </div>
+          )}
 
           {canChangePrice && (
             <div className="rounded-2xl border border-border bg-card p-6">
@@ -190,6 +246,15 @@ function ItemDetailPage() {
   )
 }
 
+function StockTotal({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-xl bg-muted p-3">
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="mt-1 font-mono text-lg font-semibold">{value}</dd>
+    </div>
+  )
+}
+
 function Edit({
   label,
   name,
@@ -197,6 +262,7 @@ function Edit({
   type = 'text',
   required = true,
   min,
+  max,
   step,
   placeholder,
 }: {
@@ -206,6 +272,7 @@ function Edit({
   type?: string
   required?: boolean
   min?: string
+  max?: string
   step?: string
   placeholder?: string
 }) {
@@ -217,6 +284,7 @@ function Edit({
         name={name}
         type={type}
         min={min ?? (type === 'number' ? '0' : undefined)}
+        max={max}
         step={step ?? (type === 'number' ? '1' : undefined)}
         inputMode={type === 'number' ? (step === '0.01' ? 'decimal' : 'numeric') : undefined}
         placeholder={placeholder}

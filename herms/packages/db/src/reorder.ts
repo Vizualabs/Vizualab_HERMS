@@ -108,7 +108,7 @@ function reconciliationSql(scope: ReorderScope, actor: AuditActor, now: Date) {
 }
 
 export function reconcileReorderAlertsForLedger(
-  sourceType: 'delivery_note' | 'retention_note' | 'write_off_reversal',
+  sourceType: 'delivery_note' | 'retention_note' | 'opening_balance' | 'write_off_reversal',
   sourceNoteId: string,
   ledgerCreatedAt: Date,
   actor: AuditActor,

@@ -88,6 +88,88 @@ export function createClaimService(db: Database) {
   return {
     getClaim,
 
+    async listDiscrepancies(actor: SessionUser) {
+      const storeFilter = actor.storeId
+        ? sql`AND customer.store_id = ${actor.storeId}::uuid`
+        : sql``
+      const result = await db.execute<{
+        id: string
+        sourceType: string
+        sourceNoteId: string
+        sourceNoteNumber: string
+        sourceNoteStatus: string
+        orderId: string | null
+        orderNumber: string | null
+        customerId: string | null
+        customerName: string | null
+        equipmentItemId: string
+        equipmentName: string
+        quantity: number | string
+        discrepancyType: 'missing' | 'damaged' | 'not_accepted' | 'other'
+        reason: string | null
+        responsibleParty: 'customer' | 'staff_member' | 'business' | null
+        status: 'open' | 'resolved' | 'written_off' | 'claimed'
+        recordedAt: Date | string
+        resolvedAt: Date | string | null
+        unitPriceCents: number | string
+      }>(sql`
+        SELECT discrepancy.id,
+          discrepancy.source_type AS "sourceType",
+          discrepancy.source_note_id AS "sourceNoteId",
+          COALESCE(delivery_note.dn_number, retention_note.rn_number)
+            AS "sourceNoteNumber",
+          COALESCE(delivery_note.status::text, retention_note.status::text)
+            AS "sourceNoteStatus",
+          discrepancy.order_id AS "orderId",
+          rental_order.order_number AS "orderNumber",
+          customer.id AS "customerId",
+          customer.name AS "customerName",
+          discrepancy.equipment_item_id AS "equipmentItemId",
+          item.name AS "equipmentName",
+          discrepancy.quantity,
+          discrepancy.discrepancy_type AS "discrepancyType",
+          discrepancy.reason,
+          discrepancy.responsible_party AS "responsibleParty",
+          discrepancy.status,
+          discrepancy.created_at AS "recordedAt",
+          discrepancy.resolved_at AS "resolvedAt",
+          recorded_price.new_price_cents AS "unitPriceCents"
+        FROM ${discrepancies} discrepancy
+        LEFT JOIN ${deliveryNotes} delivery_note
+          ON discrepancy.source_type = 'delivery_note'
+          AND delivery_note.id = discrepancy.source_note_id
+        LEFT JOIN ${retentionNotes} retention_note
+          ON discrepancy.source_type = 'retention_note'
+          AND retention_note.id = discrepancy.source_note_id
+        LEFT JOIN ${orders} rental_order ON rental_order.id = discrepancy.order_id
+        LEFT JOIN ${customers} customer ON customer.id = rental_order.customer_id
+        INNER JOIN ${equipmentItems} item ON item.id = discrepancy.equipment_item_id
+        INNER JOIN LATERAL (
+          SELECT history.new_price_cents
+          FROM ${priceHistory} history
+          WHERE history.equipment_item_id = discrepancy.equipment_item_id
+            AND history.effective_date <= discrepancy.created_at
+          ORDER BY history.effective_date DESC, history.created_at DESC
+          LIMIT 1
+        ) recorded_price ON true
+        WHERE COALESCE(delivery_note.id, retention_note.id) IS NOT NULL
+          ${storeFilter}
+        ORDER BY discrepancy.created_at DESC, discrepancy.id DESC
+      `)
+      return result.rows.map((row) => {
+        const quantity = databaseInteger(row.quantity, 'Discrepancy quantity')
+        const unitPriceCents = databaseInteger(row.unitPriceCents, 'Recorded-date price')
+        return {
+          ...row,
+          quantity,
+          unitPriceCents,
+          valueCents: multiplyMinorUnits(unitPriceCents, quantity),
+          recordedAt: new Date(row.recordedAt),
+          resolvedAt: row.resolvedAt ? new Date(row.resolvedAt) : null,
+        }
+      })
+    },
+
     async listClaims(actor: SessionUser) {
       const scoped = claimStoreScope(actor)
       return db

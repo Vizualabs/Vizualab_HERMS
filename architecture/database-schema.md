@@ -130,6 +130,10 @@ Equipment master (FR-1.x).
 | `reorder_threshold` | integer NULL | FR-6.4 |
 | `created_at`, `updated_at` | timestamptz | |
 
+Opening quantity is not stored as a mutable equipment column. Equipment registration and later
+stock additions create typed `opening_balance_note` receipts; current stock is always derived
+from approved ledger movements (I-1).
+
 ### price_history  (append-only)
 
 Immutable price log (FR-1.5, FR-9.7, I-3). Point-in-time source for claims (I-4).
@@ -269,6 +273,34 @@ Per line: returned / balance / missing-damaged (FR-4.1, FR-4.3).
 | `mismatch_reason` | `discrepancy_type` NULL | `missing` / `damaged` / `other` |
 | `responsible_party` | `responsible_party` NULL | Required on shortfall (BR-3); determines billability (BR-5) |
 | `reason_detail` | text NULL | |
+
+### opening_balance_note
+
+Stock-receipt header created for an equipment item's opening balance or a later stock addition.
+It uses the same physical-count and Store Admin approval gate as delivery and retention notes.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid PK | |
+| `ob_number` | text NOT NULL UNIQUE | |
+| `entry_type` | text NOT NULL | `opening_balance` / `stock_addition` |
+| `store_id` | uuid FK → `store.id` NOT NULL | Queue scope |
+| `status` | `note_status` NOT NULL default `pending_approval` | Pending / approved / rejected only |
+| `submitted_by` | uuid FK → `user.id` NOT NULL | Equipment creator or stock-addition requester |
+| `approved_by` | uuid FK → `user.id` NULL | Counting Store Admin |
+| `submitted_at` | timestamptz NOT NULL | |
+| `approved_at` | timestamptz NULL | |
+| `created_at`, `updated_at` | timestamptz | |
+
+### opening_balance_note_line
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid PK | |
+| `opening_balance_note_id` | uuid FK → `opening_balance_note.id` NOT NULL, ON DELETE CASCADE | |
+| `equipment_item_id` | uuid FK → `equipment_item.id` NOT NULL | One line per item within each receipt |
+| `requested_qty` | integer NOT NULL CHECK (> 0) | Quantity entered at registration or addition |
+| `counted_qty` | integer NULL CHECK (>= 0) | Store Admin physical count |
 
 ### stock_ledger  (append-only)
 

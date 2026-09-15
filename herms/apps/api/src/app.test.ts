@@ -93,6 +93,15 @@ function createServices() {
     listItems: async () => [],
     getItem: async (id: string) => ({ id }),
     createItem: async (input: object) => ({ id: 'item-1', ...input }),
+    addItemStock: async (id: string, input: { quantity: number }) => ({
+      equipmentItemId: id,
+      equipmentName: 'Test item',
+      quantity: input.quantity,
+      status: 'pending_approval',
+      noteId: '70000000-0000-4000-8000-000000000099',
+      noteNumber: 'OB-000099',
+      entryType: 'stock_addition',
+    }),
     updateItem: async (id: string, input: object) => ({ id, ...input }),
     changeItemPrice: async (id: string, input: object) => ({ id, ...input }),
     listPriceHistory: async () => [],
@@ -204,6 +213,8 @@ function createServices() {
     createFromOrder: async () => ({ ...deliveryNote, status: 'draft' as const, submissionLink: 'http://localhost:3000/notes/test-token', tokenExpiresAt: new Date() }),
     listForOrder: async () => [deliveryNote],
     getDeliveryNote: async () => deliveryNote,
+    getApprovalNote: async () => deliveryNote,
+    ownsOpeningBalance: async () => false,
     getLink: async () => ({ submissionLink: 'http://localhost:3000/notes/test-token', expiresAt: new Date() }),
     regenerateLink: async () => ({ submissionLink: 'http://localhost:3000/notes/new-token', expiresAt: new Date() }),
     readByToken: async () => deliveryNote,
@@ -425,6 +436,28 @@ function createServices() {
   const claims = {
     getClaim: async () => damageClaim,
     listClaims: async () => [damageClaim],
+    listDiscrepancies: async () => [{
+      id: damageClaim.discrepancyId,
+      sourceType: 'retention_note' as const,
+      sourceNoteId: '92000000-0000-4000-8000-000000000001',
+      sourceNoteNumber: 'RN-2026-000001',
+      sourceNoteStatus: 'approved' as const,
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      customerId: order.customerId,
+      customerName: order.customerName,
+      equipmentItemId: damageClaim.equipmentItemId,
+      equipmentName: damageClaim.equipmentName,
+      quantity: 1,
+      discrepancyType: 'damaged' as const,
+      reason: damageClaim.reason,
+      responsibleParty: 'customer' as const,
+      status: 'written_off' as const,
+      recordedAt: damageClaim.damageRecordedAt,
+      resolvedAt: null,
+      unitPriceCents: 2500,
+      valueCents: 2500,
+    }],
     listClaimableDiscrepancies: async () => [{
       id: damageClaim.discrepancyId,
       orderId: order.id,
@@ -865,6 +898,22 @@ describe('Phase 1 API', () => {
     const app = createTestApp()
     const cookie = await sessionCookie(app, 'system_admin')
     expect((await app.request('/api/items', { headers: { Cookie: cookie } })).status).toBe(200)
+    const addition = await app.request(
+      '/api/items/50000000-0000-4000-8000-000000000001/stock-additions',
+      {
+        method: 'POST',
+        headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quantity: 150 }),
+      },
+    )
+    expect(addition.status).toBe(201)
+    expect(await addition.json()).toMatchObject({
+      data: {
+        quantity: 150,
+        status: 'pending_approval',
+        entryType: 'stock_addition',
+      },
+    })
     expect((await app.request('/api/customers', { headers: { Cookie: cookie } })).status).toBe(403)
     expect((await app.request('/api/customers/pricing', { headers: { Cookie: cookie } })).status).toBe(403)
     expect((await app.request('/api/audit-logs', { headers: { Cookie: cookie } })).status).toBe(200)
@@ -891,6 +940,18 @@ describe('Phase 1 API', () => {
     for (const path of checks) {
       expect((await app.request(path, { headers })).status).toBe(200)
     }
+    const stockAddition = await app.request(
+      '/api/items/50000000-0000-4000-8000-000000000001/stock-additions',
+      {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quantity: 150 }),
+      },
+    )
+    expect(stockAddition.status).toBe(201)
+    expect(await stockAddition.json()).toMatchObject({
+      data: { quantity: 150, entryType: 'stock_addition' },
+    })
   })
 })
 
@@ -1002,7 +1063,7 @@ describe('Phase 3 API', () => {
       listApprovals: async (actor: SessionUser) => deliverySubmitted
         ? [await originalDelivery.getDeliveryNote('delivery-note', actor)]
         : [],
-    } as DeliveryService
+    } as unknown as DeliveryService
     const retention = {
       ...originalRetention,
       submitByToken: async () => {
@@ -1128,6 +1189,85 @@ describe('Phase 3 API', () => {
       expect(approval.status).toBe(200)
       expect(((await approval.json()) as { data: { status: string } }).data.status).toBe('approved')
     }
+  })
+
+  test('lets Store Admin and Super User count and approve stock receipts', async () => {
+    const services = createServices()
+    const noteId = '96000000-0000-4000-8000-000000000001'
+    const countedBy: string[] = []
+    const approvedBy: string[] = []
+    const openingNote = {
+      id: noteId,
+      noteType: 'opening_balance' as const,
+      obNumber: 'OB-000001',
+      entryType: 'opening_balance' as const,
+      storeId: '10000000-0000-4000-8000-000000000001',
+      storeName: 'Main Store',
+      storeAddress: '1 Store Road',
+      status: 'pending_approval' as const,
+      submittedBy: user('sales').id,
+      submittedByName: 'Sales User',
+      approvedBy: null,
+      approvedByName: null,
+      submittedAt: new Date(),
+      approvedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      lines: [{
+        id: '97000000-0000-4000-8000-000000000001',
+        equipmentItemId: '50000000-0000-4000-8000-000000000001',
+        equipmentName: 'Scaffold frame',
+        unitOfMeasure: 'unit',
+        requestedQty: 100,
+        countedQty: null,
+        countDifference: null,
+      }],
+    }
+    const delivery = {
+      ...services.delivery,
+      ownsOpeningBalance: async (id: string) => id === noteId,
+      getApprovalNote: async () => openingNote,
+      countOpeningBalance: async (_id, _input, actor) => {
+        countedBy.push(actor.role)
+        return openingNote
+      },
+      approveOpeningBalance: async (_id, actor) => {
+        approvedBy.push(actor.role)
+        return { ...openingNote, status: 'approved' as const }
+      },
+    } as DeliveryService
+    const app = createApp({
+      healthCheck: async () => 1,
+      ...services,
+      delivery,
+      auth: TEST_AUTH,
+      logger: createTestLogger().logger,
+    })
+    for (const role of ['store_admin', 'super_user'] as const) {
+      const cookie = await sessionCookie(app, role)
+      const detail = await app.request(`/api/approvals/${noteId}`, {
+        headers: { Cookie: cookie },
+      })
+      expect(detail.status).toBe(200)
+      expect(await detail.json() as unknown).toMatchObject({
+        data: { noteType: 'opening_balance', obNumber: 'OB-000001' },
+      })
+      expect((await app.request(`/api/approvals/${noteId}/count`, {
+        method: 'POST',
+        headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lines: [{
+          lineId: openingNote.lines[0]!.id,
+          countedQty: 100,
+        }] }),
+      })).status).toBe(200)
+      expect((await app.request(`/api/approvals/${noteId}/approve`, {
+        method: 'POST',
+        headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+        body: '{}',
+      })).status).toBe(200)
+    }
+    expect(countedBy).toEqual(['store_admin', 'super_user'])
+    expect(approvedBy).toEqual(['store_admin', 'super_user'])
   })
 
   test('summarizes the store-scoped approval queue for the approval dashboard', async () => {
@@ -1362,6 +1502,11 @@ describe('Phase 7 API', () => {
     expect((await app.request('/api/discrepancies/claimable', {
       headers: { Cookie: cookie },
     })).status).toBe(200)
+    const registry = await app.request('/api/discrepancies', { headers: { Cookie: cookie } })
+    expect(registry.status).toBe(200)
+    expect((await registry.json()) as unknown).toMatchObject({
+      data: [{ sourceNoteNumber: 'RN-2026-000001', discrepancyType: 'damaged' }],
+    })
     expect((await app.request('/api/discrepancies/discrepancy/claim', {
       method: 'POST', headers: { Cookie: cookie, 'Content-Type': 'application/json' }, body: '{}',
     })).status).toBe(201)
@@ -1378,6 +1523,9 @@ describe('Phase 7 API', () => {
     const app = createTestApp()
     const ownerCookie = await sessionCookie(app, 'business_owner')
     expect((await app.request('/api/claims', { headers: { Cookie: ownerCookie } })).status).toBe(200)
+    expect((await app.request('/api/discrepancies', {
+      headers: { Cookie: ownerCookie },
+    })).status).toBe(200)
     expect((await app.request('/api/claims/claim/confirm', {
       method: 'POST', headers: { Cookie: ownerCookie, 'Content-Type': 'application/json' }, body: '{}',
     })).status).toBe(403)
@@ -1401,6 +1549,9 @@ describe('Phase 7 API', () => {
 
     const salesCookie = await sessionCookie(app, 'sales')
     expect((await app.request('/api/claims', { headers: { Cookie: salesCookie } })).status).toBe(403)
+    expect((await app.request('/api/discrepancies', {
+      headers: { Cookie: salesCookie },
+    })).status).toBe(403)
   })
 })
 

@@ -356,6 +356,43 @@ export const retentionNoteLines = pgTable(
   ],
 )
 
+export const openingBalanceNotes = pgTable(
+  'opening_balance_note',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    obNumber: text('ob_number').notNull().unique(),
+    storeId: uuid('store_id').notNull().references(() => stores.id),
+    entryType: text('entry_type').$type<'opening_balance' | 'stock_addition'>()
+      .default('opening_balance').notNull(),
+    status: noteStatus('status').default('pending_approval').notNull(),
+    submittedBy: uuid('submitted_by').notNull().references(() => users.id),
+    approvedBy: uuid('approved_by').references(() => users.id),
+    submittedAt: timestamp('submitted_at', { withTimezone: true }).defaultNow().notNull(),
+    approvedAt: timestamp('approved_at', { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [index('opening_balance_note_store_status_idx').on(table.storeId, table.status)],
+)
+
+export const openingBalanceNoteLines = pgTable(
+  'opening_balance_note_line',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    openingBalanceNoteId: uuid('opening_balance_note_id').notNull()
+      .references(() => openingBalanceNotes.id, { onDelete: 'cascade' }),
+    equipmentItemId: uuid('equipment_item_id').notNull()
+      .references(() => equipmentItems.id),
+    requestedQty: integer('requested_qty').notNull(),
+    countedQty: integer('counted_qty'),
+  },
+  (table) => [
+    unique('opening_balance_note_line_item_unique')
+      .on(table.openingBalanceNoteId, table.equipmentItemId),
+    index('opening_balance_note_line_note_id_idx').on(table.openingBalanceNoteId),
+    index('opening_balance_note_line_item_id_idx').on(table.equipmentItemId),
+  ],
+)
+
 export const stockLedger = pgTable(
   'stock_ledger',
   {
