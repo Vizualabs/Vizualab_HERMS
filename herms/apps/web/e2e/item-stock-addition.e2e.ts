@@ -71,6 +71,7 @@ for (const role of ['system_admin', 'super_user'] as const) {
   await expect(page.getByRole('status')).toContainText(
     'Added 150 units successfully. Available stock is now updated.',
   )
+  await expect(page.getByLabel('New units received')).toHaveValue('')
   await expect(page.getByText('Available now').locator('..')).toContainText('225')
   await expect(page.getByText('Opening stock').locator('..')).toContainText('75')
   await expect(page.getByText('Total stock received').locator('..')).toContainText('225')

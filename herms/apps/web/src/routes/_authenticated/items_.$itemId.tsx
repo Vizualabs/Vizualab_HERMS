@@ -136,8 +136,11 @@ function ItemDetailPage() {
                 className="mt-4 space-y-4"
                 onSubmit={(event) => {
                   event.preventDefault()
-                  const form = new FormData(event.currentTarget)
-                  addStock.mutate(Number(form.get('stockAdditionQuantity')))
+                  const formElement = event.currentTarget
+                  const form = new FormData(formElement)
+                  addStock.mutate(Number(form.get('stockAdditionQuantity')), {
+                    onSuccess: () => formElement.reset(),
+                  })
                 }}
               >
                 <Edit
