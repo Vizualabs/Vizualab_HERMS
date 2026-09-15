@@ -69,12 +69,11 @@ if (withDatabase) {
 
   await run([bunExecutable, 'run', 'db:check'])
   await run([bunExecutable, 'run', 'db:migrate'])
-  await run([bunExecutable, 'run', 'db:seed'])
 }
 
 console.log('\nBootstrap complete.')
 if (!withDatabase) {
   console.log('Set DATABASE_URL and MIGRATION_DATABASE_URL in .env if they are not configured yet.')
-  console.log('Then run ' + bootstrapDatabaseCommand + ' once to migrate and seed the database.')
+  console.log('Then run ' + bootstrapDatabaseCommand + ' once to migrate the database.')
 }
 console.log('Start the frontend and backend with ' + startCommand + '.')

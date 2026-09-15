@@ -19,8 +19,10 @@ needed. Existing `.env` files are preserved. Open `.env` and set valid
 .\herms.bat bootstrap-db
 ```
 
-Database initialization is opt-in because it runs the migration and seed commands
-against the database configured in `.env`.
+Database initialization is opt-in and runs only migrations against the database
+configured in `.env`; it never inserts seed or sample data automatically. On a
+brand-new environment, run `bun run db:seed` separately to provision only the
+initial store and login users.
 
 Start the backend and frontend together:
 

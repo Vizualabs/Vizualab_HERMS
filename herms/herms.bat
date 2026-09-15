@@ -47,7 +47,7 @@ echo Usage: herms.bat COMMAND
 echo.
 echo Commands:
 echo   bootstrap      Install dependencies and prepare the local environment
-echo   bootstrap-db   Bootstrap, migrate, and seed the configured database
+echo   bootstrap-db   Bootstrap and migrate the configured database
 echo   dev            Start the frontend and backend together
 echo   dev-api        Start only the backend
 echo   dev-web        Start only the frontend
