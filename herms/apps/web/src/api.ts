@@ -78,7 +78,7 @@ export type EquipmentItemDetail = EquipmentItem & {
 
 export type CreatedEquipmentItem = EquipmentItem & {
   openingQuantity: number
-  openingBalanceStatus: 'pending_approval' | null
+  openingBalanceStatus: 'approved' | null
   openingBalanceNoteId?: string
   openingBalanceNoteNumber?: string
 }

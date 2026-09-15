@@ -34,16 +34,34 @@ describe('Stock write boundary', () => {
     expect(service).toContain('line.counted_qty')
   })
 
-  test('posts stock additions immediately without adding them to approvals', async () => {
+  test('posts equipment opening stock and later additions without approvals', async () => {
     const masterData = await Bun.file(new URL('./services.ts', import.meta.url)).text()
     const delivery = await Bun.file(new URL('./delivery.ts', import.meta.url)).text()
+    const migration = await Bun.file(
+      new URL('../migrations/0014_immediate_equipment_stock.sql', import.meta.url),
+    ).text()
+    const approvalList = delivery.slice(
+      delivery.indexOf('async listApprovals'),
+      delivery.indexOf('async approvalMetrics'),
+    )
+    const approvalMetrics = delivery.slice(
+      delivery.indexOf('async approvalMetrics'),
+      delivery.indexOf('async countOpeningBalance'),
+    )
 
+    expect(masterData).toContain("entryType: 'opening_balance' as const")
     expect(masterData).toContain("entryType: 'stock_addition' as const")
     expect(masterData).toContain("status: 'approved' as const")
+    expect(masterData).toContain('countedQty: input.openingQuantity')
     expect(masterData).toContain('countedQty: input.quantity')
     expect(masterData).toContain('db.insert(stockLedger).values({')
+    expect(masterData).toContain('quantityDelta: input.openingQuantity')
     expect(masterData).toContain("quantityDelta: input.quantity")
-    expect(delivery).toContain("eq(openingBalanceNotes.entryType, 'opening_balance')")
+    expect(approvalList).not.toContain('.from(openingBalanceNotes)')
+    expect(approvalMetrics).not.toContain('.from(openingBalanceNotes)')
+    expect(migration).toContain('0014_immediate_equipment_stock')
+    expect(migration).toContain('CHECK ("status" = \'approved\')')
+    expect(migration).toContain('INSERT INTO "stock_ledger"')
   })
 })
 

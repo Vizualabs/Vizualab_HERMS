@@ -639,46 +639,26 @@ export function createDeliveryService(db: Database, config: DeliveryConfig) {
 
     async listApprovals(actor: SessionUser) {
       const storeId = requireStore(actor)
-      const [deliveryRows, openingRows] = await Promise.all([
-        db.select({
-          id: deliveryNotes.id,
-          noteType: sql<'delivery_note'>`'delivery_note'`,
-          dnNumber: deliveryNotes.dnNumber,
-          obNumber: sql<string | null>`NULL`,
-          entryType: sql<'opening_balance' | 'stock_addition' | null>`NULL`,
-          orderId: deliveryNotes.orderId,
-          orderNumber: orders.orderNumber,
-          customerName: customers.name,
-          status: deliveryNotes.status,
-          submittedAt: deliveryNotes.submittedAt,
-          createdAt: deliveryNotes.createdAt,
-        }).from(deliveryNotes)
-          .innerJoin(orders, eq(deliveryNotes.orderId, orders.id))
-          .innerJoin(customers, eq(orders.customerId, customers.id))
-          .where(and(
-            eq(deliveryNotes.storeId, storeId),
-            inArray(deliveryNotes.status, ['pending_approval', 'rejected', 'reopened']),
-          )),
-        db.select({
-          id: openingBalanceNotes.id,
-          noteType: sql<'opening_balance'>`'opening_balance'`,
-          dnNumber: sql<string | null>`NULL`,
-          obNumber: openingBalanceNotes.obNumber,
-          entryType: openingBalanceNotes.entryType,
-          orderId: sql<string | null>`NULL`,
-          orderNumber: sql<string | null>`NULL`,
-          customerName: sql<string | null>`NULL`,
-          status: openingBalanceNotes.status,
-          submittedAt: openingBalanceNotes.submittedAt,
-          createdAt: openingBalanceNotes.createdAt,
-        }).from(openingBalanceNotes)
-          .where(and(
-            eq(openingBalanceNotes.storeId, storeId),
-            eq(openingBalanceNotes.entryType, 'opening_balance'),
-            inArray(openingBalanceNotes.status, ['pending_approval', 'rejected']),
-          )),
-      ])
-      return [...deliveryRows, ...openingRows].sort((left, right) =>
+      const deliveryRows = await db.select({
+        id: deliveryNotes.id,
+        noteType: sql<'delivery_note'>`'delivery_note'`,
+        dnNumber: deliveryNotes.dnNumber,
+        obNumber: sql<string | null>`NULL`,
+        entryType: sql<'opening_balance' | 'stock_addition' | null>`NULL`,
+        orderId: deliveryNotes.orderId,
+        orderNumber: orders.orderNumber,
+        customerName: customers.name,
+        status: deliveryNotes.status,
+        submittedAt: deliveryNotes.submittedAt,
+        createdAt: deliveryNotes.createdAt,
+      }).from(deliveryNotes)
+        .innerJoin(orders, eq(deliveryNotes.orderId, orders.id))
+        .innerJoin(customers, eq(orders.customerId, customers.id))
+        .where(and(
+          eq(deliveryNotes.storeId, storeId),
+          inArray(deliveryNotes.status, ['pending_approval', 'rejected', 'reopened']),
+        ))
+      return deliveryRows.sort((left, right) =>
         new Date(right.submittedAt ?? right.createdAt).getTime()
         - new Date(left.submittedAt ?? left.createdAt).getTime())
     },
@@ -702,38 +682,7 @@ export function createDeliveryService(db: Database, config: DeliveryConfig) {
         .from(deliveryNotes)
         .leftJoin(deliveryNoteLines, eq(deliveryNoteLines.deliveryNoteId, deliveryNotes.id))
         .where(eq(deliveryNotes.storeId, storeId))
-      const [openingMetrics] = await db.select({
-        pendingApproval: sql<number>`COUNT(DISTINCT ${openingBalanceNotes.id}) FILTER (
-          WHERE ${openingBalanceNotes.status} = 'pending_approval'
-        )::int`,
-        approvedToday: sql<number>`COUNT(DISTINCT ${openingBalanceNotes.id}) FILTER (
-          WHERE ${openingBalanceNotes.status} = 'approved'
-            AND (${openingBalanceNotes.approvedAt} AT TIME ZONE ${config.timezone})::date
-              = (CURRENT_TIMESTAMP AT TIME ZONE ${config.timezone})::date
-        )::int`,
-        mismatchesFlagged: sql<number>`COUNT(${openingBalanceNoteLines.id}) FILTER (
-          WHERE ${openingBalanceNotes.status} = 'pending_approval'
-            AND ${openingBalanceNoteLines.countedQty} IS NOT NULL
-            AND ${openingBalanceNoteLines.requestedQty} <> ${openingBalanceNoteLines.countedQty}
-        )::int`,
-      })
-        .from(openingBalanceNotes)
-        .leftJoin(
-          openingBalanceNoteLines,
-          eq(openingBalanceNoteLines.openingBalanceNoteId, openingBalanceNotes.id),
-        )
-        .where(and(
-          eq(openingBalanceNotes.storeId, storeId),
-          eq(openingBalanceNotes.entryType, 'opening_balance'),
-        ))
-      return {
-        pendingApproval: (deliveryMetrics?.pendingApproval ?? 0)
-          + (openingMetrics?.pendingApproval ?? 0),
-        approvedToday: (deliveryMetrics?.approvedToday ?? 0)
-          + (openingMetrics?.approvedToday ?? 0),
-        mismatchesFlagged: (deliveryMetrics?.mismatchesFlagged ?? 0)
-          + (openingMetrics?.mismatchesFlagged ?? 0),
-      }
+      return deliveryMetrics ?? { pendingApproval: 0, approvedToday: 0, mismatchesFlagged: 0 }
     },
 
     async countOpeningBalance(id: string, input: DeliveryNoteCount, actor: AuditActor) {

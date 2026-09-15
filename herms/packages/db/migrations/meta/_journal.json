@@ -99,6 +99,13 @@
       "when": 1789441213000,
       "tag": "0013_opening_balance_inventory",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1789441214000,
+      "tag": "0014_immediate_equipment_stock",
+      "breakpoints": true
     }
   ]
 }

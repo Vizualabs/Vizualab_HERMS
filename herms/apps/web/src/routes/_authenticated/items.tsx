@@ -24,7 +24,6 @@ function ItemsPage() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.items }),
         queryClient.invalidateQueries({ queryKey: queryKeys.stock }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.approvals }),
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboard }),
       ])
     },
@@ -135,9 +134,8 @@ function ItemsPage() {
             required
           />
           <p className="text-xs text-muted-foreground">
-            Opening quantity is sent to Store Admin approval. Stock appears only after the
-            physical opening count is approved. Administrators are alerted when stock drops
-            below the reorder threshold.
+            Opening quantity is added to available stock immediately. Administrators are
+            alerted when stock drops below the reorder threshold.
           </p>
           {createItem.error && (
             <p role="alert" className="text-sm text-danger">
@@ -147,7 +145,7 @@ function ItemsPage() {
           {createItem.data && (
             <p role="status" className="text-sm font-medium text-primary-strong">
               {createItem.data.openingBalanceStatus
-                ? `Equipment created. ${createItem.data.openingBalanceNoteNumber} now awaits opening-stock approval.`
+                ? `Equipment created with ${createItem.data.openingQuantity} units available in stock.`
                 : 'Equipment created with zero opening stock.'}
             </p>
           )}

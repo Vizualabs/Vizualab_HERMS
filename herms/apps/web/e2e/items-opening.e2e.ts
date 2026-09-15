@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-test('registers equipment with an opening quantity for approval', async ({ page }) => {
+test('registers equipment with opening stock available immediately', async ({ page }) => {
   const pageErrors: string[] = []
   let submittedBody: Record<string, unknown> | undefined
   page.on('pageerror', (error) => pageErrors.push(error.message))
@@ -24,7 +24,7 @@ test('registers equipment with an opening quantity for approval', async ({ page 
       await route.fulfill({ status: 201, json: { data: {
         id: '50000000-0000-4000-8000-000000000001',
         ...submittedBody,
-        openingBalanceStatus: 'pending_approval',
+        openingBalanceStatus: 'approved',
         openingBalanceNoteId: '60000000-0000-4000-8000-000000000001',
         openingBalanceNoteNumber: 'OB-000001',
         createdAt: '2026-09-15T00:00:00.000Z',
@@ -48,7 +48,7 @@ test('registers equipment with an opening quantity for approval', async ({ page 
   await page.getByRole('button', { name: 'Create equipment' }).click()
 
   await expect(page.getByRole('status')).toContainText(
-    'OB-000001 now awaits opening-stock approval',
+    'Equipment created with 75 units available in stock.',
   )
   expect(submittedBody).toEqual({
     name: 'Scaffold frame',

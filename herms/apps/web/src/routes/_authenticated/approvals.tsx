@@ -42,7 +42,7 @@ function ApprovalsPage() {
       <header>
         <h1 id="approvals-title">Store Admin Approvals</h1>
         <p className="mt-1 text-sm text-[#60727e]">
-          No stock quantity changes until a physical count is entered and approved here
+          Delivery and retention quantities require a physical count and approval here
         </p>
       </header>
 

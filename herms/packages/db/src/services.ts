@@ -365,11 +365,13 @@ export function createMasterDataService(db: Database) {
             ...created,
             openingQuantity: input.openingQuantity,
           })),
-        db.execute(reconcileReorderAlertsForItem(created.id, actor, now)),
       ] as const
 
       if (input.openingQuantity === 0) {
-        await db.batch(commonWrites)
+        await db.batch([
+          ...commonWrites,
+          db.execute(reconcileReorderAlertsForItem(created.id, actor, now)),
+        ])
         return { ...created, openingQuantity: 0, openingBalanceStatus: null }
       }
 
@@ -379,11 +381,11 @@ export function createMasterDataService(db: Database) {
         obNumber: await nextOpeningBalanceNumber(),
         storeId,
         entryType: 'opening_balance' as const,
-        status: 'pending_approval' as const,
+        status: 'approved' as const,
         submittedBy: actor.id,
-        approvedBy: null,
+        approvedBy: actor.id,
         submittedAt: now,
-        approvedAt: null,
+        approvedAt: now,
         createdAt: now,
         updatedAt: now,
       }
@@ -392,15 +394,28 @@ export function createMasterDataService(db: Database) {
         openingBalanceNoteId: openingNote.id,
         equipmentItemId: created.id,
         requestedQty: input.openingQuantity,
-        countedQty: null,
+        countedQty: input.openingQuantity,
       }
       await db.batch([
         ...commonWrites,
         db.insert(openingBalanceNotes).values(openingNote),
         db.insert(openingBalanceNoteLines).values(openingLine),
+        db.insert(stockLedger).values({
+          equipmentItemId: created.id,
+          storeId,
+          sourceType: 'opening_balance',
+          sourceNoteId: openingNote.id,
+          direction: 'in',
+          quantityDelta: input.openingQuantity,
+          createdBy: actor.id,
+          createdAt: now,
+        }),
+        db.execute(reconcileReorderAlertsForLedger(
+          'opening_balance', openingNote.id, now, actor,
+        )),
         db.insert(auditLogs).values(auditValues(
           actor,
-          'opening_balance_note.create',
+          'opening_balance.post',
           'opening_balance_note',
           openingNote.id,
           null,

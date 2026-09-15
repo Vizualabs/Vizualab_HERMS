@@ -364,7 +364,7 @@ export const openingBalanceNotes = pgTable(
     storeId: uuid('store_id').notNull().references(() => stores.id),
     entryType: text('entry_type').$type<'opening_balance' | 'stock_addition'>()
       .default('opening_balance').notNull(),
-    status: noteStatus('status').default('pending_approval').notNull(),
+    status: noteStatus('status').default('approved').notNull(),
     submittedBy: uuid('submitted_by').notNull().references(() => users.id),
     approvedBy: uuid('approved_by').references(() => users.id),
     submittedAt: timestamp('submitted_at', { withTimezone: true }).defaultNow().notNull(),
