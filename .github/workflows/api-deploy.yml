@@ -1,5 +1,7 @@
 name: Deploy HERMS API
 
+# Production Lambda deploy. Manual until AWS and Neon secrets exist.
+# Do not enable push-to-main auto-deploy until those values are verified.
 on:
   workflow_dispatch:
 
@@ -7,13 +9,26 @@ permissions:
   contents: read
   id-token: write
 
+concurrency:
+  group: production-api
+  cancel-in-progress: false
+
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: herms
     steps:
+      - name: Allow production deploys from main only
+        working-directory: .
+        run: |
+          if [ "${GITHUB_REF}" != "refs/heads/main" ]; then
+            echo "::error::Production API deploy is only allowed from main. Selected branch: ${GITHUB_REF_NAME}."
+            exit 1
+          fi
+
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
@@ -27,6 +42,7 @@ jobs:
   migrate:
     needs: verify
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     environment: phase-0-migrations
     defaults:
       run:
@@ -44,6 +60,7 @@ jobs:
   deploy:
     needs: migrate
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     environment: production-api
     defaults:
       run:
@@ -53,6 +70,23 @@ jobs:
       STACK_NAME: ${{ vars.AWS_STACK_NAME }}
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
     steps:
+      - name: Require AWS configuration
+        working-directory: .
+        run: |
+          missing=0
+          if [ -z "$AWS_REGION" ]; then
+            echo "::error::AWS_REGION is not set on the production-api GitHub environment."
+            missing=1
+          fi
+          if [ -z "$STACK_NAME" ]; then
+            echo "::error::AWS_STACK_NAME is not set on the production-api GitHub environment."
+            missing=1
+          fi
+          if [ "$missing" -ne 0 ]; then
+            echo "::error::AWS is not configured yet. Keep using local verification until region, stack name, and OIDC role exist."
+            exit 1
+          fi
+
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
@@ -76,3 +110,5 @@ jobs:
           --no-confirm-changeset
           --no-fail-on-empty-changeset
           --parameter-overrides "DatabaseUrl=$DATABASE_URL"
+      - name: Record stack outputs
+        run: sam list stack-outputs --stack-name "$STACK_NAME" --region "$AWS_REGION" --output table

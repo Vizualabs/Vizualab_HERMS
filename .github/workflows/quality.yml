@@ -8,13 +8,22 @@ on:
   push:
     branches:
       - main
+      - develop
     paths:
       - 'herms/**'
-      - '.github/workflows/quality.yml'
+      - '.github/workflows/**'
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: herms
@@ -28,3 +37,17 @@ jobs:
       - run: bun test
       - run: bun run db:check
       - run: bun run build
+      - name: Upload web artifact
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: herms-web-client
+          path: herms/apps/web/dist/client
+          retention-days: 14
+      - name: Upload API artifact
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: herms-api
+          path: herms/apps/api/dist
+          retention-days: 14
