@@ -440,9 +440,18 @@ function FinancePage() {
                     event.preventDefault()
                     const formElement = event.currentTarget
                     const form = new FormData(formElement)
+                    const amountInput = formElement.elements.namedItem('amount')
+                    if (!(amountInput instanceof HTMLInputElement)) return
+                    const amountCents = parseMajorCurrencyToMinorUnits(amountInput.value)
+                    if (amountCents === null) {
+                      amountInput.setCustomValidity('Enter a valid amount with no more than two decimal places.')
+                      amountInput.reportValidity()
+                      return
+                    }
+                    amountInput.setCustomValidity('')
                     expense.mutate({
                       category: String(form.get('category')),
-                      amountCents: Number(form.get('amountCents')),
+                      amountCents,
                       expenseDate: new Date(String(form.get('expenseDate'))).toISOString(),
                       description: String(form.get('description') ?? ''),
                     }, {
@@ -455,9 +464,22 @@ function FinancePage() {
                     <input className="input" name="category" maxLength={120} autoComplete="off" required />
                   </label>
                   <label className="flex flex-col gap-2 text-sm font-medium">
-                    Amount (minor units)
-                    <input className="input" name="amountCents" type="number" min="1" step="1" inputMode="numeric" autoComplete="off" required aria-describedby="expense-amount-help" />
-                    <span id="expense-amount-help" className="text-xs font-normal text-muted-foreground">Enter whole minor units.</span>
+                    Expense amount (LKR)
+                    <input
+                      className="input"
+                      name="amount"
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      inputMode="decimal"
+                      autoComplete="off"
+                      required
+                      placeholder="0.00"
+                      aria-describedby="expense-amount-help"
+                    />
+                    <span id="expense-amount-help" className="text-xs font-normal text-muted-foreground">
+                      Enter Amount.
+                    </span>
                   </label>
                   <label className="flex flex-col gap-2 text-sm font-medium sm:col-span-2">
                     Expense date & time
