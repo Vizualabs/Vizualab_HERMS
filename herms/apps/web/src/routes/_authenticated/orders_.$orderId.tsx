@@ -1,8 +1,9 @@
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { ApiError, api, formatMoney } from '../../api'
+import { useConfirm } from '../../components/ConfirmDialog'
 import { ManualLinkShare } from '../../components/ManualShareActions'
 import { queryKeys, sessionQuery } from '../../queries'
 import { createNoteShareMessage } from '../../whatsapp'
@@ -14,12 +15,20 @@ export const Route = createFileRoute('/_authenticated/orders_/$orderId')({
 function OrderDetailPage() {
   const { orderId } = Route.useParams()
   const queryClient = useQueryClient()
+  const confirm = useConfirm()
   const [newLink, setNewLink] = useState<{
     type: 'delivery' | 'retention'
     noteNumber: string
     url: string
   } | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
+  const sharePanelRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!newLink) return
+    sharePanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    sharePanelRef.current?.querySelector('input')?.focus()
+  }, [newLink])
   const session = useQuery(sessionQuery)
   const canUseSales = session.data?.role === 'sales' || session.data?.role === 'super_user'
   const canClose = session.data?.role === 'store_admin' || session.data?.role === 'super_user'
@@ -146,9 +155,11 @@ function OrderDetailPage() {
             className="button-primary mt-4"
             disabled={close.isPending || data.status !== 'open'}
             onClick={() => {
-              if (window.confirm('Mark this order Fully Returned? This succeeds only when every delivered quantity is reconciled.')) {
-                close.mutate()
-              }
+              void confirm({
+                title: 'Mark this order Fully Returned?',
+                message: 'This succeeds only when every delivered quantity is reconciled.',
+                confirmLabel: 'Mark Fully Returned',
+              }).then((ok) => { if (ok) close.mutate() })
             }}
           >
             {close.isPending ? 'Checking reconciliation...' : 'Mark Fully Returned'}
@@ -166,6 +177,22 @@ function OrderDetailPage() {
       </section>
 
       {canUseSales && <aside className="flex h-fit flex-col gap-6">
+        {newLink && (
+          <div ref={sharePanelRef} className="scroll-mt-6" role="status">
+            <ManualLinkShare
+              label={`${newLink.type === 'retention' ? 'Retention' : 'Delivery'} submission link created`}
+              link={newLink.url}
+              message={createNoteShareMessage({
+                noteType: newLink.type === 'retention' ? 'Retention' : 'Delivery',
+                noteNumber: newLink.noteNumber,
+                orderNumber: data.orderNumber,
+                customerName: data.customerName,
+                submissionLink: newLink.url,
+              })}
+            />
+          </div>
+        )}
+        {formError && <p role="alert" className="text-sm text-danger">{formError}</p>}
         <section id="create-delivery-note" className="scroll-mt-6 rounded-2xl border border-border bg-card p-6">
           <h2 className="text-lg font-semibold">Create delivery note</h2>
           <p className="mt-2 text-sm text-muted-foreground">Deliverable quantities are limited by both the order balance and unallocated store stock.</p>
@@ -267,18 +294,6 @@ function OrderDetailPage() {
           </ul>
         </section>
 
-        {newLink && <ManualLinkShare
-          label={`${newLink.type === 'retention' ? 'Retention' : 'Delivery'} submission link created`}
-          link={newLink.url}
-          message={createNoteShareMessage({
-            noteType: newLink.type === 'retention' ? 'Retention' : 'Delivery',
-            noteNumber: newLink.noteNumber,
-            orderNumber: data.orderNumber,
-            customerName: data.customerName,
-            submissionLink: newLink.url,
-          })}
-        />}
-        {formError && <p role="alert" className="text-sm text-danger">{formError}</p>}
         {fieldStaff.isSuccess && fieldStaff.data.length === 0 && <p role={'alert'} className={'text-sm text-danger'}>
           Add an active field staff user with a phone number before creating a note.
         </p>}

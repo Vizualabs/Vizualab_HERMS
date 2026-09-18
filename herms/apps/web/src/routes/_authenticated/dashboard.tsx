@@ -402,21 +402,28 @@ function DashboardPage() {
         </section>
       )}
 
-      {initialLoading && (
-        <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
-          Loading reconciled dashboard&hellip;
-        </p>
-      )}
       {firstError && <ErrorNotice error={firstError} />}
 
+      {initialLoading && (
+        <section aria-label="Key business measures" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <p role="status" aria-live="polite" className="sr-only">
+            Loading reconciled dashboard&hellip;
+          </p>
+          {Array.from({ length: 4 }, (_, index) => (
+            <MetricCardSkeleton key={index} />
+          ))}
+        </section>
+      )}
       {stock.data && payments.data && incomeExpenses.data && (
         <section aria-label="Key business measures" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <MetricCard
+            delay={0}
             label="Stock value"
             value={formatMoney(stock.data.totalValueCents, stock.data.currency)}
             detail={`${stock.data.items.length} equipment types`}
           />
           <MetricCard
+            delay={70}
             label="Pending payments"
             value={formatMoney(payments.data.current.pendingAmountCents, payments.data.currency)}
             detail={monthlyFinance.data
@@ -425,6 +432,7 @@ function DashboardPage() {
             tone="warning"
           />
           <MetricCard
+            delay={140}
             label="Received this month"
             value={formatMoney(payments.data.current.receivedAmountCents, payments.data.currency)}
             detail={monthlyFinance.data
@@ -433,6 +441,7 @@ function DashboardPage() {
             tone="success"
           />
           <MetricCard
+            delay={210}
             label="Net position"
             value={formatMoney(incomeExpenses.data.current.netPositionCents, incomeExpenses.data.currency)}
             detail={`Expenses ${formatMoney(incomeExpenses.data.current.expenseCents, incomeExpenses.data.currency)}`}
@@ -443,9 +452,12 @@ function DashboardPage() {
 
       <section aria-label="Financial trends" className="grid gap-5 xl:grid-cols-2">
         <DashboardCard title="Monthly income vs expenses">
-          {monthlyFinance.isPending && <PanelLoading label="Loading income and expenses" />}
+          {monthlyFinance.isPending && (
+            <PanelLoading label="Loading income and expenses" variant="bars" />
+          )}
           {monthlyFinance.data && (
             <IncomeExpenseChart
+              key={month}
               rows={monthlyFinance.data.history}
               currency={monthlyFinance.data.currency}
             />
@@ -453,10 +465,11 @@ function DashboardPage() {
         </DashboardCard>
         <DashboardCard title="Received vs pending payments">
           {paymentHistoryQueries.some((query) => query.isPending) && (
-            <PanelLoading label="Loading payment history" />
+            <PanelLoading label="Loading payment history" variant="line" />
           )}
           {paymentHistory.length === chartMonths.length && (
             <PaymentLineChart
+              key={month}
               rows={paymentHistory}
               currency={payments.data?.currency ?? 'LKR'}
             />
@@ -466,11 +479,15 @@ function DashboardPage() {
 
       <section aria-label="Operational breakdown" className="grid gap-5 lg:grid-cols-2 xl:grid-cols-3">
         <DashboardCard title="Stock quantity & value by item">
-          {stock.isPending && <PanelLoading label="Loading stock" />}
+          {stock.isPending && <PanelLoading label="Loading stock" variant="list" />}
           {stock.data && (
             <ul className="space-y-4">
-              {stock.data.items.slice(0, 6).map((item) => (
-                <li key={item.equipmentItemId} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-baseline gap-4 text-sm">
+              {stock.data.items.slice(0, 6).map((item, index) => (
+                <li
+                  key={item.equipmentItemId}
+                  className="dashboard-reveal grid grid-cols-[minmax(0,1fr)_auto_auto] items-baseline gap-4 text-sm"
+                  style={{ animationDelay: `${index * 50}ms` }}
+                >
                   <span className="truncate font-medium">{item.equipmentName}</span>
                   <span className="text-muted-foreground">{item.quantity.toLocaleString('en-LK')}</span>
                   <span className="whitespace-nowrap font-semibold">
@@ -507,7 +524,9 @@ function DashboardPage() {
             </p>
           )}
         </div>
-        {discrepancies.isPending && <PanelLoading label="Loading equipment issues" />}
+        {discrepancies.isPending && (
+          <PanelLoading label="Loading equipment issues" variant="table" />
+        )}
         {discrepancies.data?.rows.length === 0 && (
           <p className="mx-5 mb-5 rounded-xl bg-success-soft p-4 text-sm text-primary-strong">
             No open missing or damaged equipment matches these filters.
@@ -526,7 +545,7 @@ function DashboardPage() {
                   <th className="py-3 pl-3 text-right">Value</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="dashboard-reveal">
                 {discrepancies.data.rows.map((row) => (
                   <tr key={row.id} className="border-b border-border last:border-0">
                     <td className="py-3 pr-4 font-medium">{row.equipmentName}</td>
@@ -615,11 +634,13 @@ function MetricCard({
   value,
   detail,
   tone = 'default',
+  delay = 0,
 }: {
   label: string
   value: string
   detail: React.ReactNode
   tone?: 'default' | 'success' | 'warning' | 'danger'
+  delay?: number
 }) {
   const valueClass = tone === 'danger'
     ? 'text-danger'
@@ -629,7 +650,10 @@ function MetricCard({
         ? 'text-warning'
         : 'text-foreground'
   return (
-    <article className="rounded-2xl border border-border bg-card p-5">
+    <article
+      className="dashboard-reveal rounded-2xl border border-border bg-card p-5"
+      style={{ animationDelay: `${delay}ms` }}
+    >
       <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</h2>
       <p className={`mt-3 break-words text-2xl font-semibold tracking-tight ${valueClass}`}>{value}</p>
       <div className="mt-1.5 text-xs text-muted-foreground">{detail}</div>
@@ -646,11 +670,102 @@ function DashboardCard({ title, children }: { title: string; children: React.Rea
   )
 }
 
-function PanelLoading({ label }: { label: string }) {
+function PanelLoading({
+  label,
+  variant = 'list',
+}: {
+  label: string
+  variant?: 'bars' | 'line' | 'list' | 'rank' | 'table'
+}) {
   return (
-    <p role="status" aria-live="polite" className="py-10 text-center text-sm text-muted-foreground">
-      {label}&hellip;
-    </p>
+    <div role="status" aria-live="polite" aria-busy="true">
+      <p className="sr-only">{label}&hellip;</p>
+      {variant === 'bars' && <ChartSkeleton variant="bars" />}
+      {variant === 'line' && <ChartSkeleton variant="line" />}
+      {variant === 'list' && <ListSkeleton />}
+      {variant === 'rank' && <RankSkeleton />}
+      {variant === 'table' && <TableSkeleton />}
+    </div>
+  )
+}
+
+function MetricCardSkeleton() {
+  return (
+    <article className="rounded-2xl border border-border bg-card p-5">
+      <div aria-hidden="true" className="dashboard-skeleton h-3 w-24 rounded-md" />
+      <div aria-hidden="true" className="dashboard-skeleton mt-4 h-8 w-40 rounded-md" />
+      <div aria-hidden="true" className="dashboard-skeleton mt-3 h-3 w-28 rounded-md" />
+    </article>
+  )
+}
+
+function ChartSkeleton({ variant }: { variant: 'bars' | 'line' }) {
+  const columns = variant === 'bars'
+    ? [[38, 14], [22, 10], [18, 8], [30, 12], [26, 10], [86, 16]]
+    : [[22], [34], [28], [46], [38], [78]]
+  return (
+    <div className="pt-1">
+      <div className="flex h-44 items-end gap-3 border-b border-border px-1">
+        {columns.map((bars, index) => (
+          <div key={index} className="flex h-full flex-1 items-end justify-center gap-1">
+            {bars.map((height, barIndex) => (
+              <div
+                key={barIndex}
+                aria-hidden="true"
+                className="dashboard-skeleton w-full max-w-8 rounded-t-md"
+                style={{ height: `${height}%` }}
+              />
+            ))}
+          </div>
+        ))}
+      </div>
+      <div className="mt-4 flex justify-center gap-3">
+        <div aria-hidden="true" className="dashboard-skeleton h-3 w-16 rounded-md" />
+        <div aria-hidden="true" className="dashboard-skeleton h-3 w-20 rounded-md" />
+      </div>
+    </div>
+  )
+}
+
+function ListSkeleton({ rows = 6 }: { rows?: number }) {
+  return (
+    <ul className="space-y-4" aria-hidden="true">
+      {Array.from({ length: rows }, (_, index) => (
+        <li key={index} className="flex items-center gap-4">
+          <div className="dashboard-skeleton h-4 flex-1 rounded-md" />
+          <div className="dashboard-skeleton h-4 w-10 rounded-md" />
+          <div className="dashboard-skeleton h-4 w-24 rounded-md" />
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function RankSkeleton() {
+  return (
+    <ul className="space-y-5" aria-hidden="true">
+      {[88, 62, 48, 36, 24].map((width, index) => (
+        <li key={index}>
+          <div className="flex justify-between gap-4">
+            <div className="dashboard-skeleton h-4 w-32 rounded-md" />
+            <div className="dashboard-skeleton h-4 w-28 rounded-md" />
+          </div>
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-muted">
+            <div className="dashboard-skeleton h-full rounded-full" style={{ width: `${width}%` }} />
+          </div>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function TableSkeleton() {
+  return (
+    <div className="space-y-3 px-5 pb-5" aria-hidden="true">
+      {Array.from({ length: 4 }, (_, index) => (
+        <div key={index} className="dashboard-skeleton h-10 w-full rounded-lg" />
+      ))}
+    </div>
   )
 }
 
@@ -695,7 +810,7 @@ function IncomeExpenseChart({
   const connectorY = Math.max(tooltipY + 16, Math.min(tooltipY + tooltipHeight - 16, activeY))
 
   return (
-    <figure>
+    <figure className="dashboard-reveal">
       <div className="overflow-x-auto pb-1">
         <svg
           role="group"
@@ -741,7 +856,8 @@ function IncomeExpenseChart({
                     barWidth,
                     top + plotHeight - y(row.incomeCents),
                   )}
-                  className="fill-primary"
+                  className="dashboard-chart-bar fill-primary"
+                  style={{ animationDelay: `${index * 55}ms` }}
                 />
                 <path
                   d={topRoundedBarPath(
@@ -750,7 +866,8 @@ function IncomeExpenseChart({
                     barWidth,
                     top + plotHeight - y(row.expenseCents),
                   )}
-                  className="fill-warning"
+                  className="dashboard-chart-bar fill-warning"
+                  style={{ animationDelay: `${80 + index * 55}ms` }}
                 />
                 <text x={center} y={height - 31} textAnchor="middle" className="fill-muted-foreground text-xs">
                   {monthLabel(row.month)}
@@ -863,7 +980,7 @@ function PaymentLineChart({ rows, currency }: { rows: ChartPayment[]; currency: 
   const connectorY = Math.max(tooltipY + 16, Math.min(tooltipY + tooltipHeight - 16, activeY))
 
   return (
-    <figure>
+    <figure className="dashboard-reveal">
       <div className="overflow-x-auto pb-1">
         <svg
           role="group"
@@ -888,12 +1005,43 @@ function PaymentLineChart({ rows, currency }: { rows: ChartPayment[]; currency: 
               </g>
             )
           })}
-          <polyline points={receivedPoints} fill="none" className="stroke-success" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
-          <polyline points={pendingPoints} fill="none" className="stroke-danger" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
+          <polyline
+            pathLength={1}
+            points={receivedPoints}
+            fill="none"
+            className="dashboard-chart-line stroke-success"
+            strokeWidth="3"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+          <polyline
+            pathLength={1}
+            points={pendingPoints}
+            fill="none"
+            className="dashboard-chart-line stroke-danger"
+            strokeWidth="3"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            style={{ animationDelay: '120ms' }}
+          />
           {rows.map((row, index) => (
             <g key={row.month}>
-              <circle cx={x(index)} cy={y(row.receivedAmountCents)} r="3" className="fill-card stroke-success" strokeWidth="2" />
-              <circle cx={x(index)} cy={y(row.pendingAmountCents)} r="3" className="fill-card stroke-danger" strokeWidth="2" />
+              <circle
+                cx={x(index)}
+                cy={y(row.receivedAmountCents)}
+                r="3"
+                className="dashboard-chart-dot fill-card stroke-success"
+                strokeWidth="2"
+                style={{ animationDelay: `${420 + index * 55}ms` }}
+              />
+              <circle
+                cx={x(index)}
+                cy={y(row.pendingAmountCents)}
+                r="3"
+                className="dashboard-chart-dot fill-card stroke-danger"
+                strokeWidth="2"
+                style={{ animationDelay: `${480 + index * 55}ms` }}
+              />
               <text x={x(index)} y={height - 31} textAnchor="middle" className="fill-muted-foreground text-xs">
                 {monthLabel(row.month)}
               </text>
@@ -1011,31 +1159,40 @@ function RankingPanel({
   const maximum = Math.max(...rows.map((row) => row.quantity), 1)
   return (
     <DashboardCard title={title}>
-      {loading && <PanelLoading label={`Loading ${title.toLowerCase()}`} />}
+      {loading && <PanelLoading label={`Loading ${title.toLowerCase()}`} variant="rank" />}
       {!loading && rows.length === 0 && (
         <p className="rounded-xl bg-muted p-4 text-sm text-muted-foreground">
           No approved missing or damaged cases match these filters.
         </p>
       )}
-      <ol className="space-y-4">
-        {rows.map((row) => (
-          <li key={row.id}>
-            <div className="flex items-baseline justify-between gap-4 text-sm">
-              <p className="truncate font-medium">{row.name}</p>
-              <p className="whitespace-nowrap text-muted-foreground">
-                {row.quantity} pcs <span aria-hidden="true">&middot;</span>{' '}
-                {formatMoney(row.valueCents, currency)}
-              </p>
-            </div>
-            <div className="mt-2 h-2 overflow-hidden rounded-full bg-muted" aria-hidden="true">
-              <div
-                className={`h-full rounded-full ${tone === 'danger' ? 'bg-danger' : 'bg-primary'}`}
-                style={{ width: `${Math.max((row.quantity / maximum) * 100, 4)}%` }}
-              />
-            </div>
-          </li>
-        ))}
-      </ol>
+      {!loading && rows.length > 0 && (
+        <ol className="space-y-4">
+          {rows.map((row, index) => (
+            <li
+              key={row.id}
+              className="dashboard-reveal"
+              style={{ animationDelay: `${index * 55}ms` }}
+            >
+              <div className="flex items-baseline justify-between gap-4 text-sm">
+                <p className="truncate font-medium">{row.name}</p>
+                <p className="whitespace-nowrap text-muted-foreground">
+                  {row.quantity} pcs <span aria-hidden="true">&middot;</span>{' '}
+                  {formatMoney(row.valueCents, currency)}
+                </p>
+              </div>
+              <div className="mt-2 h-2 overflow-hidden rounded-full bg-muted" aria-hidden="true">
+                <div
+                  className={`dashboard-rank-bar h-full rounded-full ${tone === 'danger' ? 'bg-danger' : 'bg-primary'}`}
+                  style={{
+                    width: `${Math.max((row.quantity / maximum) * 100, 4)}%`,
+                    animationDelay: `${120 + index * 70}ms`,
+                  }}
+                />
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
     </DashboardCard>
   )
 }

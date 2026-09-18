@@ -12,6 +12,7 @@ import {
   type RetentionNoteDetail,
 } from '../../api'
 import { ManualLinkShare } from '../../components/ManualShareActions'
+import { useConfirm } from '../../components/ConfirmDialog'
 import { approvalMetricsQuery, approvalsQuery, queryKeys } from '../../queries'
 import { createNoteShareMessage } from '../../whatsapp'
 
@@ -265,6 +266,7 @@ function ApprovalFormCard({
 }) {
   const actionPending = approvePending || rejectPending
   const { number, typeLabel } = approvalIdentity(note)
+  const confirm = useConfirm()
 
   return (
     <form
@@ -272,9 +274,11 @@ function ApprovalFormCard({
       className="overflow-hidden rounded-xl border border-[#d6e0e2] bg-white"
       onSubmit={(event) => {
         event.preventDefault()
-        if (window.confirm('Approve this physical count and post its stock movements?')) {
-          onApprove()
-        }
+        void confirm({
+          title: 'Approve and post stock?',
+          message: 'Approve this physical count and post its stock movements?',
+          confirmLabel: 'Approve',
+        }).then((ok) => { if (ok) onApprove() })
       }}
     >
       <div className="flex flex-col gap-4 border-b border-[#d6e0e2] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
@@ -285,9 +289,14 @@ function ApprovalFormCard({
             className="min-h-10 rounded-lg border border-[#d6e0e2] bg-white px-4 text-xs font-semibold text-[#071c23] shadow-sm transition-colors hover:bg-[#f4f8f8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#078486]"
             disabled={actionPending}
             onClick={() => {
-              if (window.confirm(note.noteType === 'opening_balance'
-                ? 'Reject this opening-stock registration?'
-                : 'Reject this note and revoke its field link?')) onReject()
+              void confirm({
+                title: note.noteType === 'opening_balance' ? 'Reject this registration?' : 'Reject this note?',
+                message: note.noteType === 'opening_balance'
+                  ? 'Reject this opening-stock registration?'
+                  : 'Reject this note and revoke its field link?',
+                confirmLabel: 'Reject',
+                tone: 'danger',
+              }).then((ok) => { if (ok) onReject() })
             }}
           >
             {rejectPending ? 'Rejecting…' : 'Reject'}
@@ -421,6 +430,7 @@ function WaitingApprovalCard({ note }: { note: ApprovalNote }) {
   })
   const { number, typeLabel } = approvalIdentity(note)
   const status = note.status.replaceAll('_', ' ')
+  const confirm = useConfirm()
   return (
     <article className="rounded-xl border border-[#d6e0e2] bg-white px-5 py-4">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -457,9 +467,13 @@ function WaitingApprovalCard({ note }: { note: ApprovalNote }) {
               className="min-h-10 rounded-lg border border-[#078486] bg-[#078486] px-4 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#096f72] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#078486] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
               disabled={reopen.isPending}
               onClick={() => {
-                if (window.confirm(note.noteType === 'opening_balance'
-                  ? 'Reopen this opening balance for a new physical count?'
-                  : 'Reopen this note and create a new field link?')) reopen.mutate()
+                void confirm({
+                  title: note.noteType === 'opening_balance' ? 'Reopen this count?' : 'Reopen this note?',
+                  message: note.noteType === 'opening_balance'
+                    ? 'Reopen this opening balance for a new physical count?'
+                    : 'Reopen this note and create a new field link?',
+                  confirmLabel: 'Reopen',
+                }).then((ok) => { if (ok) reopen.mutate() })
               }}
             >
               {reopen.isPending
