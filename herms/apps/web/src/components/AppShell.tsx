@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 
 import { api } from '../api'
+import { ConfirmProvider } from './ConfirmDialog'
 
 type AppRoute =
   | '/dashboard'
@@ -75,6 +76,7 @@ export function AppShell({
   const signOut = () => logout.mutate()
 
   return (
+    <ConfirmProvider>
     <div className="min-h-screen bg-background text-foreground lg:flex">
       <a
         href="#main-content"
@@ -139,6 +141,7 @@ export function AppShell({
         </main>
       </div>
     </div>
+    </ConfirmProvider>
   )
 }
 

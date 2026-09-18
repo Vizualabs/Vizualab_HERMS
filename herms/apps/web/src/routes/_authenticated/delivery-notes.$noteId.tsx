@@ -3,6 +3,7 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { useState } from 'react'
 
 import { ApiError, api } from '../../api'
+import { useConfirm } from '../../components/ConfirmDialog'
 import { ManualLinkShare } from '../../components/ManualShareActions'
 import { queryKeys } from '../../queries'
 import { createNoteShareMessage } from '../../whatsapp'
@@ -13,6 +14,7 @@ export const Route = createFileRoute('/_authenticated/delivery-notes/$noteId')({
 
 function DeliveryNotePage() {
   const { noteId } = Route.useParams()
+  const confirm = useConfirm()
   const [link, setLink] = useState<string | null>(null)
   const note = useQuery(queryOptions({
     queryKey: queryKeys.deliveryNote(noteId),
@@ -78,9 +80,12 @@ function DeliveryNotePage() {
           Get submission link
         </button>
         <button type="button" className="button-secondary" disabled={getLink.isPending || regenerate.isPending} onClick={() => {
-          if (window.confirm('Replace the current field link? The old link will stop working immediately.')) {
-            regenerate.mutate()
-          }
+          void confirm({
+            title: 'Replace the field link?',
+            message: 'Replace the current field link? The old link will stop working immediately.',
+            confirmLabel: 'Replace link',
+            tone: 'danger',
+          }).then((ok) => { if (ok) regenerate.mutate() })
         }}>
           Replace field link
         </button>

@@ -3,6 +3,7 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { useEffect, useRef, useState } from 'react'
 
 import { ApiError, api, formatMoney } from '../../api'
+import { useConfirm } from '../../components/ConfirmDialog'
 import { ManualLinkShare } from '../../components/ManualShareActions'
 import { queryKeys, sessionQuery } from '../../queries'
 import { createNoteShareMessage } from '../../whatsapp'
@@ -14,6 +15,7 @@ export const Route = createFileRoute('/_authenticated/orders_/$orderId')({
 function OrderDetailPage() {
   const { orderId } = Route.useParams()
   const queryClient = useQueryClient()
+  const confirm = useConfirm()
   const [newLink, setNewLink] = useState<{
     type: 'delivery' | 'retention'
     noteNumber: string
@@ -153,9 +155,11 @@ function OrderDetailPage() {
             className="button-primary mt-4"
             disabled={close.isPending || data.status !== 'open'}
             onClick={() => {
-              if (window.confirm('Mark this order Fully Returned? This succeeds only when every delivered quantity is reconciled.')) {
-                close.mutate()
-              }
+              void confirm({
+                title: 'Mark this order Fully Returned?',
+                message: 'This succeeds only when every delivered quantity is reconciled.',
+                confirmLabel: 'Mark Fully Returned',
+              }).then((ok) => { if (ok) close.mutate() })
             }}
           >
             {close.isPending ? 'Checking reconciliation...' : 'Mark Fully Returned'}

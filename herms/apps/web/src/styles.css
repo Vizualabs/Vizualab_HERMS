@@ -361,6 +361,10 @@
   animation: dashboard-rank-fill 640ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+.confirm-dialog[open] {
+  animation: dashboard-reveal 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 .app-main .bg-success-soft,
 .app-main .bg-danger-soft,
 .app-main .bg-primary-soft,
@@ -405,5 +409,9 @@
   .app-main .dashboard-chart-line {
     animation: none;
     stroke-dashoffset: 0;
+  }
+
+  .confirm-dialog[open] {
+    animation: none;
   }
 }
