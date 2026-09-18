@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
 
 import { ApiError, api, formatMinorUnits } from '../../api'
+import { useConfirm } from '../../components/ConfirmDialog'
 import { parseMajorCurrencyToMinorUnits } from '../../money'
 import {
   itemsQuery,
@@ -15,6 +16,7 @@ export const Route = createFileRoute('/_authenticated/items')({ component: Items
 function ItemsPage() {
   const items = useQuery(itemsQuery)
   const session = useQuery(sessionQuery)
+  const confirm = useConfirm()
   const isOwner = session.data?.role === 'business_owner' || session.data?.role === 'super_user'
   const escalation = useQuery({ ...priceEscalationQuery, enabled: isOwner })
   const queryClient = useQueryClient()
@@ -196,10 +198,12 @@ function ItemsPage() {
               className="button-primary mt-4 w-full"
               disabled={applyEscalation.isPending || !escalation.data?.length}
               onClick={() => {
-                const confirmed = window.confirm(
-                  `Increase all ${escalation.data?.length ?? 0} equipment prices by 10% now? This price-history entry cannot be removed.`,
-                )
-                if (confirmed) applyEscalation.mutate()
+                void confirm({
+                  title: 'Increase all prices by 10%?',
+                  message: `Increase all ${escalation.data?.length ?? 0} equipment prices by 10% now? This price-history entry cannot be removed.`,
+                  confirmLabel: 'Increase prices',
+                  tone: 'danger',
+                }).then((ok) => { if (ok) applyEscalation.mutate() })
               }}
             >
               {applyEscalation.isPending ? 'Increasing prices...' : 'Increase prices by 10%'}

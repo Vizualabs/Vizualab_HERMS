@@ -11,6 +11,7 @@ import {
   type RetentionNoteDetail,
 } from '../../api'
 import { ManualLinkShare } from '../../components/ManualShareActions'
+import { useConfirm } from '../../components/ConfirmDialog'
 import { queryKeys } from '../../queries'
 import { createNoteShareMessage } from '../../whatsapp'
 
@@ -307,6 +308,7 @@ function RetentionApproval({
   onReopen: () => void
   onReverse: (id: string, reason: string) => void
 }) {
+  const confirm = useConfirm()
   const allCounted = note.lines.every((line) => line.countedReturnedQty !== null)
   return <section className="mt-5 rounded-2xl border border-border bg-card p-6">
     <Header label="Physical return approval" number={note.rnNumber} note={note} />
@@ -349,9 +351,14 @@ function RetentionApproval({
             {line.discrepancyId && line.discrepancyStatus === 'written_off' && !line.writeOffReversed && <form className="mt-2 flex max-w-md gap-2" onSubmit={(event) => {
               event.preventDefault()
               const form = new FormData(event.currentTarget)
-              if (window.confirm('Reverse this write-off and restore the quantity to stock?')) {
-                onReverse(line.discrepancyId!, String(form.get('reason')))
-              }
+              void confirm({
+                title: 'Reverse this write-off?',
+                message: 'Reverse this write-off and restore the quantity to stock?',
+                confirmLabel: 'Reverse',
+                tone: 'danger',
+              }).then((ok) => {
+                if (ok) onReverse(line.discrepancyId!, String(form.get('reason')))
+              })
             }}>
               <input className="input" name="reason" required maxLength={500} placeholder="Reversal reason" aria-label={`Reversal reason for ${line.equipmentName}`} />
               <button className="button-secondary whitespace-nowrap" disabled={reversePending}>Reverse</button>
@@ -378,23 +385,37 @@ function ApprovalActions({
   onReject: () => void
   onReopen: () => void
 }) {
+  const confirm = useConfirm()
   return <div className="mt-6 flex flex-wrap gap-3">
     {note.status === 'pending_approval' && <>
       <button type="button" className="button-primary" disabled={!allCounted || pending} onClick={() => {
-        if (window.confirm('Approve this physical count and post its stock movements?')) onApprove()
+        void confirm({
+          title: 'Approve and post stock?',
+          message: 'Approve this physical count and post its stock movements?',
+          confirmLabel: 'Approve',
+        }).then((ok) => { if (ok) onApprove() })
       }}>
         Approve and post stock
       </button>
       <button type="button" className="button-secondary" disabled={pending} onClick={() => {
-      if (window.confirm(note.noteType === 'opening_balance'
-        ? 'Reject this opening-stock registration?'
-        : 'Reject this note and revoke its field link?')) onReject()
+        void confirm({
+          title: note.noteType === 'opening_balance' ? 'Reject this registration?' : 'Reject this note?',
+          message: note.noteType === 'opening_balance'
+            ? 'Reject this opening-stock registration?'
+            : 'Reject this note and revoke its field link?',
+          confirmLabel: 'Reject',
+          tone: 'danger',
+        }).then((ok) => { if (ok) onReject() })
       }}>Reject</button>
     </>}
     {note.status === 'rejected' && <button type="button" className="button-primary" disabled={pending} onClick={() => {
-      if (window.confirm(note.noteType === 'opening_balance'
-        ? 'Reopen this opening balance for a new physical count?'
-        : 'Reopen this note and create a new field link?')) onReopen()
+      void confirm({
+        title: note.noteType === 'opening_balance' ? 'Reopen this count?' : 'Reopen this note?',
+        message: note.noteType === 'opening_balance'
+          ? 'Reopen this opening balance for a new physical count?'
+          : 'Reopen this note and create a new field link?',
+        confirmLabel: 'Reopen',
+      }).then((ok) => { if (ok) onReopen() })
     }}>
       {note.noteType === 'opening_balance' ? 'Reopen count' : 'Reopen and create link'}
     </button>}

@@ -1,5 +1,12 @@
 import { expect, test, type Page } from '@playwright/test'
 
+async function acceptAppConfirm(page: Page, confirmName: string | RegExp) {
+  const dialog = page.getByRole('alertdialog')
+  await expect(dialog).toBeVisible()
+  await dialog.getByRole('button', { name: confirmName }).click()
+  await expect(dialog).toBeHidden()
+}
+
 const storeAdmin = {
   id: '30000000-0000-4000-8000-000000000001',
   storeId: '20000000-0000-4000-8000-000000000001',
@@ -228,11 +235,9 @@ test('Approval detail saves a physical count before enabling stock approval', as
   await expect(page.getByRole('button', { name: 'Update physical count' })).toBeVisible()
   await expect(approve).toBeEnabled()
 
-  page.once('dialog', async (dialog) => {
-    expect(dialog.message()).toContain('post its stock movements')
-    await dialog.accept()
-  })
   await approve.click()
+  await expect(page.getByRole('alertdialog')).toContainText('post its stock movements')
+  await acceptAppConfirm(page, 'Approve')
 
   await expect(page.getByText('approved', { exact: true })).toBeVisible()
   await expect(approve).toHaveCount(0)
@@ -244,7 +249,6 @@ test('Approval detail saves a physical count before enabling stock approval', as
 
 test('Approval queue approves Delivery and Retention Notes and refreshes its metrics', async ({ page }) => {
   const { calls } = await mockApprovals(page, [deliveryNote, retentionNote])
-  page.on('dialog', (dialog) => dialog.accept())
 
   await page.goto('/approvals')
   await expect(page.getByText('2', { exact: true }).first()).toBeVisible()
@@ -252,11 +256,13 @@ test('Approval queue approves Delivery and Retention Notes and refreshes its met
   const deliveryForm = page.getByRole('form', { name: `Approval for ${deliveryNote.dnNumber}` })
   await deliveryForm.getByLabel('Scaffold frame admin physical count').fill('8')
   await deliveryForm.getByRole('button', { name: 'Approve & post stock' }).click()
+  await acceptAppConfirm(page, 'Approve')
   await expect(deliveryForm).toHaveCount(0)
 
   const retentionForm = page.getByRole('form', { name: `Approval for ${retentionNote.rnNumber}` })
   await retentionForm.getByLabel('Scaffold frame admin physical count').fill('6')
   await retentionForm.getByRole('button', { name: 'Approve & post stock' }).click()
+  await acceptAppConfirm(page, 'Approve')
   await expect(retentionForm).toHaveCount(0)
   await expect(page.getByText('No notes await action.')).toBeVisible()
 
@@ -272,18 +278,19 @@ test('Approval queue keeps a note pending and supports retry when stock posting 
   const { calls } = await mockApprovals(page, [deliveryNote], {
     failApprovalOnceFor: deliveryNote.id,
   })
-  page.on('dialog', (dialog) => dialog.accept())
 
   await page.goto('/approvals')
   const approvalForm = page.getByRole('form', { name: `Approval for ${deliveryNote.dnNumber}` })
   const approve = approvalForm.getByRole('button', { name: 'Approve & post stock' })
   await approve.click()
+  await acceptAppConfirm(page, 'Approve')
 
   await expect(approvalForm.getByRole('alert')).toContainText('Stock posting conflict')
   await expect(approvalForm).toBeVisible()
   await expect(approve).toBeEnabled()
 
   await approve.click()
+  await acceptAppConfirm(page, 'Approve')
   await expect(approvalForm).toHaveCount(0)
   expect(calls.map((call) => call.action)).toEqual(['count', 'approve', 'count', 'approve'])
 })
@@ -309,8 +316,8 @@ for (const note of [deliveryNote, retentionNote]) {
     })
 
     await page.goto('/approvals')
-    page.once('dialog', (dialog) => dialog.accept())
     await page.getByRole('button', { name: 'Reopen & create link' }).click()
+    await acceptAppConfirm(page, 'Reopen')
 
     const submissionLink = `http://localhost:3000/notes/reopened-${note.id}`
     await expect(page.getByLabel(`${typeLabel} submission link created URL`)).toHaveValue(submissionLink)
