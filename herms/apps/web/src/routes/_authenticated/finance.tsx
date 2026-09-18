@@ -205,9 +205,20 @@ function FinancePage() {
       </header>
 
       {monthly.isPending && (
-        <p role="status" aria-live="polite" className="rounded-xl border border-border bg-card p-6 text-muted-foreground">
-          Loading finance report…
-        </p>
+        <>
+          <p role="status" aria-live="polite" className="sr-only">
+            Loading finance report&hellip;
+          </p>
+          <section aria-hidden="true" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {Array.from({ length: 4 }, (_, index) => (
+              <article key={index} className="rounded-xl border border-border bg-card px-5 py-5">
+                <div className="dashboard-skeleton h-3 w-28 rounded-md" />
+                <div className="dashboard-skeleton mt-4 h-8 w-36 rounded-md" />
+              </article>
+            ))}
+          </section>
+          <FinanceChartSkeleton />
+        </>
       )}
       {monthly.error && <ErrorText error={monthly.error} fallback="Unable to load the finance report" />}
 
@@ -239,7 +250,11 @@ function FinancePage() {
             />
           </section>
 
-          <FinanceChart rows={monthly.data.history} currency={monthly.data.currency} />
+          <FinanceChart
+            key={month}
+            rows={monthly.data.history}
+            currency={monthly.data.currency}
+          />
 
           <div className="grid gap-5 2xl:grid-cols-2">
             <PaymentsTable report={monthly.data} />
@@ -440,9 +455,18 @@ function FinancePage() {
                     event.preventDefault()
                     const formElement = event.currentTarget
                     const form = new FormData(formElement)
+                    const amountInput = formElement.elements.namedItem('amount')
+                    if (!(amountInput instanceof HTMLInputElement)) return
+                    const amountCents = parseMajorCurrencyToMinorUnits(amountInput.value)
+                    if (amountCents === null) {
+                      amountInput.setCustomValidity('Enter a valid amount with no more than two decimal places.')
+                      amountInput.reportValidity()
+                      return
+                    }
+                    amountInput.setCustomValidity('')
                     expense.mutate({
                       category: String(form.get('category')),
-                      amountCents: Number(form.get('amountCents')),
+                      amountCents,
                       expenseDate: new Date(String(form.get('expenseDate'))).toISOString(),
                       description: String(form.get('description') ?? ''),
                     }, {
@@ -455,9 +479,22 @@ function FinancePage() {
                     <input className="input" name="category" maxLength={120} autoComplete="off" required />
                   </label>
                   <label className="flex flex-col gap-2 text-sm font-medium">
-                    Amount (minor units)
-                    <input className="input" name="amountCents" type="number" min="1" step="1" inputMode="numeric" autoComplete="off" required aria-describedby="expense-amount-help" />
-                    <span id="expense-amount-help" className="text-xs font-normal text-muted-foreground">Enter whole minor units.</span>
+                    Expense amount (LKR)
+                    <input
+                      className="input"
+                      name="amount"
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      inputMode="decimal"
+                      autoComplete="off"
+                      required
+                      placeholder="0.00"
+                      aria-describedby="expense-amount-help"
+                    />
+                    <span id="expense-amount-help" className="text-xs font-normal text-muted-foreground">
+                      Enter Amount.
+                    </span>
                   </label>
                   <label className="flex flex-col gap-2 text-sm font-medium sm:col-span-2">
                     Expense date & time
@@ -548,6 +585,36 @@ function SummaryCard({
   )
 }
 
+function FinanceChartSkeleton() {
+  const heights = [[22, 10], [18, 8], [28, 12], [24, 10], [32, 14], [86, 16]]
+  return (
+    <section className="overflow-hidden rounded-xl border border-border bg-card" aria-hidden="true">
+      <div className="border-b border-border px-5 py-4">
+        <div className="dashboard-skeleton h-4 w-64 rounded-md" />
+      </div>
+      <div className="px-5 pb-5 pt-5">
+        <div className="flex h-64 items-end gap-3 border-b border-border pb-8">
+          {heights.map((bars, index) => (
+            <div key={index} className="flex h-full flex-1 items-end justify-center gap-1">
+              {bars.map((height, barIndex) => (
+                <div
+                  key={barIndex}
+                  className="dashboard-skeleton w-full max-w-8 rounded-t-md"
+                  style={{ height: `${height}%` }}
+                />
+              ))}
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 flex justify-center gap-5">
+          <div className="dashboard-skeleton h-3 w-16 rounded-md" />
+          <div className="dashboard-skeleton h-3 w-20 rounded-md" />
+        </div>
+      </div>
+    </section>
+  )
+}
+
 function FinanceChart({ rows, currency }: { rows: MonthlyFinance['history']; currency: string }) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null)
   const maximum = Math.max(...rows.flatMap((row) => [row.incomeCents, row.expenseCents]), 1)
@@ -564,7 +631,7 @@ function FinanceChart({ rows, currency }: { rows: MonthlyFinance['history']; cur
       <div className="border-b border-border px-5 py-4">
         <h2 id="finance-chart-title">Income vs expenses — last 6 months</h2>
       </div>
-      <div className="overflow-x-auto px-4 pb-4 pt-5 sm:px-5">
+      <div className="dashboard-reveal overflow-x-auto px-4 pb-4 pt-5 sm:px-5">
         <div className="grid min-w-[300px] grid-cols-[2.75rem_1fr] gap-2 sm:grid-cols-[3.25rem_1fr] sm:gap-3">
           <div className="flex h-64 flex-col justify-between pb-8 text-right text-xs text-muted-foreground" aria-hidden="true">
             {ticks.map((tick) => <span key={tick}>{compactMoney(chartMaximum * tick)}</span>)}
@@ -609,13 +676,19 @@ function FinanceChart({ rows, currency }: { rows: MonthlyFinance['history']; cur
                       onClick={() => setActiveIndex(index)}
                     >
                       <div
-                        className="w-full max-w-[4.5rem] rounded-t bg-[oklch(52%_0.11_194)] transition-opacity group-hover:opacity-90"
-                        style={{ height: `${Math.max((row.incomeCents / chartMaximum) * 100, row.incomeCents ? 1 : 0)}%` }}
+                        className="dashboard-chart-bar w-full max-w-[4.5rem] origin-bottom rounded-t bg-[oklch(52%_0.11_194)] transition-opacity group-hover:opacity-90"
+                        style={{
+                          height: `${Math.max((row.incomeCents / chartMaximum) * 100, row.incomeCents ? 1 : 0)}%`,
+                          animationDelay: `${index * 55}ms`,
+                        }}
                         aria-hidden="true"
                       />
                       <div
-                        className="w-full max-w-[4.5rem] rounded-t bg-[oklch(72%_0.15_75)] transition-opacity group-hover:opacity-90"
-                        style={{ height: `${Math.max((row.expenseCents / chartMaximum) * 100, row.expenseCents ? 1 : 0)}%` }}
+                        className="dashboard-chart-bar w-full max-w-[4.5rem] origin-bottom rounded-t bg-[oklch(72%_0.15_75)] transition-opacity group-hover:opacity-90"
+                        style={{
+                          height: `${Math.max((row.expenseCents / chartMaximum) * 100, row.expenseCents ? 1 : 0)}%`,
+                          animationDelay: `${80 + index * 55}ms`,
+                        }}
                         aria-hidden="true"
                       />
                     </button>
