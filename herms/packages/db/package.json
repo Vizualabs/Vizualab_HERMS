@@ -16,7 +16,8 @@
   "dependencies": {
     "@herms/shared": "workspace:*",
     "@neondatabase/serverless": "^1.0.2",
-    "drizzle-orm": "^0.44.5"
+    "drizzle-orm": "^0.44.5",
+    "hash-wasm": "^4.12.0"
   },
   "devDependencies": {
     "@types/bun": "latest",
