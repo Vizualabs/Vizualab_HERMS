@@ -1,4 +1,9 @@
-import { calculateEscalatedPriceCents, multiplyMinorUnits, type SessionUser } from '@herms/shared'
+import {
+  calculateEscalatedPriceCents,
+  escalationSqlMultiplier,
+  multiplyMinorUnits,
+  type SessionUser,
+} from '@herms/shared'
 import { and, asc, desc, eq, lte, sql } from 'drizzle-orm'
 
 import type { Database } from './client'
@@ -457,7 +462,7 @@ export function createClaimService(db: Database) {
 export type ClaimService = ReturnType<typeof createClaimService>
 
 export function createPriceEscalationService(db: Database) {
-  async function preview() {
+  async function preview(percent: number) {
     const rows = await db
       .select({
         itemId: equipmentItems.id,
@@ -468,22 +473,23 @@ export function createPriceEscalationService(db: Database) {
       .orderBy(asc(equipmentItems.name))
     return rows.map((row) => ({
       ...row,
-      newPriceCents: calculateEscalatedPriceCents(row.oldPriceCents),
+      newPriceCents: calculateEscalatedPriceCents(row.oldPriceCents, percent),
     }))
   }
 
   return {
     preview,
 
-    async apply(actor: AuditActor, effectiveDate = new Date()) {
+    async apply(actor: AuditActor, percent: number, effectiveDate = new Date()) {
       if (Number.isNaN(effectiveDate.getTime())) {
         throw new DataConflictError('The price escalation time is invalid')
       }
-      const proposed = await preview()
+      const proposed = await preview(percent)
       if (proposed.length === 0) {
         throw new DataConflictError('No equipment prices are available to escalate')
       }
 
+      const multiplier = escalationSqlMultiplier(percent)
       const result = await db.execute<{
         itemId: string
         itemName: string
@@ -506,7 +512,7 @@ export function createPriceEscalationService(db: Database) {
             effective_date, reason, created_by
           )
           SELECT item.id, item.current_unit_price_cents,
-            ((item.current_unit_price_cents::bigint * 110 + 50) / 100)::integer,
+            ((item.current_unit_price_cents::bigint * ${sql.raw(String(multiplier))} + 5000) / 10000)::integer,
             ${effectiveDate}, 'owner_escalation'::price_change_reason, ${actor.id}::uuid
           FROM ${equipmentItems} item, request_gate
           RETURNING *
@@ -524,7 +530,10 @@ export function createPriceEscalationService(db: Database) {
           )
           SELECT 'user'::audit_actor_type, ${actor.id}::uuid, 'price.owner_escalation',
             'price_history', inserted.id,
-            jsonb_build_object('unitPriceCents', inserted.old_price_cents),
+            jsonb_build_object(
+              'unitPriceCents', inserted.old_price_cents,
+              'percent', ${sql.raw(String(percent))}::numeric
+            ),
             to_jsonb(inserted.*), ${actor.requestId}
           FROM inserted INNER JOIN updated ON updated.id = inserted.equipment_item_id
           RETURNING entity_id

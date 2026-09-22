@@ -324,7 +324,7 @@ export function createDashboardService(db: Database, config: DashboardConfig) {
     }
   }
 
-  async function getEscalations(): Promise<DashboardEscalations> {
+  async function getEscalations(percent = 10): Promise<DashboardEscalations> {
     const [historyRows, previewRows] = await Promise.all([
       db
         .select({
@@ -360,12 +360,12 @@ export function createDashboardService(db: Database, config: DashboardConfig) {
       0,
     )
     const escalatedValueCents = previewRows.reduce(
-      (sum, row) => sum + calculateEscalatedPriceCents(row.currentUnitPriceCents),
+      (sum, row) => sum + calculateEscalatedPriceCents(row.currentUnitPriceCents, percent),
       0,
     )
     return {
       currency: config.currency,
-      percentage: 10,
+      percentage: percent,
       lastEscalation: history[0] ?? null,
       history,
       preview: {

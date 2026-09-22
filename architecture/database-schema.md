@@ -516,7 +516,7 @@ erDiagram
 | `delivery_note` | `(store_id, status)` | approval queue |
 | `retention_note` | `(store_id, status)` | approval queue |
 | `discrepancy` | `(status)`, `(equipment_item_id)`, `(customer via order)` | registry views (FR-5.2–5.4) |
-| `outbox` | `(status, available_at)` | publisher drain |
+| `outbox` | `(status, available_at)` | internal intent history and recipient recovery |
 | `audit_log` | `(entity_type, entity_id)`, `(actor_id)` | audit lookups |
 
 ## Triggers and Constraints

@@ -1,5 +1,7 @@
+import { formatEscalationPercent, parseOwnerEscalationPercent } from '@herms/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
+import { useState } from 'react'
 
 import { ApiError, api, formatMinorUnits } from '../../api'
 import { useConfirm } from '../../components/ConfirmDialog'
@@ -18,7 +20,13 @@ function ItemsPage() {
   const session = useQuery(sessionQuery)
   const confirm = useConfirm()
   const isOwner = session.data?.role === 'business_owner' || session.data?.role === 'super_user'
-  const escalation = useQuery({ ...priceEscalationQuery, enabled: isOwner })
+  const [percentInput, setPercentInput] = useState('')
+  const percent = parseOwnerEscalationPercent(percentInput)
+  const percentLabel = percent === null ? null : formatEscalationPercent(percent)
+  const escalation = useQuery({
+    ...priceEscalationQuery(percent ?? 0),
+    enabled: isOwner && percent !== null,
+  })
   const queryClient = useQueryClient()
   const createItem = useMutation({
     mutationFn: api.createItem,
@@ -160,25 +168,62 @@ function ItemsPage() {
             <p className="text-sm font-semibold uppercase tracking-widest text-primary">
               Owner control
             </p>
-            <h2 className="mt-2 text-lg font-semibold">Increase all prices by 10%</h2>
+            <h2 className="mt-2 text-lg font-semibold">Increase all catalogue prices</h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              Run this only when you decide prices should increase. The change takes effect
-              immediately and is permanently recorded in price history.
+              Enter the increase you want, review the new prices, then apply. The change takes
+              effect immediately and is permanently recorded in price history.
             </p>
-            {escalation.isPending && (
+            <label className="mt-4 block text-sm font-medium" htmlFor="owner-price-increase-percent">
+              Increase by (%)
+              <input
+                id="owner-price-increase-percent"
+                className="input mt-2"
+                type="number"
+                min="0.01"
+                max="100"
+                step="0.01"
+                inputMode="decimal"
+                placeholder="15"
+                value={percentInput}
+                onChange={(event) => {
+                  setPercentInput(event.target.value)
+                  applyEscalation.reset()
+                }}
+              />
+            </label>
+            {escalation.isPending && percent !== null && (
               <p className="mt-4 text-sm text-muted-foreground">Checking equipment prices...</p>
             )}
-            {escalation.data && (
-              <p className="mt-4 rounded-xl bg-muted p-3 text-sm">
-                {escalation.data.length} equipment price
-                {escalation.data.length === 1 ? '' : 's'} will be increased.
+            {percent === null && percentInput.trim() !== '' && (
+              <p role="alert" className="mt-4 text-sm text-danger">
+                Enter a percent between 0.01 and 100, with at most two decimal places.
               </p>
+            )}
+            {escalation.data && percentLabel && (
+              <div className="mt-4 space-y-3">
+                <p className="rounded-xl bg-muted p-3 text-sm">
+                  {escalation.data.length} equipment price
+                  {escalation.data.length === 1 ? '' : 's'} will increase by {percentLabel}%.
+                </p>
+                {escalation.data.length > 0 && (
+                  <ul className="max-h-48 space-y-2 overflow-y-auto rounded-xl border border-border p-3 text-sm">
+                    {escalation.data.map((row) => (
+                      <li key={row.itemId} className="flex items-baseline justify-between gap-3">
+                        <span className="truncate">{row.itemName}</span>
+                        <span className="shrink-0 font-mono text-xs">
+                          LKR {formatMinorUnits(row.oldPriceCents)} → {formatMinorUnits(row.newPriceCents)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             )}
             {escalation.error && (
               <p role="alert" className="mt-4 text-sm text-danger">
                 {escalation.error instanceof ApiError
                   ? escalation.error.message
-                  : 'Unable to preview the price escalation'}
+                  : 'Unable to preview the price increase'}
               </p>
             )}
             {applyEscalation.data && !applyEscalation.data.replayed && (
@@ -196,17 +241,26 @@ function ItemsPage() {
             <button
               type="button"
               className="button-primary mt-4 w-full"
-              disabled={applyEscalation.isPending || !escalation.data?.length}
+              disabled={
+                applyEscalation.isPending
+                || percent === null
+                || !escalation.data?.length
+              }
               onClick={() => {
+                if (percent === null || percentLabel === null) return
                 void confirm({
-                  title: 'Increase all prices by 10%?',
-                  message: `Increase all ${escalation.data?.length ?? 0} equipment prices by 10% now? This price-history entry cannot be removed.`,
+                  title: `Increase all prices by ${percentLabel}%?`,
+                  message: `Increase all ${escalation.data?.length ?? 0} equipment prices by ${percentLabel}% now? This price-history entry cannot be removed.`,
                   confirmLabel: 'Increase prices',
                   tone: 'danger',
-                }).then((ok) => { if (ok) applyEscalation.mutate() })
+                }).then((ok) => { if (ok) applyEscalation.mutate(percent) })
               }}
             >
-              {applyEscalation.isPending ? 'Increasing prices...' : 'Increase prices by 10%'}
+              {applyEscalation.isPending
+                ? 'Increasing prices...'
+                : percentLabel
+                  ? `Increase prices by ${percentLabel}%`
+                  : 'Increase prices'}
             </button>
           </section>
         )}

@@ -14,7 +14,7 @@ High-level view of how the Hotel Equipment Rental Management System is deployed 
 
 Companion documents:
 
-- [Backend](backend.md) — Hono monolith, domain services, outbox, notifications.
+- [Backend](backend.md) — Hono monolith, domain services, internal outbox history, manual sharing.
 - [Database Schema](database-schema.md) — Neon PostgreSQL, Drizzle, tables and invariants.
 - [Frontend](frontend.md) — TanStack Start, back-office and mobile link forms.
 
@@ -104,7 +104,7 @@ The full set of rules every component must respect lives in [Invariants](../road
 - Price history is immutable (I-3).
 - Claim pricing uses the date-of-damage price (I-4).
 - Order documents freeze their prices (I-11).
-- Outbox before provider (I-12).
+- Notification sharing remains manual; internal outbox rows are not drained to a provider.
 
 ## Known Risks
 

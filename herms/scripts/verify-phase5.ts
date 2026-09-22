@@ -7,12 +7,10 @@ import {
 import {
   parseApiEnv,
   parseSeedEnv,
-  type NotificationEventType,
   type UserRole,
 } from '@herms/shared'
 
 import app from '../apps/api/src/index'
-import { createManualOnlyNotifierHandler } from '../apps/notifier/src/index'
 
 const apiEnv = parseApiEnv(process.env)
 const seedEnv = parseSeedEnv(process.env)
@@ -187,7 +185,7 @@ const aggregateIds = [quotation.data.id, delivery.data.id, retention.data.id]
 const rows = await db.select().from(outboxEvents)
   .where(inArray(outboxEvents.aggregateId, aggregateIds))
   .orderBy(asc(outboxEvents.createdAt))
-const expectedTypes: NotificationEventType[] = [
+const expectedTypes = [
   'quotation_created',
   'delivery_note_link_created',
   'delivery_note_link_regenerated',
@@ -197,46 +195,15 @@ const expectedTypes: NotificationEventType[] = [
   'retention_note_link_regenerated',
   'retention_note_pending_approval',
   'retention_note_approved',
-]
+] as const
 for (const expectedType of expectedTypes) {
   assert(rows.some((row) => row.eventType === expectedType), 'Missing outbox event: ' + expectedType)
 }
-
-const notifierLogs: Array<Record<string, unknown>> = []
-const notifier = createManualOnlyNotifierHandler({
-  logger: (entry) => notifierLogs.push(entry),
-})
-const event = {
-  Records: rows.map((row) => ({
-    messageId: row.id,
-    body: JSON.stringify({
-      version: 1,
-      outboxId: row.id,
-      eventType: row.eventType,
-      aggregateType: row.aggregateType,
-      aggregateId: row.aggregateId,
-      payload: row.payload,
-      idempotencyKey: row.idempotencyKey,
-      requestId: typeof row.payload.requestId === 'string'
-        ? row.payload.requestId
-        : 'phase-5-verification',
-      occurredAt: row.createdAt.toISOString(),
-    }),
-  })),
-}
-const firstResult = await notifier(event as never)
-assert(firstResult.batchItemFailures.length === 0, 'Manual-only notifier did not acknowledge legacy events')
-assert(notifierLogs.length === rows.length, 'Manual-only notifier did not suppress every legacy event')
-assert(
-  notifierLogs.every((entry) => entry.event === 'automatic_whatsapp_delivery_disabled'),
-  'Automatic WhatsApp delivery was not disabled',
-)
 
 console.log(JSON.stringify({
   event: 'phase_5_verification_complete',
   deliveryMode: 'manual',
   fieldStaffSelection: true,
   outboxEventTypesVerified: expectedTypes.length,
-  automaticWhatsAppEventsSuppressed: notifierLogs.length,
-  cloudInfrastructureDeferred: true,
+  automaticDeliveryComponentsPresent: false,
 }))

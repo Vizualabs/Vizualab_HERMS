@@ -29,8 +29,9 @@ describe('Phase 7 claim invariants', () => {
 })
 
 describe('Phase 7 escalation rules', () => {
-  test('rounds a ten-percent increase half-up in one shared function', () => {
-    expect(calculateEscalatedPriceCents(105)).toBe(116)
-    expect(calculateEscalatedPriceCents(100)).toBe(110)
+  test('rounds owner-chosen percent increases half-up in one shared function', () => {
+    expect(calculateEscalatedPriceCents(105, 10)).toBe(116)
+    expect(calculateEscalatedPriceCents(100, 10)).toBe(110)
+    expect(calculateEscalatedPriceCents(100, 15)).toBe(115)
   })
 })

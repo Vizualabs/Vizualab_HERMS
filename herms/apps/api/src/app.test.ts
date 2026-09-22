@@ -568,7 +568,7 @@ function createServices() {
   }
   const dashboardEscalations = {
     currency: 'LKR',
-    percentage: 10 as const,
+    percentage: 10,
     lastEscalation: {
       effectiveDate: '2026-08-28T00:00:00.000Z',
       ownerId: user('business_owner').id,
@@ -1530,11 +1530,17 @@ describe('Phase 7 API', () => {
       method: 'POST', headers: { Cookie: ownerCookie, 'Content-Type': 'application/json' }, body: '{}',
     })).status).toBe(403)
 
-    expect((await app.request('/api/price-escalation', {
+    expect((await app.request('/api/price-escalation?percent=10', {
       headers: { Cookie: ownerCookie },
     })).status).toBe(200)
     expect((await app.request('/api/price-escalation', {
+      headers: { Cookie: ownerCookie },
+    })).status).toBe(400)
+    expect((await app.request('/api/price-escalation', {
       method: 'POST', headers: { Cookie: ownerCookie, 'Content-Type': 'application/json' }, body: '{}',
+    })).status).toBe(400)
+    expect((await app.request('/api/price-escalation', {
+      method: 'POST', headers: { Cookie: ownerCookie, 'Content-Type': 'application/json' }, body: JSON.stringify({ percent: 15 }),
     })).status).toBe(200)
     expect((await app.request('/api/items/item/price', {
       method: 'POST',
@@ -1544,7 +1550,7 @@ describe('Phase 7 API', () => {
 
     const financeCookie = await sessionCookie(app, 'finance')
     expect((await app.request('/api/price-escalation', {
-      method: 'POST', headers: { Cookie: financeCookie, 'Content-Type': 'application/json' }, body: '{}',
+      method: 'POST', headers: { Cookie: financeCookie, 'Content-Type': 'application/json' }, body: JSON.stringify({ percent: 10 }),
     })).status).toBe(403)
 
     const salesCookie = await sessionCookie(app, 'sales')

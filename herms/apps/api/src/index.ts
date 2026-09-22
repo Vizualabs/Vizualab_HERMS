@@ -22,11 +22,7 @@ const app = createApp({
   healthCheck: createDbHealthCheck(env.DATABASE_URL),
   identity: createIdentityService(db),
   masterData: createMasterDataService(db),
-  notifications: createNotificationService(db, {
-    businessCurrency: env.BUSINESS_CURRENCY,
-    noteTokenSecret: env.NOTE_TOKEN_SECRET,
-    publicAppUrl: env.PUBLIC_APP_URL,
-  }),
+  notifications: createNotificationService(db),
   commercial: createCommercialService(db, {
     timezone: env.BUSINESS_TIMEZONE,
     currency: env.BUSINESS_CURRENCY,

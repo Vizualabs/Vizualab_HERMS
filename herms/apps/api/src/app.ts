@@ -17,6 +17,7 @@ import {
   customerInputSchema,
   customerPricesInputSchema,
   customerUpdateSchema,
+  dashboardEscalationQuerySchema,
   dashboardExportQuerySchema,
   dashboardFilterQuerySchema,
   dashboardMonthQuerySchema,
@@ -27,6 +28,8 @@ import {
   isSuperUser,
   loginInputSchema,
   noteLinkRecipientSchema,
+  ownerEscalationInputSchema,
+  ownerEscalationQuerySchema,
   priceChangeInputSchema,
   paymentInputSchema,
   quotationInputSchema,
@@ -421,12 +424,28 @@ export function createApp({
     })
 
   const claimRoutes = financeRoutes
-    .get('/api/price-escalation', requireRoles('business_owner'), async (c) =>
-      c.json({ data: await priceEscalation.preview() }),
-    )
-    .post('/api/price-escalation', requireRoles('business_owner'), async (c) =>
-      c.json({ data: await priceEscalation.apply(actor(c)) }),
-    )
+    .get('/api/price-escalation', requireRoles('business_owner'), async (c) => {
+      const parsed = ownerEscalationQuerySchema.safeParse(c.req.query())
+      if (!parsed.success) {
+        return errorResponse(
+          c,
+          400,
+          'VALIDATION_ERROR',
+          'The request contains invalid data',
+          parsed.error.issues.map((issue) => ({
+            field: issue.path.join('.') || 'query',
+            code: issue.code,
+            message: issue.message,
+          })),
+        )
+      }
+      return c.json({ data: await priceEscalation.preview(parsed.data.percent) })
+    })
+    .post('/api/price-escalation', requireRoles('business_owner'), async (c) => {
+      const parsed = await validatedJson(c, ownerEscalationInputSchema)
+      if ('response' in parsed) return parsed.response
+      return c.json({ data: await priceEscalation.apply(actor(c), parsed.data.percent) })
+    })
     .get('/api/discrepancies', requireRoles('finance', 'business_owner'), async (c) =>
       c.json({ data: await claims.listDiscrepancies(c.get('user')) }),
     )
@@ -501,9 +520,23 @@ export function createApp({
       }
       return c.json({ data: await dashboard.getRankings(parsed.data) })
     })
-    .get('/api/dashboard/escalations', requireRoles('business_owner'), async (c) =>
-      c.json({ data: await dashboard.getEscalations() }),
-    )
+    .get('/api/dashboard/escalations', requireRoles('business_owner'), async (c) => {
+      const parsed = dashboardEscalationQuerySchema.safeParse(c.req.query())
+      if (!parsed.success) {
+        return errorResponse(
+          c,
+          400,
+          'VALIDATION_ERROR',
+          'The request contains invalid data',
+          parsed.error.issues.map((issue) => ({
+            field: issue.path.join('.') || 'query',
+            code: issue.code,
+            message: issue.message,
+          })),
+        )
+      }
+      return c.json({ data: await dashboard.getEscalations(parsed.data.percent) })
+    })
     .get('/api/dashboard/export', requireRoles('business_owner', 'finance'), async (c) => {
       const parsed = dashboardExportQuerySchema.safeParse(c.req.query())
       if (!parsed.success) {
@@ -729,6 +762,7 @@ export function createApp({
       event: 'unhandled_request_error',
       requestId,
       errorType: error.name,
+      errorMessage: error instanceof Error ? error.message : String(error),
     })
     c.header(REQUEST_ID_HEADER, requestId)
     return errorResponse(c, 500, 'INTERNAL_ERROR', 'An unexpected error occurred')
