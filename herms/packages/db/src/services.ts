@@ -12,6 +12,7 @@ import type {
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 
 import type { Database } from './client'
+import { verifyPassword } from './password'
 import { reconcileReorderAlertsForItem, reconcileReorderAlertsForLedger } from './reorder'
 import {
   auditLogs,
@@ -78,7 +79,7 @@ export function createIdentityService(db: Database) {
         .from(users)
         .where(and(sql`lower(${users.email}) = ${email.toLowerCase()}`, eq(users.active, true)))
         .limit(1)
-      if (!user?.passwordHash || !(await Bun.password.verify(password, user.passwordHash))) return null
+      if (!user?.passwordHash || !(await verifyPassword(password, user.passwordHash))) return null
       return publicUser(user)
     },
 
