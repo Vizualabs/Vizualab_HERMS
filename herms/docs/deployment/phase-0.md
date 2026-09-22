@@ -8,12 +8,14 @@ database URL, AWS identifier, domain, host, or credential is committed.
 Staging is deferred until the team is larger and a subdomain exists. Until then
 HERMS is **production-only with approval**.
 
-AWS and the public domain are not set up yet. Until they exist:
+The base Lambda, execution role, CloudWatch log group, budget, and IAM access
+are managed manually. Deployment remains blocked until GitHub OIDC, production
+environment values, the Function URL, and the Hostinger domain are verified.
 
 | Can do now | Cannot do yet |
 |---|---|
 | Run CI on every pull request and on `main` / `develop` | Deploy to Hostinger |
-| Block bad code with typecheck, tests, migration check, and build | Deploy to AWS Lambda |
+| Block bad code with typecheck, tests, migration check, and build | Deploy code to the existing AWS Lambda |
 | Keep production deploy workflows ready, manual, `main`-only | Browser smoke test against a live URL |
 | Work and verify on `localhost` | Automatic deploy on merge to `main` |
 
@@ -88,12 +90,13 @@ are the production approval gate.
 ### `production-api`
 
 - Variable: `AWS_REGION`
-- Variable: `AWS_STACK_NAME`
+- Variable: `API_FUNCTION_NAME`
+- Variable: `API_HEALTH_URL`
 - Secret: `AWS_DEPLOY_ROLE_ARN`
-- Secret: `DATABASE_URL`
 
 The AWS role should be assumed through GitHub OIDC. Do not create permanent AWS
-access-key secrets for this workflow.
+access-key secrets for this workflow. Runtime secrets stay in the manually
+configured Lambda environment and are not copied into GitHub.
 
 ### `production-vps`
 
@@ -108,14 +111,16 @@ access-key secrets for this workflow.
 Do this in order. Do not enable auto-deploy on the first attempt.
 
 1. Create the GitHub environments and required reviewers above.
-2. Configure AWS OIDC for GitHub Actions and the Lambda stack values.
-3. Configure Neon runtime and migration URLs as environment secrets.
+2. Configure AWS OIDC for GitHub Actions with code-update permission on only
+   the existing `herms-api` Lambda.
+3. Configure the Neon migration URL in GitHub. Keep the pooled runtime URL and
+   application secrets in the manually configured Lambda environment.
 4. Put the Hostinger VPS host, user, web root, SSH key, and known hosts in
    `production-vps`.
 5. Copy `infra/nginx/herms.conf.example` to the VPS and replace
    `__HERMS_DOMAIN__` and `__LAMBDA_FUNCTION_URL_HOST__`.
-6. From GitHub Actions, run **Deploy HERMS API** against `main`, approve
-   migration, then confirm the Lambda Function URL.
+6. From GitHub Actions, run **Deploy HERMS API** against `main`, approve the
+   migration, and confirm the existing Lambda Function URL health check.
 7. From GitHub Actions, run **Deploy HERMS web** against `main`.
 8. Open `https://<domain>`, confirm the health card is green, and confirm
    `X-Request-ID`.
@@ -129,18 +134,22 @@ error instead of a cryptic cloud error.
 
 ## AWS
 
-`infra/aws/template.yaml` defines the Node.js 22 Lambda Function URL. Its
-database URL is a no-echo deployment parameter. The API timeout defaults to
-20 seconds.
+AWS resources are manually managed. See `infra/aws/README.md` for the required
+Lambda configuration and GitHub deployment contract. The API workflow builds
+`apps/api/dist/lambda.js` and updates only the code of the existing `herms-api`
+function; it does not create or change AWS resources.
 
-After AWS details are available:
+Before the first API deployment:
 
-1. Configure the OIDC deployment role and GitHub environment values.
-2. Run the API deployment workflow from `main`.
-3. Record the Function URL host without the `https://` prefix.
-4. Use that host when preparing the Nginx configuration.
-5. Confirm the public Function URL boundary is monitored. Authentication and
-   business-route authorization arrive in their roadmap phases.
+1. Confirm the handler is `lambda.handler`, the runtime is Node.js 22, and the
+   architecture is ARM64.
+2. Configure Lambda environment variables and the Function URL manually.
+3. Configure the least-privilege GitHub OIDC role and environment values.
+4. Run the API deployment workflow from `main`.
+5. Record the Function URL host without the `https://` prefix.
+6. Use that host when preparing the Nginx configuration.
+7. Confirm the public Function URL boundary is monitored and concurrency is
+   capped.
 
 ## Nginx
 
