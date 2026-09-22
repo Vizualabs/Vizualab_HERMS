@@ -95,6 +95,30 @@ export const priceChangeInputSchema = z.object({
   effectiveDate: z.string().datetime({ offset: true }).optional(),
 })
 
+export const ownerEscalationPercentSchema = z.coerce
+  .number()
+  .refine(
+    (value) => Number.isFinite(value) && value >= 0.01 && value <= 100,
+    'Increase percent must be between 0.01 and 100',
+  )
+  .refine(
+    (value) => Math.abs(value * 100 - Math.round(value * 100)) < 1e-8,
+    'Increase percent may have at most two decimal places',
+  )
+  .transform((value) => Math.round(value * 100) / 100)
+
+export const ownerEscalationInputSchema = z.object({
+  percent: ownerEscalationPercentSchema,
+})
+
+export const ownerEscalationQuerySchema = z.object({
+  percent: ownerEscalationPercentSchema,
+})
+
+export const dashboardEscalationQuerySchema = z.object({
+  percent: ownerEscalationPercentSchema.optional(),
+})
+
 export const fixedPriceSchema = z.object({
   equipmentItemId: z.string().uuid(),
   unitPriceCents: z.number().int().min(0),
@@ -291,6 +315,8 @@ export type EquipmentInput = z.infer<typeof equipmentInputSchema>
 export type EquipmentUpdate = z.infer<typeof equipmentUpdateSchema>
 export type StockAdditionInput = z.infer<typeof stockAdditionInputSchema>
 export type PriceChangeInput = z.infer<typeof priceChangeInputSchema>
+export type OwnerEscalationInput = z.infer<typeof ownerEscalationInputSchema>
+export type OwnerEscalationQuery = z.infer<typeof ownerEscalationQuerySchema>
 export type RecurringCustomerInput = z.infer<typeof recurringCustomerInputSchema>
 export type CustomerPricesInput = z.infer<typeof customerPricesInputSchema>
 export type QuotationInput = z.infer<typeof quotationInputSchema>
@@ -427,7 +453,7 @@ export type DashboardEscalationHistory = {
 
 export type DashboardEscalations = {
   currency: string
-  percentage: 10
+  percentage: number
   lastEscalation: DashboardEscalationHistory | null
   history: DashboardEscalationHistory[]
   preview: {

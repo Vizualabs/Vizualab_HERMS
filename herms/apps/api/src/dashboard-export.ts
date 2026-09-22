@@ -242,7 +242,7 @@ export async function createDashboardPdf(report: DashboardReport) {
     heading(context, 'Owner price escalation')
     ensureSpace(context, 30)
     context.page.drawText(
-      `Current 10% preview: ${report.escalations.preview.itemCount} items, ${money(
+      `Current ${report.escalations.percentage}% preview: ${report.escalations.preview.itemCount} items, ${money(
         report.escalations.preview.currentValueCents,
         report.escalations.currency,
       )} to ${money(
@@ -489,7 +489,7 @@ export async function createDashboardXlsx(report: DashboardReport) {
     escalation.getColumn(5).numFmt = MONEY_FORMAT
     styleSheet(escalation, [20, 28, 12, 22, 22])
     const previewRow = escalation.rowCount + 3
-    escalation.getCell(previewRow, 1).value = 'Current 10% preview'
+    escalation.getCell(previewRow, 1).value = `Current ${report.escalations.percentage}% preview`
     escalation.getCell(previewRow, 1).font = { bold: true }
     escalation.getCell(previewRow + 1, 1).value = 'Items'
     escalation.getCell(previewRow + 1, 2).value = report.escalations.preview.itemCount
@@ -497,7 +497,7 @@ export async function createDashboardXlsx(report: DashboardReport) {
     escalation.getCell(previewRow + 2, 2).value =
       report.escalations.preview.currentValueCents / 100
     escalation.getCell(previewRow + 2, 2).numFmt = MONEY_FORMAT
-    escalation.getCell(previewRow + 3, 1).value = 'After 10% escalation'
+    escalation.getCell(previewRow + 3, 1).value = `After ${report.escalations.percentage}% increase`
     escalation.getCell(previewRow + 3, 2).value =
       report.escalations.preview.escalatedValueCents / 100
     escalation.getCell(previewRow + 3, 2).numFmt = MONEY_FORMAT

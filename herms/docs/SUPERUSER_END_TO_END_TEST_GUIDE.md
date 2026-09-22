@@ -242,15 +242,15 @@ Run destructive or history-producing scenarios only in development/staging. Stoc
 - Record a correction back to `8000`.
 - Expect another history row, not an edit of the negotiated row.
 
-### SU-EQP-006 — Global 10% escalation preview and cancel
+### SU-EQP-006 — Global price increase preview and cancel
 
-- In **Owner control**, note the number of affected prices, select **Increase prices by 10%**, then cancel the browser confirmation.
+- In **Owner control**, enter the increase percent you want (for example `15`), note the previewed new prices, select **Increase prices by 15%**, then cancel the confirmation.
 - Expect no prices or histories to change.
 
-### SU-EQP-007 — Global 10% escalation apply
+### SU-EQP-007 — Global price increase apply
 
-- Confirm the same action once.
-- Expect every current equipment price to increase by 10% using whole-minor-unit rounding and a permanent owner-escalation history row.
+- Enter the same percent and confirm the action once.
+- Expect every current equipment price to increase by that percent using whole-minor-unit rounding and a permanent owner-escalation history row.
 - Record screenshots before and after because this is intentionally irreversible.
 
 ### SU-EQP-008 — Historical price freeze
@@ -530,7 +530,7 @@ Use one item with 100 approved delivered units for the following connected test.
 
 ### SU-CLM-007 — Damage-date pricing
 
-- Record damage before a 10% price escalation, run escalation, then draft/confirm the claim.
+- Record damage before a catalogue price increase, run the owner increase, then draft/confirm the claim.
 - Expect claim unit price to equal price history at the damage-recorded date, not the new current price.
 
 ### SU-CLM-008 — Duplicate decision protection

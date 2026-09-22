@@ -271,7 +271,7 @@ function CustomerTypeBadge({ type }: { type: 'new' | 'recurring' }) {
 
 const reasonLabels: Record<PriceChangeReason, string> = {
   scheduled_escalation: 'Scheduled 10% escalation',
-  owner_escalation: 'Owner 10% escalation',
+  owner_escalation: 'Owner price increase',
   negotiated: 'Negotiated rate',
   correction: 'Price correction',
 }

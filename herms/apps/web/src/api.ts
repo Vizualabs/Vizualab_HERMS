@@ -671,13 +671,15 @@ export const api = {
     }),
   priceHistory: (id: string) =>
     request<PriceHistoryEntry[]>(`/api/items/${id}/price-history`),
-  priceEscalationPreview: () =>
-    request<PriceEscalationItem[]>('/api/price-escalation'),
-  applyPriceEscalation: () =>
+  priceEscalationPreview: (percent: number) =>
+    request<PriceEscalationItem[]>(
+      `/api/price-escalation?percent=${encodeURIComponent(String(percent))}`,
+    ),
+  applyPriceEscalation: (percent: number) =>
     request<PriceEscalationResult>('/api/price-escalation', {
       method: 'POST',
       headers: { [REQUEST_ID_HEADER]: crypto.randomUUID() },
-      body: '{}',
+      body: JSON.stringify({ percent }),
     }),
   quotations: () => request<QuotationSummary[]>('/api/quotations'),
   quotation: (id: string) => request<QuotationDetail>(`/api/quotations/${id}`),
@@ -777,8 +779,10 @@ export const api = {
     ),
   dashboardRankings: (filters: DashboardFilters) =>
     request<DashboardRankings>(`/api/dashboard/rankings?${dashboardQuery(filters)}`),
-  dashboardEscalations: () =>
-    request<DashboardEscalations>('/api/dashboard/escalations'),
+  dashboardEscalations: (percent?: number) =>
+    request<DashboardEscalations>(
+      `/api/dashboard/escalations${percent === undefined ? '' : `?percent=${encodeURIComponent(String(percent))}`}`,
+    ),
   downloadDashboardExport,
 }
 
