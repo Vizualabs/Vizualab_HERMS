@@ -18,7 +18,6 @@ The backend is a **Hono.js monolith** running on an **AWS Lambda Function URL**,
 apps/
   web/        TanStack Start (frontend)
   api/        Hono (this backend)
-  notifier/   Legacy queue safety handler (automatic delivery disabled)
 packages/
   db/         Drizzle schema + migrations
   shared/     Shared types and constants
@@ -62,7 +61,7 @@ Business rules are implemented once as deterministic domain services, reused acr
 
 - Business mutation and its outbox/audit rows commit atomically.
 - Idempotency keys prevent duplicate effects from retries.
-- No direct SQS `PutMessage` in the request path — a post-commit failure would silently lose the notification (I-12).
+- Internal outbox history stays in the database; no SQS publisher or notification worker is deployed.
 
 ## Manual document sharing
 
@@ -74,7 +73,6 @@ note detail → get secure link → copy/open/WhatsApp icon → staff sends manu
 - HERMS has no WhatsApp provider credentials and makes no automatic messaging API calls.
 - Customer quotation links are hashed at rest, expire with the quotation, and separate customer acceptance from authenticated Sales order conversion.
 - Existing outbox rows are retained because note-link regeneration uses them to recover the selected field-staff assignment.
-- The legacy notifier acknowledges any remaining queue trigger without resolving a recipient or sending a message.
 
 ## Scheduler
 

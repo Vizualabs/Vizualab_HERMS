@@ -736,7 +736,7 @@ Run date: 2026-09-12 against the configured development environment.
 Passed:
 
 - 91 original unit/API tests, plus the new reorder SQL regression test
-- TypeScript checks for shared, database, API, notifier, and web workspaces
+- TypeScript checks for shared, database, API, and web workspaces
 - Migration integrity check for all 13 migrations
 - Production API and web builds
 - 16 Playwright browser scenarios in headless Edge
