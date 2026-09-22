@@ -4,7 +4,7 @@ Phase 9 hardening is implemented without database-resident backups or snapshots.
 
 ## Implemented
 
-- Configurable equipment reorder thresholds, automatic open/resolve handling, deduplicated outbox notifications, and Store Admin/deputy WhatsApp recipients.
+- Configurable equipment reorder thresholds, automatic open/resolve handling, internal outbox history, and Store Admin/deputy manual WhatsApp recipients.
 - Authenticated printable Delivery Note and Retention Note PDFs based on the SRS field lists. The generator is isolated in `apps/api/src/note-pdf.ts` so the layout can be adjusted when the client's physical form samples are supplied.
 - Audit completeness verification for notes, stock ledger entries, discrepancies, finance records, claims, and reorder alerts.
 - A read-only concurrent dashboard load runner with a hard p95 limit of three seconds.
