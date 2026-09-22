@@ -78,7 +78,18 @@ export type AppDependencies = {
   priceEscalation: PriceEscalationService
   retention: RetentionService
   auth: AuthConfig
+  publicAppUrl?: string
   logger?: AppLogger
+}
+
+function csrfAllowedOrigins(publicAppUrl: string): string[] {
+  const origins = new Set(['http://localhost:3000', 'http://127.0.0.1:3000'])
+  try {
+    origins.add(new URL(publicAppUrl).origin)
+  } catch {
+    // Keep local origins when PUBLIC_APP_URL is not a valid URL.
+  }
+  return [...origins]
 }
 
 function errorResponse(
@@ -137,13 +148,14 @@ export function createApp({
   priceEscalation,
   retention,
   auth,
+  publicAppUrl = 'http://localhost:3000',
   logger = jsonLogger,
 }: AppDependencies) {
   const app = new Hono<AppEnv>()
 
   app.use('*', requestContext(logger))
   app.use('*', secureHeaders())
-  app.use('/api/*', csrf())
+  app.use('/api/*', csrf({ origin: csrfAllowedOrigins(publicAppUrl) }))
 
   const routes = app
     .get('/', (c) =>

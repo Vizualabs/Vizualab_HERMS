@@ -61,6 +61,7 @@ const app = createApp({
     ttlSeconds: env.SESSION_TTL_SECONDS,
     secureCookie: env.SESSION_COOKIE_SECURE,
   },
+  publicAppUrl: env.PUBLIC_APP_URL,
 })
 
 export default app
