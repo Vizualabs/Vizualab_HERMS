@@ -72,9 +72,9 @@ export const itemsQuery = queryOptions({
   staleTime: 15_000,
 })
 
-export const priceEscalationQuery = queryOptions({
-  queryKey: queryKeys.priceEscalation,
-  queryFn: api.priceEscalationPreview,
+export const priceEscalationQuery = (percent: number) => queryOptions({
+  queryKey: [...queryKeys.priceEscalation, percent],
+  queryFn: () => api.priceEscalationPreview(percent),
   staleTime: 15_000,
 })
 
@@ -195,6 +195,6 @@ export const dashboardRankingsQuery = (filters: DashboardFilters) => queryOption
 
 export const dashboardEscalationsQuery = queryOptions({
   queryKey: queryKeys.dashboardEscalations,
-  queryFn: api.dashboardEscalations,
+  queryFn: () => api.dashboardEscalations(),
   staleTime: 15_000,
 })

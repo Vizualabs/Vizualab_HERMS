@@ -198,7 +198,7 @@ const staffClaimResponse = await request(
 )
 assert(staffClaimResponse.status === 409, 'A staff-responsible discrepancy was accepted as a claim')
 
-const escalationPreviewResponse = await request('/api/price-escalation', ownerCookie)
+const escalationPreviewResponse = await request('/api/price-escalation?percent=10', ownerCookie)
 assert(escalationPreviewResponse.status === 200, 'Owner price-escalation preview failed')
 const escalationPreview = (await escalationPreviewResponse.json()) as {
   data: Array<{ itemId: string; oldPriceCents: number; newPriceCents: number }>
@@ -210,13 +210,13 @@ assert(
   'Owner preview did not calculate the ten-percent increase',
 )
 assert((await request('/api/price-escalation', financeCookie, {
-  method: 'POST', body: '{}',
+  method: 'POST', body: JSON.stringify({ percent: 10 }),
 })).status === 403, 'Finance was allowed to trigger a Business Owner price escalation')
 
 const escalationRequestId = crypto.randomUUID()
 const firstEscalationResponse = await request('/api/price-escalation', ownerCookie, {
   method: 'POST',
-  body: '{}',
+  body: JSON.stringify({ percent: 10 }),
   headers: { 'x-request-id': escalationRequestId },
 })
 assert(firstEscalationResponse.status === 200, 'Owner price escalation failed')
@@ -229,7 +229,7 @@ const firstRun = (await firstEscalationResponse.json()) as {
 }
 const secondEscalationResponse = await request('/api/price-escalation', ownerCookie, {
   method: 'POST',
-  body: '{}',
+  body: JSON.stringify({ percent: 10 }),
   headers: { 'x-request-id': escalationRequestId },
 })
 const secondRun = (await secondEscalationResponse.json()) as {
