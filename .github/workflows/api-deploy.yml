@@ -60,15 +60,15 @@ jobs:
   deploy:
     needs: migrate
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 20
     environment: production-api
     defaults:
       run:
         working-directory: herms
     env:
       AWS_REGION: ${{ vars.AWS_REGION }}
-      STACK_NAME: ${{ vars.AWS_STACK_NAME }}
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      API_FUNCTION_NAME: ${{ vars.API_FUNCTION_NAME }}
+      API_HEALTH_URL: ${{ vars.API_HEALTH_URL }}
     steps:
       - name: Require AWS configuration
         working-directory: .
@@ -78,12 +78,16 @@ jobs:
             echo "::error::AWS_REGION is not set on the production-api GitHub environment."
             missing=1
           fi
-          if [ -z "$STACK_NAME" ]; then
-            echo "::error::AWS_STACK_NAME is not set on the production-api GitHub environment."
+          if [ -z "$API_FUNCTION_NAME" ]; then
+            echo "::error::API_FUNCTION_NAME is not set on the production-api GitHub environment."
+            missing=1
+          fi
+          if [ -z "$API_HEALTH_URL" ]; then
+            echo "::error::API_HEALTH_URL is not set on the production-api GitHub environment."
             missing=1
           fi
           if [ "$missing" -ne 0 ]; then
-            echo "::error::AWS is not configured yet. Keep using local verification until region, stack name, and OIDC role exist."
+            echo "::error::AWS is not configured yet. Keep using local verification until the existing Lambda and OIDC role are configured."
             exit 1
           fi
 
@@ -91,24 +95,27 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.14
-      - uses: aws-actions/setup-sam@v2
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
       - run: bun install --frozen-lockfile
       - run: bun run build:api
-      - run: sam validate --template-file infra/aws/template.yaml
-      - run: sam build --template-file infra/aws/template.yaml
-      - name: Deploy Lambda
+      - name: Package Lambda bundle
+        run: zip -9 -j herms-api.zip apps/api/dist/lambda.mjs
+      - name: Update existing Lambda code
+        run: |
+          aws lambda update-function-code \
+            --function-name "$API_FUNCTION_NAME" \
+            --zip-file fileb://herms-api.zip \
+            --region "$AWS_REGION"
+          aws lambda wait function-updated-v2 \
+            --function-name "$API_FUNCTION_NAME" \
+            --region "$AWS_REGION"
+      - name: Verify production health
         run: >
-          sam deploy
-          --stack-name "$STACK_NAME"
-          --region "$AWS_REGION"
-          --capabilities CAPABILITY_IAM
-          --resolve-s3
-          --no-confirm-changeset
-          --no-fail-on-empty-changeset
-          --parameter-overrides "DatabaseUrl=$DATABASE_URL"
-      - name: Record stack outputs
-        run: sam list stack-outputs --stack-name "$STACK_NAME" --region "$AWS_REGION" --output table
+          curl --fail --silent --show-error
+          --retry 5
+          --retry-all-errors
+          --retry-delay 5
+          "$API_HEALTH_URL"
