@@ -64,6 +64,7 @@ export type EquipmentItem = {
   category: string
   unitOfMeasure: string
   currentUnitPriceCents: number
+  purchasePriceCents: number | null
   reorderThreshold: number | null
   createdAt: string
   updatedAt: string

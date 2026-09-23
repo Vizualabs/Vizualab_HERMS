@@ -345,6 +345,7 @@ export function createMasterDataService(db: Database) {
         category: input.category,
         unitOfMeasure: input.unitOfMeasure,
         currentUnitPriceCents: input.currentUnitPriceCents,
+        purchasePriceCents: input.purchasePriceCents,
         reorderThreshold: input.reorderThreshold ?? null,
         createdAt: now,
         updatedAt: now,
