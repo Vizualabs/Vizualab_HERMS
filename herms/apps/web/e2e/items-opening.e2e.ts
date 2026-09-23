@@ -43,6 +43,7 @@ test('registers equipment with opening stock available immediately', async ({ pa
   await page.getByLabel('Name').fill('Scaffold frame')
   await page.getByLabel('Category').fill('Scaffolding')
   await page.getByLabel('Opening price (LKR)').fill('500.00')
+  await page.getByLabel('Purchase price (LKR)').fill('350.00')
   await page.getByLabel('Reorder threshold (optional)').fill('10')
   await page.getByLabel('Opening quantity').fill('75')
   await page.getByRole('button', { name: 'Create equipment' }).click()
@@ -55,6 +56,7 @@ test('registers equipment with opening stock available immediately', async ({ pa
     category: 'Scaffolding',
     unitOfMeasure: 'unit',
     currentUnitPriceCents: 50_000,
+    purchasePriceCents: 35_000,
     reorderThreshold: 10,
     openingQuantity: 75,
   })

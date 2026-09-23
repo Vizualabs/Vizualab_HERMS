@@ -73,6 +73,7 @@ export const equipmentInputSchema = z.object({
   category: z.string().trim().min(1).max(120),
   unitOfMeasure: z.string().trim().min(1).max(40).default('unit'),
   currentUnitPriceCents: z.number().int().min(0),
+  purchasePriceCents: z.number().int().min(0),
   openingQuantity: z.number().int().min(0).max(1_000_000).default(0),
   reorderThreshold: z.number().int().min(0).nullable().optional(),
 })

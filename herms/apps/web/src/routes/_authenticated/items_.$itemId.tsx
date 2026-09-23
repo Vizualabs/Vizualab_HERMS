@@ -32,7 +32,13 @@ function ItemDetailPage() {
     }),
   )
   const update = useMutation({
-    mutationFn: (input: { name: string; category: string; unitOfMeasure: string; reorderThreshold: number | null }) =>
+    mutationFn: (input: {
+      name: string
+      category: string
+      unitOfMeasure: string
+      purchasePriceCents?: number
+      reorderThreshold: number | null
+    }) =>
       api.updateItem(itemId, input),
     onSuccess: invalidateItem,
   })
@@ -93,11 +99,24 @@ function ItemDetailPage() {
               onSubmit={(event) => {
                 event.preventDefault()
                 const form = new FormData(event.currentTarget)
+                const purchasePriceInput = event.currentTarget.elements.namedItem('purchasePrice')
+                if (!(purchasePriceInput instanceof HTMLInputElement)) return
+                const purchasePriceValue = purchasePriceInput.value.trim()
+                const purchasePriceCents = purchasePriceValue === ''
+                  ? null
+                  : parseMajorCurrencyToMinorUnits(purchasePriceValue)
+                if (purchasePriceValue !== '' && purchasePriceCents === null) {
+                  purchasePriceInput.setCustomValidity('Enter a valid price with no more than two decimal places.')
+                  purchasePriceInput.reportValidity()
+                  return
+                }
+                purchasePriceInput.setCustomValidity('')
                 const reorderThreshold = String(form.get('reorderThreshold') ?? '').trim()
                 update.mutate({
                   name: String(form.get('name') ?? ''),
                   category: String(form.get('category') ?? ''),
                   unitOfMeasure: String(form.get('unitOfMeasure') ?? ''),
+                  ...(purchasePriceCents === null ? {} : { purchasePriceCents }),
                   reorderThreshold: reorderThreshold === '' ? null : Number(reorderThreshold),
                 })
               }}
@@ -106,6 +125,20 @@ function ItemDetailPage() {
               <Edit label="Name" name="name" defaultValue={item.data.name} />
               <Edit label="Category" name="category" defaultValue={item.data.category} />
               <Edit label="Unit" name="unitOfMeasure" defaultValue={item.data.unitOfMeasure} />
+              <Edit
+                label="Purchase price (LKR)"
+                name="purchasePrice"
+                type="number"
+                min="0.01"
+                step="0.01"
+                placeholder="350.00"
+                required={false}
+                defaultValue={
+                  item.data.purchasePriceCents == null
+                    ? ''
+                    : (item.data.purchasePriceCents / 100).toFixed(2)
+                }
+              />
               <Edit
                 label="Reorder threshold (optional)"
                 name="reorderThreshold"
