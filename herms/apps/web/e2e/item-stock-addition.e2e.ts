@@ -30,6 +30,7 @@ for (const role of ['system_admin', 'super_user'] as const) {
         category: 'Cutlery',
         unitOfMeasure: 'unit',
         currentUnitPriceCents: 16_500,
+        purchasePriceCents: 12_000,
         reorderThreshold: 20,
         currentStockQty: stockAdded ? 225 : 75,
         openingStockQty: 75,

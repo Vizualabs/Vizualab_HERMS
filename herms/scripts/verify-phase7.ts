@@ -75,6 +75,7 @@ async function createItem(name: string, price: number) {
       category: 'Phase 7 verification',
       unitOfMeasure: 'unit',
       currentUnitPriceCents: price,
+      purchasePriceCents: price,
     }),
   })
   assert(response.status === 201, `${name} creation failed`)

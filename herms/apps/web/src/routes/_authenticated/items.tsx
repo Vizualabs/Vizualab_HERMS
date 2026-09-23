@@ -100,7 +100,8 @@ function ItemsPage() {
             const formElement = event.currentTarget
             const form = new FormData(formElement)
             const priceInput = formElement.elements.namedItem('currentUnitPrice')
-            if (!(priceInput instanceof HTMLInputElement)) return
+            const purchasePriceInput = formElement.elements.namedItem('purchasePrice')
+            if (!(priceInput instanceof HTMLInputElement) || !(purchasePriceInput instanceof HTMLInputElement)) return
             const currentUnitPriceCents = parseMajorCurrencyToMinorUnits(priceInput.value)
             if (currentUnitPriceCents === null) {
               priceInput.setCustomValidity('Enter a valid price with no more than two decimal places.')
@@ -108,6 +109,13 @@ function ItemsPage() {
               return
             }
             priceInput.setCustomValidity('')
+            const purchasePriceCents = parseMajorCurrencyToMinorUnits(purchasePriceInput.value)
+            if (purchasePriceCents === null) {
+              purchasePriceInput.setCustomValidity('Enter a valid price with no more than two decimal places.')
+              purchasePriceInput.reportValidity()
+              return
+            }
+            purchasePriceInput.setCustomValidity('')
             const reorderThreshold = String(form.get('reorderThreshold') ?? '').trim()
             const openingQuantity = Number(form.get('openingQuantity'))
             createItem.mutate({
@@ -115,6 +123,7 @@ function ItemsPage() {
               category: String(form.get('category') ?? ''),
               unitOfMeasure: String(form.get('unitOfMeasure') ?? 'unit'),
               currentUnitPriceCents,
+              purchasePriceCents,
               reorderThreshold: reorderThreshold === '' ? null : Number(reorderThreshold),
               openingQuantity,
             }, {
@@ -132,6 +141,15 @@ function ItemsPage() {
             min="0.01"
             step="0.01"
             placeholder="500.00"
+            required
+          />
+          <ItemField
+            label="Purchase price (LKR)"
+            name="purchasePrice"
+            type="number"
+            min="0.01"
+            step="0.01"
+            placeholder="350.00"
             required
           />
           <ItemField label="Reorder threshold (optional)" name="reorderThreshold" type="number" />

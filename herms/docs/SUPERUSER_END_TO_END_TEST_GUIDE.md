@@ -219,7 +219,7 @@ Run destructive or history-producing scenarios only in development/staging. Stoc
 
 ### SU-EQP-001 — Create equipment
 
-- Create both standard test items with name, category, unit, opening price, and threshold.
+- Create both standard test items with name, category, unit, opening price, purchase price, and threshold.
 - Expect them in the Equipment list and Customers & Pricing fixed-price list.
 
 ### SU-EQP-002 — Equipment validation
@@ -229,7 +229,7 @@ Run destructive or history-producing scenarios only in development/staging. Stoc
 
 ### SU-EQP-003 — Edit non-price details
 
-- Change name/category/unit/threshold and save.
+- Change name/category/unit/purchase price/threshold and save.
 - Expect only those fields to change; price history must be unchanged.
 
 ### SU-EQP-004 — Negotiated price change

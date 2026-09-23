@@ -821,6 +821,7 @@ describe('Phase 1 API', () => {
       category: 'Cutlery',
       unitOfMeasure: 'unit',
       currentUnitPriceCents: 16_500,
+      purchasePriceCents: null,
       reorderThreshold: null,
       createdAt,
       updatedAt: createdAt,

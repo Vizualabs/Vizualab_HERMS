@@ -106,6 +106,7 @@ export const equipmentItems = pgTable('equipment_item', {
   category: text('category').notNull(),
   unitOfMeasure: text('unit_of_measure').default('unit').notNull(),
   currentUnitPriceCents: integer('current_unit_price_cents').notNull(),
+  purchasePriceCents: integer('purchase_price_cents'),
   reorderThreshold: integer('reorder_threshold'),
   ...timestamps,
 })
