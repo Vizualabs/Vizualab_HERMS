@@ -14,6 +14,7 @@ export type ConfirmOptions = {
   message: string
   confirmLabel?: string
   cancelLabel?: string
+  hideCancel?: boolean
   tone?: 'primary' | 'danger'
 }
 
@@ -47,7 +48,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
     if (!dialog) return
     if (request) {
       if (!dialog.open) dialog.showModal()
-      const focusTarget = request.tone === 'danger'
+      const focusTarget = request.tone === 'danger' && !request.hideCancel
         ? dialog.querySelector<HTMLButtonElement>('.button-secondary')
         : dialog.querySelector<HTMLButtonElement>('[data-confirm-action]')
       focusTarget?.focus()
@@ -74,17 +75,19 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
             <h2 id={titleId} className="text-base font-semibold">
               {request.title}
             </h2>
-            <p id={messageId} className="mt-2 text-sm text-muted-foreground">
+            <p id={messageId} className="mt-2 whitespace-pre-line text-sm text-muted-foreground">
               {request.message}
             </p>
             <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-              <button
-                type="button"
-                className="button-secondary"
-                onClick={() => settle(false)}
-              >
-                {request.cancelLabel ?? 'Cancel'}
-              </button>
+              {!request.hideCancel && (
+                <button
+                  type="button"
+                  className="button-secondary"
+                  onClick={() => settle(false)}
+                >
+                  {request.cancelLabel ?? 'Cancel'}
+                </button>
+              )}
               <button
                 type="button"
                 data-confirm-action
@@ -93,7 +96,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
                   : 'button-primary'}
                 onClick={() => settle(true)}
               >
-                {request.confirmLabel ?? 'Confirm'}
+                {request.confirmLabel ?? (request.hideCancel ? 'OK' : 'Confirm')}
               </button>
             </div>
           </div>

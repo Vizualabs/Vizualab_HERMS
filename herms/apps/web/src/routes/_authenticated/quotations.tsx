@@ -1,11 +1,14 @@
 import type { QuotationInput, QuotationPricingMode, QuotationStatus } from '@herms/shared'
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { ApiError, api, formatMoney, type CreatedQuotation, type QuotationLink, type QuotationSummary } from '../../api'
+import { ApiError, api, formatMoney, type CreatedQuotation, type EquipmentItem, type QuotationLink, type QuotationSummary } from '../../api'
+import { useConfirm } from '../../components/ConfirmDialog'
 import { ManualLinkShare } from '../../components/ManualShareActions'
-import { customersQuery, itemsQuery, queryKeys, quotationsQuery } from '../../queries'
+import { SearchableSelect } from '../../components/SearchableSelect'
+import { markQuotationResponsesSeen } from '../../quotationNotifications'
+import { customersQuery, itemsQuery, queryKeys, quotationsQuery, sessionQuery } from '../../queries'
 import { createQuotationShareMessage } from '../../whatsapp'
 
 export const Route = createFileRoute('/_authenticated/quotations')({ component: QuotationsPage })
@@ -19,7 +22,19 @@ function QuotationsPage() {
   const quotations = useQuery(quotationsQuery)
   const customers = useQuery(customersQuery)
   const items = useQuery(itemsQuery)
+  const session = useQuery(sessionQuery)
+  const confirm = useConfirm()
   const queryClient = useQueryClient()
+  const markedSeen = useRef(false)
+
+  useEffect(() => {
+    if (markedSeen.current || !session.data || !quotations.data) return
+    markedSeen.current = true
+    queryClient.setQueryData(
+      queryKeys.quotationResponseSeen(session.data.id),
+      markQuotationResponsesSeen(session.data.id, quotations.data),
+    )
+  }, [quotations.data, queryClient, session.data])
   const navigate = useNavigate()
   const [showCreate, setShowCreate] = useState(false)
   const [share, setShare] = useState<ShareState | null>(null)
@@ -74,6 +89,30 @@ function QuotationsPage() {
     }
   }
 
+  const showStockNotice = async (itemName: string, available: number) => {
+    await confirm({
+      title: 'Not enough stock',
+      message: stockShortageMessage(itemName, available),
+      confirmLabel: 'OK',
+      hideCancel: true,
+    })
+  }
+
+  const applyLineQuantity = async (key: string, quantity: number, equipmentItemId: string) => {
+    if (!Number.isFinite(quantity)) return
+    const available = availableStockQty(equipmentItemId, items.data)
+    if (equipmentItemId && quantity > available) {
+      setLines((current) => current.map((entry) => (
+        entry.key === key ? { ...entry, quantity: Math.max(available, 1) } : entry
+      )))
+      await showStockNotice(itemName(equipmentItemId, items.data), available)
+      return
+    }
+    setLines((current) => current.map((entry) => (
+      entry.key === key ? { ...entry, quantity } : entry
+    )))
+  }
+
   return (
     <div>
       <header className="flex flex-wrap items-start justify-between gap-4">
@@ -124,8 +163,18 @@ function QuotationsPage() {
 
       {showCreate && (
         <Modal title="New quotation" onClose={() => !create.isPending && setShowCreate(false)}>
-          <form onSubmit={(event) => {
+          <form onSubmit={async (event) => {
             event.preventDefault()
+            const overstocked = lines.find((line) => (
+              line.equipmentItemId && line.quantity > availableStockQty(line.equipmentItemId, items.data)
+            ))
+            if (overstocked) {
+              await showStockNotice(
+                itemName(overstocked.equipmentItemId, items.data),
+                availableStockQty(overstocked.equipmentItemId, items.data),
+              )
+              return
+            }
             const input: QuotationInput = {
               customerId,
               pricingMode,
@@ -137,12 +186,15 @@ function QuotationsPage() {
             }
             create.mutate(input)
           }}>
-            <label className="block text-sm font-medium text-[#071c23]">Customer
-              <select className="input mt-2" required value={customerId} onChange={(event) => setCustomerId(event.currentTarget.value)}>
-                <option value="">Select customer</option>
-                {customers.data?.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
-              </select>
-            </label>
+            <SearchableSelect
+              className="mt-0"
+              label="Customer"
+              required
+              value={customerId}
+              placeholder="Select customer"
+              options={customers.data?.map((entry) => ({ value: entry.id, label: entry.name })) ?? []}
+              onChange={setCustomerId}
+            />
 
             <fieldset className="mt-5">
               <legend className="text-sm font-medium text-[#071c23]">Pricing</legend>
@@ -155,21 +207,37 @@ function QuotationsPage() {
             <div className="mt-5 space-y-3">
               {lines.map((line, index) => {
                 const effectivePrice = standardPrice(line.equipmentItemId, items.data, customer.data)
+                const available = availableStockQty(line.equipmentItemId, items.data)
                 return <div key={line.key} className="rounded-xl border border-[#d6e0e2] p-4">
                   <div className="mb-3 flex items-center justify-between"><p className="text-sm font-semibold text-[#071c23]">Item {index + 1}</p>{lines.length > 1 && <button type="button" className="text-xs font-medium text-[#d72b2b] hover:underline" onClick={() => setLines((current) => current.filter((entry) => entry.key !== line.key))}>Remove</button>}</div>
-                  <select className="input" required value={line.equipmentItemId} aria-label={`Equipment for item ${index + 1}`} onChange={(event) => {
-                    const equipmentItemId = event.currentTarget.value
-                    const price = standardPrice(equipmentItemId, items.data, customer.data)
-                    setLines((current) => current.map((entry) => entry.key === line.key ? { ...entry, equipmentItemId, customPrice: centsToInput(price) } : entry))
-                  }}>
-                    <option value="">Select equipment</option>
-                    {items.data?.map((item) => <option key={item.id} value={item.id} disabled={selectedIds.has(item.id) && item.id !== line.equipmentItemId}>{item.name}</option>)}
-                  </select>
+                  <SearchableSelect
+                    aria-label={`Equipment for item ${index + 1}`}
+                    required
+                    value={line.equipmentItemId}
+                    placeholder="Select equipment"
+                    options={items.data?.map((item) => ({
+                      value: item.id,
+                      label: item.name,
+                      disabled: selectedIds.has(item.id) && item.id !== line.equipmentItemId,
+                    })) ?? []}
+                    onChange={(equipmentItemId) => {
+                      const price = standardPrice(equipmentItemId, items.data, customer.data)
+                      const nextAvailable = availableStockQty(equipmentItemId, items.data)
+                      if (equipmentItemId && line.quantity > nextAvailable) {
+                        void showStockNotice(itemName(equipmentItemId, items.data), nextAvailable)
+                      }
+                      setLines((current) => current.map((entry) => entry.key === line.key ? {
+                        ...entry,
+                        equipmentItemId,
+                        customPrice: centsToInput(price),
+                        quantity: equipmentItemId && line.quantity > nextAvailable ? Math.max(nextAvailable, 1) : entry.quantity,
+                      } : entry))
+                    }}
+                  />
                   <div className={`mt-3 grid gap-3 ${pricingMode === 'custom' ? 'sm:grid-cols-2' : ''}`}>
-                    <label className="text-xs font-medium text-[#071c23]">Quantity<input className="input mt-1" type="number" min="1" max="1000000" step="1" required value={line.quantity} onChange={(event) => {
-                      const quantity = event.currentTarget.valueAsNumber
-                      setLines((current) => current.map((entry) => entry.key === line.key ? { ...entry, quantity } : entry))
-                    }} /></label>
+                    <label className="text-xs font-medium text-[#071c23]">Quantity<input className="input mt-1" type="number" min="1" max={line.equipmentItemId ? Math.max(available, 1) : 1_000_000} step="1" required value={Number.isFinite(line.quantity) ? line.quantity : ''} onChange={(event) => {
+                      void applyLineQuantity(line.key, event.currentTarget.valueAsNumber, line.equipmentItemId)
+                    }} />{line.equipmentItemId && <span className="mt-1 block font-normal text-[#60727e]">In stock: {available}</span>}</label>
                     {pricingMode === 'custom' && <label className="text-xs font-medium text-[#071c23]">Unit price (LKR)<input className="input mt-1" type="number" min="0.01" max="20000000" step="0.01" required value={line.customPrice} onChange={(event) => {
                       const customPrice = event.currentTarget.value
                       setLines((current) => current.map((entry) => entry.key === line.key ? { ...entry, customPrice } : entry))
@@ -236,6 +304,20 @@ function quotationMetrics(rows: QuotationSummary[]) {
   const quotedThisMonth = rows.filter((row) => new Date(row.createdAt) >= monthStart && row.status !== 'rejected').reduce((total, row) => total + row.totalValueCents, 0)
   const conversionRate = recent.length ? Math.round(recent.filter((row) => row.status === 'accepted').length / recent.length * 100) : 0
   return { awaiting, awaitingLabel: awaitingRows[0]?.quotationNumber, acceptedThisMonth, quotedThisMonth, conversionRate, monthLabel: now.toLocaleString('en', { month: 'short' }).toUpperCase() }
+}
+
+function availableStockQty(itemId: string, items: EquipmentItem[] | undefined) {
+  if (!itemId) return 0
+  return items?.find((item) => item.id === itemId)?.currentStockQty ?? 0
+}
+
+function itemName(itemId: string, items: EquipmentItem[] | undefined) {
+  return items?.find((item) => item.id === itemId)?.name ?? 'this item'
+}
+
+function stockShortageMessage(name: string, available: number) {
+  if (available <= 0) return `${name} has no stock available, so it cannot be quoted.`
+  return `${name} has only ${available} in stock. You cannot add more than the available quantity.`
 }
 
 function standardPrice(itemId: string, items: Awaited<ReturnType<typeof api.items>> | undefined, customer: Awaited<ReturnType<typeof api.customer>> | undefined) {

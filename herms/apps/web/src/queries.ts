@@ -2,6 +2,7 @@ import { queryOptions } from '@tanstack/react-query'
 import type { DashboardFilters } from '@herms/shared'
 
 import { api } from './api'
+import { loadSeenResponseIds } from './quotationNotifications'
 
 export const queryKeys = {
   session: ['session'] as const,
@@ -13,6 +14,7 @@ export const queryKeys = {
   priceHistory: (id: string) => ['items', id, 'price-history'] as const,
   priceEscalation: ['price-escalation'] as const,
   quotations: ['quotations'] as const,
+  quotationResponseSeen: (userId: string) => ['quotations', 'response-seen', userId] as const,
   quotation: (id: string) => ['quotations', id] as const,
   orders: ['orders'] as const,
   order: (id: string) => ['orders', id] as const,
@@ -82,12 +84,20 @@ export const quotationsQuery = queryOptions({
   queryKey: queryKeys.quotations,
   queryFn: api.quotations,
   staleTime: 10_000,
+  refetchInterval: 15_000,
+})
+
+export const quotationResponseSeenQuery = (userId: string) => queryOptions({
+  queryKey: queryKeys.quotationResponseSeen(userId),
+  queryFn: () => loadSeenResponseIds(userId),
+  staleTime: Infinity,
 })
 
 export const ordersQuery = queryOptions({
   queryKey: queryKeys.orders,
   queryFn: api.orders,
   staleTime: 10_000,
+  refetchInterval: 15_000,
 })
 
 export const approvalsQuery = queryOptions({
@@ -100,12 +110,15 @@ export const approvalMetricsQuery = queryOptions({
   queryKey: queryKeys.approvalMetrics,
   queryFn: api.approvalMetrics,
   staleTime: 5_000,
+  refetchInterval: 15_000,
+  retry: false,
 })
 
 export const stockQuery = queryOptions({
   queryKey: queryKeys.stock,
   queryFn: api.stock,
   staleTime: 10_000,
+  refetchInterval: 15_000,
 })
 
 export const stockMovementsQuery = queryOptions({
@@ -137,12 +150,14 @@ export const claimsQuery = queryOptions({
   queryKey: queryKeys.claims,
   queryFn: api.claims,
   staleTime: 5_000,
+  refetchInterval: 15_000,
 })
 
 export const discrepanciesQuery = queryOptions({
   queryKey: queryKeys.discrepancies,
   queryFn: api.discrepancies,
   staleTime: 5_000,
+  refetchInterval: 15_000,
   refetchOnWindowFocus: 'always',
 })
 
@@ -162,6 +177,7 @@ export const dashboardStockQuery = queryOptions({
   queryKey: queryKeys.dashboardStock,
   queryFn: api.dashboardStock,
   staleTime: 15_000,
+  refetchInterval: 15_000,
   refetchOnWindowFocus: 'always',
 })
 

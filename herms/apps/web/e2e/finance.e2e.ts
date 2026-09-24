@@ -173,7 +173,8 @@ test.describe('Payments & Finance report', () => {
     await expect(page.getByRole('heading', { name: 'Record payments & expenses' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Order invoice & balance' })).toBeVisible()
 
-    await page.getByRole('combobox', { name: 'Order' }).selectOption({ index: 1 })
+    await page.getByRole('combobox', { name: 'Order' }).click()
+    await page.getByRole('option').first().click()
     await expect(page.getByText('Ready for payment')).toBeVisible()
     await expect(page.getByText('Order selected')).toBeVisible()
 
@@ -274,7 +275,8 @@ test.describe('Payments & Finance report', () => {
 
     const orderSelect = page.getByRole('combobox', { name: 'Order' })
     const paymentAmount = page.getByLabel(/^Amount \(LKR\)/)
-    await orderSelect.selectOption(orderId)
+    await orderSelect.click()
+    await page.getByRole('option', { name: /ORD-CENTS-001/ }).click()
     await expect(page.getByText('Order selected')).toBeVisible()
 
     await expect(paymentAmount).toBeEnabled()

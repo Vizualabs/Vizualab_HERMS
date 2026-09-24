@@ -244,7 +244,7 @@ export function createApp({
       const currentUser = c.get('user')
       const [customers, items, orders] = await Promise.all([
         masterData.listCustomers(currentUser),
-        masterData.listItems(),
+        masterData.listItems(currentUser),
         commercial.listOrders(currentUser),
       ])
       const histories = await Promise.all(items.map(async (item) => ({
@@ -323,7 +323,7 @@ export function createApp({
   app.use('/api/items/*', requireRoles('business_owner', 'sales', 'system_admin'))
 
   const itemRoutes = customerRoutes
-    .get('/api/items', async (c) => c.json({ data: await masterData.listItems() }))
+    .get('/api/items', async (c) => c.json({ data: await masterData.listItems(c.get('user')) }))
     .post('/api/items', async (c) => {
       const parsed = await validatedJson(c, equipmentInputSchema)
       if ('response' in parsed) return parsed.response

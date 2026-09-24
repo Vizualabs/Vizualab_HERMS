@@ -283,8 +283,8 @@ Run destructive or history-producing scenarios only in development/staging. Stoc
 
 ### SU-QUO-005 — Line validation
 
-- Try zero/negative/fractional quantity, blank equipment, blank custom price, zero custom price, and the same equipment twice.
-- Expect creation to be blocked and no quotation/outbox history to be created.
+- Try zero/negative/fractional quantity, a quantity above current stock, blank equipment, blank custom price, zero custom price, and the same equipment twice.
+- Expect a "Not enough stock" notice when quantity is above stock, creation to be blocked, and no quotation/outbox history to be created.
 
 ### SU-QUO-006 — Add and remove lines
 

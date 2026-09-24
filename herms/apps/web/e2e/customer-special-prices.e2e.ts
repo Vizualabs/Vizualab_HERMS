@@ -79,7 +79,8 @@ test('edits and permanently removes a recurring customer price without crashing'
   await expect(page.getByLabel('Dinner Plate special price in LKR')).toHaveCount(0)
   expect(savedPrices).toEqual([])
 
-  await page.getByLabel('Equipment for special price').selectOption(equipmentItemId)
+  await page.getByRole('combobox', { name: 'Equipment for special price' }).click()
+  await page.getByRole('option', { name: 'Dinner Plate' }).click()
   await expect(page.getByLabel('Dinner Plate special price in LKR')).toHaveValue('500.00')
 
   const addRequest = page.waitForRequest((request) =>

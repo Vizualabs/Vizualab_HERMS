@@ -3,6 +3,7 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { useState } from 'react'
 
 import { ApiError, api, formatMoney, type EquipmentItem } from '../../api'
+import { SearchableSelect } from '../../components/SearchableSelect'
 import { parseMajorCurrencyToMinorUnits } from '../../money'
 import { itemsQuery, queryKeys } from '../../queries'
 
@@ -162,18 +163,26 @@ function SpecialPriceForm({ items, currentPrices, requirePrice, pending, error, 
     if (!parsedPrices) return
     onSave(parsedPrices)
   }}>
-    <select aria-label="Equipment for special price" className="input" value="" disabled={pending} onChange={(event) => {
-      const item = items.find((entry) => entry.id === event.currentTarget.value)
-      if (!item) return
-      setPrices((current) => [...current, {
-        equipmentItemId: item.id,
-        value: (item.currentUnitPriceCents / 100).toFixed(2),
-      }])
-      setSelectionError(null)
-    }}>
-      <option value="">Select equipment to add</option>
-      {items.map((item) => <option key={item.id} value={item.id} disabled={selectedIds.has(item.id)}>{item.name}</option>)}
-    </select>
+    <SearchableSelect
+      aria-label="Equipment for special price"
+      value=""
+      disabled={pending}
+      placeholder="Select equipment to add"
+      options={items.map((item) => ({
+        value: item.id,
+        label: item.name,
+        disabled: selectedIds.has(item.id),
+      }))}
+      onChange={(equipmentItemId) => {
+        const item = items.find((entry) => entry.id === equipmentItemId)
+        if (!item) return
+        setPrices((current) => [...current, {
+          equipmentItemId: item.id,
+          value: (item.currentUnitPriceCents / 100).toFixed(2),
+        }])
+        setSelectionError(null)
+      }}
+    />
     {prices.length === 0 && <p className="rounded-lg bg-muted px-4 py-3 text-sm text-muted-foreground">No exceptions selected. Add only equipment with a negotiated customer price.</p>}
     {prices.map((price) => {
       const item = items.find((entry) => entry.id === price.equipmentItemId)

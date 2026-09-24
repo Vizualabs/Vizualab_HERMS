@@ -176,6 +176,18 @@
   color: var(--color-sidebar-primary);
 }
 
+.app-nav-badge {
+  min-width: 1.25rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: #e24b4b;
+  color: #fff;
+  font-size: 0.625rem;
+  font-weight: 700;
+  line-height: 1.25rem;
+  text-align: center;
+}
+
 .app-main {
   font-size: 0.875rem;
 }

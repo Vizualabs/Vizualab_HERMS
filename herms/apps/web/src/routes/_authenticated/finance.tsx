@@ -4,6 +4,7 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 
 import { ApiError, api, formatMoney, type MonthlyFinance } from '../../api'
+import { SearchableSelect } from '../../components/SearchableSelect'
 import { parseMajorCurrencyToMinorUnits } from '../../money'
 import { REPORTING_REFRESH_INTERVAL_MS, useCurrentColomboMonth } from '../../reportingTime'
 import {
@@ -292,27 +293,22 @@ function FinancePage() {
               )}
             </div>
 
-            <label className="mt-5 flex flex-col gap-2 text-sm font-medium">
-              Order
-              <select
-                className="input bg-card"
-                name="financeOrder"
-                autoComplete="off"
-                value={orderId}
-                onChange={(event) => {
-                  setOrderId(event.target.value)
-                  setPaymentAmount('')
-                  payment.reset()
-                }}
-              >
-                <option value="">Select an order</option>
-                {orders.data?.map((order) => (
-                  <option key={order.id} value={order.id}>
-                    {order.orderNumber} — {order.customerName}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <SearchableSelect
+              className="mt-5"
+              label="Order"
+              name="financeOrder"
+              value={orderId}
+              placeholder="Select an order"
+              options={orders.data?.map((order) => ({
+                value: order.id,
+                label: `${order.orderNumber} — ${order.customerName}`,
+              })) ?? []}
+              onChange={(nextOrderId) => {
+                setOrderId(nextOrderId)
+                setPaymentAmount('')
+                payment.reset()
+              }}
+            />
             {orders.isPending && <p role="status" aria-live="polite" className="mt-3 text-sm text-muted-foreground">Loading orders…</p>}
             {orders.error && <ErrorText error={orders.error} fallback="Unable to load orders" />}
             {invoice.isPending && orderId && <p role="status" aria-live="polite" className="mt-3 text-sm text-muted-foreground">Loading invoice…</p>}

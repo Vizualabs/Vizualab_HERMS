@@ -296,9 +296,37 @@ export function createCommercialService(db: Database, config: CommercialConfig) 
       if (!customer) throw new DataNotFoundError('Customer not found')
 
       const itemIds = input.lines.map((line) => line.equipmentItemId)
-      const items = await db.select({ id: equipmentItems.id, unitPriceCents: equipmentItems.currentUnitPriceCents })
+      const items = await db.select({
+        id: equipmentItems.id,
+        name: equipmentItems.name,
+        unitPriceCents: equipmentItems.currentUnitPriceCents,
+      })
         .from(equipmentItems).where(inArray(equipmentItems.id, itemIds))
       if (items.length !== itemIds.length) throw new DataNotFoundError('One or more equipment items were not found')
+
+      const stockRows = await db.select({
+        equipmentItemId: stockLedger.equipmentItemId,
+        quantity: sql<number>`COALESCE(SUM(${stockLedger.quantityDelta}), 0)::int`,
+      }).from(stockLedger)
+        .where(and(
+          eq(stockLedger.storeId, customer.storeId),
+          inArray(stockLedger.equipmentItemId, itemIds),
+        ))
+        .groupBy(stockLedger.equipmentItemId)
+      const availableByItem = new Map(items.map((item) => [item.id, 0]))
+      for (const row of stockRows) {
+        availableByItem.set(row.equipmentItemId, Number(row.quantity))
+      }
+      const namesByItem = new Map(items.map((item) => [item.id, item.name]))
+      for (const line of input.lines) {
+        const available = availableByItem.get(line.equipmentItemId) ?? 0
+        if (line.quantity > available) {
+          const name = namesByItem.get(line.equipmentItemId) ?? 'this item'
+          throw new DataConflictError(
+            `Not enough stock for ${name}. Available: ${available}.`,
+          )
+        }
+      }
 
       const prices = await db
             .select({ equipmentItemId: customerPrices.equipmentItemId, unitPriceCents: customerPrices.unitPriceCents })
