@@ -4,6 +4,8 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
 
 import { ApiError, api, formatMoney } from '../../api'
+import { itemsBelowReorder, ReorderAlerts } from '../../components/ReorderAlerts'
+import { SearchableSelect } from '../../components/SearchableSelect'
 import {
   currentColomboMonth,
   REPORTING_REFRESH_INTERVAL_MS,
@@ -16,9 +18,11 @@ import {
   dashboardPaymentsQuery,
   dashboardRankingsQuery,
   dashboardStockQuery,
+  itemsQuery,
   monthlyFinanceQuery,
   queryKeys,
   sessionQuery,
+  stockQuery,
 } from '../../queries'
 
 type DashboardSearch = {
@@ -148,6 +152,11 @@ function DashboardPage() {
   const canView = session.data?.role === 'business_owner'
     || session.data?.role === 'finance'
     || session.data?.role === 'super_user'
+  const canReadStoreStock = session.data?.role === 'super_user'
+    || session.data?.role === 'store_admin'
+    || Boolean(session.data?.isDeputyAdmin)
+  const canReadCatalogue = session.data?.role === 'business_owner'
+    || session.data?.role === 'super_user'
   const currentMonth = useCurrentColomboMonth()
   const month = search.month ?? currentMonth
   const chartMonths = lastSixMonths(month)
@@ -167,6 +176,16 @@ function DashboardPage() {
   }
   const options = useQuery({ ...dashboardFilterOptionsQuery, enabled: canView })
   const stock = useQuery({ ...dashboardStockQuery, ...liveReportOptions })
+  const storeStock = useQuery({
+    ...stockQuery,
+    enabled: canView && canReadStoreStock,
+    retry: false,
+  })
+  const catalogue = useQuery({
+    ...itemsQuery,
+    enabled: canView && canReadCatalogue,
+    retry: false,
+  })
   const payments = useQuery({ ...dashboardPaymentsQuery(month), ...liveReportOptions })
   const incomeExpenses = useQuery({
     ...dashboardIncomeExpensesQuery(month),
@@ -243,6 +262,25 @@ function DashboardPage() {
     options.error,
     ...paymentHistoryQueries.map((query) => query.error),
   ].find(Boolean)
+  const catalogueThresholds = new Map(
+    (catalogue.data ?? []).map((item) => [item.id, item.reorderThreshold] as const),
+  )
+  const reorderItems = storeStock.data
+    ? itemsBelowReorder(storeStock.data.map((item) => ({
+      id: item.equipmentItemId,
+      name: item.equipmentName,
+      quantity: item.quantity,
+      reorderThreshold: item.reorderThreshold,
+      isBelowReorderThreshold: item.isBelowReorderThreshold,
+    })))
+    : itemsBelowReorder((stock.data?.items ?? []).map((item) => ({
+      id: item.equipmentItemId,
+      name: item.equipmentName,
+      quantity: item.quantity,
+      reorderThreshold: item.reorderThreshold ?? catalogueThresholds.get(item.equipmentItemId),
+      isBelowReorderThreshold: item.isBelowReorderThreshold,
+    })))
+  const reorderReady = !stock.isPending && (!canReadStoreStock || !storeStock.isPending)
   const paymentHistory = paymentHistoryQueries.flatMap((query) => query.data
     ? [{
         month: query.data.current.month,
@@ -253,6 +291,14 @@ function DashboardPage() {
 
   return (
     <section className="space-y-5">
+      {session.data && (
+        <ReorderAlerts
+          userId={session.data.id}
+          items={reorderItems}
+          surface="dashboard"
+          ready={reorderReady}
+        />
+      )}
       <header className="flex flex-col gap-4 border-b border-border pb-5 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1>Dashboard</h1>
@@ -369,34 +415,36 @@ function DashboardPage() {
               />
             </FilterField>
             <FilterField label="Customer">
-              <select
+              <SearchableSelect
                 aria-label="Customer"
-                autoComplete="off"
-                className="input"
                 name="customerId"
                 value={search.customerId ?? ''}
-                onChange={(event) => setSearch({ customerId: event.target.value || undefined })}
-              >
-                <option value="">All customers</option>
-                {options.data?.customers.map((customer) => (
-                  <option key={customer.id} value={customer.id}>{customer.name}</option>
-                ))}
-              </select>
+                placeholder="All customers"
+                options={[
+                  { value: '', label: 'All customers' },
+                  ...(options.data?.customers.map((customer) => ({
+                    value: customer.id,
+                    label: customer.name,
+                  })) ?? []),
+                ]}
+                onChange={(customerId) => setSearch({ customerId: customerId || undefined })}
+              />
             </FilterField>
             <FilterField label="Equipment">
-              <select
+              <SearchableSelect
                 aria-label="Equipment"
-                autoComplete="off"
-                className="input"
                 name="itemId"
                 value={search.itemId ?? ''}
-                onChange={(event) => setSearch({ itemId: event.target.value || undefined })}
-              >
-                <option value="">All equipment</option>
-                {options.data?.items.map((item) => (
-                  <option key={item.id} value={item.id}>{item.name}</option>
-                ))}
-              </select>
+                placeholder="All equipment"
+                options={[
+                  { value: '', label: 'All equipment' },
+                  ...(options.data?.items.map((item) => ({
+                    value: item.id,
+                    label: item.name,
+                  })) ?? []),
+                ]}
+                onChange={(itemId) => setSearch({ itemId: itemId || undefined })}
+              />
             </FilterField>
           </div>
         </section>
@@ -514,60 +562,66 @@ function DashboardPage() {
         />
       </section>
 
-      <section className="overflow-hidden rounded-2xl border border-border bg-card">
-        <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-5">
-          <h2 className="text-base font-semibold">Open missing / damaged records</h2>
-          {discrepancies.data && (
-            <p className="text-sm text-muted-foreground">
-              {discrepancies.data.openCount} open <span aria-hidden="true">&middot;</span>{' '}
-              {formatMoney(discrepancies.data.totalValueCents, discrepancies.data.currency)}
+      <section className="grid items-end gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(16rem,22rem)]">
+        <section className="overflow-hidden rounded-2xl border border-border bg-card">
+          <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-5">
+            <h2 className="text-base font-semibold">Open missing / damaged records</h2>
+            {discrepancies.data && (
+              <p className="text-sm text-muted-foreground">
+                {discrepancies.data.openCount} open <span aria-hidden="true">&middot;</span>{' '}
+                {formatMoney(discrepancies.data.totalValueCents, discrepancies.data.currency)}
+              </p>
+            )}
+          </div>
+          {discrepancies.isPending && (
+            <PanelLoading label="Loading equipment issues" variant="table" />
+          )}
+          {discrepancies.data?.rows.length === 0 && (
+            <p className="mx-5 mb-5 rounded-xl bg-success-soft p-4 text-sm text-primary-strong">
+              No open missing or damaged equipment matches these filters.
             </p>
           )}
-        </div>
-        {discrepancies.isPending && (
-          <PanelLoading label="Loading equipment issues" variant="table" />
-        )}
-        {discrepancies.data?.rows.length === 0 && (
-          <p className="mx-5 mb-5 rounded-xl bg-success-soft p-4 text-sm text-primary-strong">
-            No open missing or damaged equipment matches these filters.
-          </p>
-        )}
-        {discrepancies.data && discrepancies.data.rows.length > 0 && (
-          <div className="overflow-x-auto px-5 pb-4">
-            <table className="w-full min-w-[780px] text-left text-sm">
-              <thead>
-                <tr className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground">
-                  <th className="py-3 pr-4">Item</th>
-                  <th className="px-3 py-3">Qty</th>
-                  <th className="px-3 py-3">Reason</th>
-                  <th className="px-3 py-3">Responsible</th>
-                  <th className="px-3 py-3">Customer</th>
-                  <th className="py-3 pl-3 text-right">Value</th>
-                </tr>
-              </thead>
-              <tbody className="dashboard-reveal">
-                {discrepancies.data.rows.map((row) => (
-                  <tr key={row.id} className="border-b border-border last:border-0">
-                    <td className="py-3 pr-4 font-medium">{row.equipmentName}</td>
-                    <td className="px-3 py-3">{row.quantity}</td>
-                    <td className="max-w-72 px-3 py-3 text-muted-foreground">
-                      {row.reason || `${row.discrepancyType === 'damaged' ? 'Damaged' : 'Missing'} equipment`}
-                    </td>
-                    <td className="px-3 py-3 capitalize">
-                      {row.responsibleParty?.replaceAll('_', ' ') ?? '-'}
-                    </td>
-                    <td className="px-3 py-3 text-muted-foreground">
-                      {row.customerName ?? 'No customer'}
-                    </td>
-                    <td className="whitespace-nowrap py-3 pl-3 text-right font-semibold">
-                      {formatMoney(row.valueCents, discrepancies.data.currency)}
-                    </td>
+          {discrepancies.data && discrepancies.data.rows.length > 0 && (
+            <div className="overflow-x-auto px-5 pb-4">
+              <table className="w-full min-w-[780px] text-left text-sm">
+                <thead>
+                  <tr className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground">
+                    <th className="py-3 pr-4">Item</th>
+                    <th className="px-3 py-3">Qty</th>
+                    <th className="px-3 py-3">Reason</th>
+                    <th className="px-3 py-3">Responsible</th>
+                    <th className="px-3 py-3">Customer</th>
+                    <th className="py-3 pl-3 text-right">Value</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                </thead>
+                <tbody className="dashboard-reveal">
+                  {discrepancies.data.rows.map((row) => (
+                    <tr key={row.id} className="border-b border-border last:border-0">
+                      <td className="py-3 pr-4 font-medium">{row.equipmentName}</td>
+                      <td className="px-3 py-3">{row.quantity}</td>
+                      <td className="max-w-72 px-3 py-3 text-muted-foreground">
+                        {row.reason || `${row.discrepancyType === 'damaged' ? 'Damaged' : 'Missing'} equipment`}
+                      </td>
+                      <td className="px-3 py-3 capitalize">
+                        {row.responsibleParty?.replaceAll('_', ' ') ?? '-'}
+                      </td>
+                      <td className="px-3 py-3 text-muted-foreground">
+                        {row.customerName ?? 'No customer'}
+                      </td>
+                      <td className="whitespace-nowrap py-3 pl-3 text-right font-semibold">
+                        {formatMoney(row.valueCents, discrepancies.data.currency)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+        <ReorderLevelCard
+          items={reorderItems}
+          loading={!reorderReady}
+        />
       </section>
 
     </section>
@@ -666,6 +720,51 @@ function DashboardCard({ title, children }: { title: string; children: React.Rea
     <section className="min-w-0 rounded-2xl border border-border bg-card p-5">
       <h2 className="text-base font-semibold">{title}</h2>
       <div className="mt-5">{children}</div>
+    </section>
+  )
+}
+
+function ReorderLevelCard({
+  items,
+  loading,
+}: {
+  items: Array<{ id: string; name: string; quantity: number; reorderThreshold: number }>
+  loading: boolean
+}) {
+  return (
+    <section aria-label="Items at reorder level" className="min-w-0 rounded-2xl border border-border bg-card p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-base font-semibold">At reorder level</h2>
+        {!loading && (
+          <p className="text-sm text-muted-foreground">{items.length} item{items.length === 1 ? '' : 's'}</p>
+        )}
+      </div>
+      <div className="mt-5">
+        {loading && <PanelLoading label="Loading reorder levels" variant="list" />}
+        {!loading && items.length === 0 && (
+          <p className="rounded-xl bg-success-soft p-4 text-sm text-primary-strong">
+            No items are at their reorder level.
+          </p>
+        )}
+        {!loading && items.length > 0 && (
+          <ul className="space-y-4">
+            {items.map((item, index) => (
+              <li
+                key={item.id}
+                className="dashboard-reveal text-sm"
+                style={{ animationDelay: `${index * 50}ms` }}
+              >
+                <p className="truncate font-medium">{item.name}</p>
+                <p className="mt-1 text-muted-foreground">
+                  In stock: {item.quantity.toLocaleString('en-LK')}
+                  <span aria-hidden="true"> &middot; </span>
+                  Reorder level: {item.reorderThreshold.toLocaleString('en-LK')}
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </section>
   )
 }

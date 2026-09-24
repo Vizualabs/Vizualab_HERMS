@@ -139,6 +139,11 @@ export function createDashboardService(db: Database, config: DashboardConfig) {
           coalesce(${dashboardStockRollups.quantity}, 0)
           * ${equipmentItems.currentUnitPriceCents}::bigint
         )::bigint`,
+        reorderThreshold: equipmentItems.reorderThreshold,
+        isBelowReorderThreshold: sql<boolean>`(
+          ${equipmentItems.reorderThreshold} IS NOT NULL
+          AND coalesce(${dashboardStockRollups.quantity}, 0) <= ${equipmentItems.reorderThreshold}
+        )`,
       })
       .from(equipmentItems)
       .leftJoin(
@@ -146,11 +151,17 @@ export function createDashboardService(db: Database, config: DashboardConfig) {
         eq(dashboardStockRollups.equipmentItemId, equipmentItems.id),
       )
       .orderBy(asc(equipmentItems.name))
-    const items = rows.map((row) => ({
-      ...row,
-      quantity: safeInteger(row.quantity, 'Stock quantity'),
-      valueCents: safeInteger(row.valueCents, 'Stock value'),
-    }))
+    const items = rows.map((row) => {
+      const quantity = safeInteger(row.quantity, 'Stock quantity')
+      const reorderThreshold = row.reorderThreshold == null ? null : Number(row.reorderThreshold)
+      return {
+        ...row,
+        quantity,
+        valueCents: safeInteger(row.valueCents, 'Stock value'),
+        reorderThreshold: Number.isFinite(reorderThreshold) ? reorderThreshold : null,
+        isBelowReorderThreshold: reorderThreshold != null && Number.isFinite(reorderThreshold) && quantity <= reorderThreshold,
+      }
+    })
     return {
       asOf: new Date().toISOString(),
       currency: config.currency,

@@ -1,8 +1,22 @@
 import { isSuperUser, type SessionUser } from '@herms/shared'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
+import { useEffect } from 'react'
 
 import { api } from '../api'
+import {
+  seedSeenResponsesIfNeeded,
+  unseenQuotationResponseCount,
+} from '../quotationNotifications'
+import {
+  approvalMetricsQuery,
+  claimsQuery,
+  discrepanciesQuery,
+  ordersQuery,
+  quotationResponseSeenQuery,
+  quotationsQuery,
+  queryKeys,
+} from '../queries'
 import { ConfirmProvider } from './ConfirmDialog'
 
 type AppRoute =
@@ -32,6 +46,8 @@ type NavigationItem = {
   label: string
   icon: IconName
   visible: boolean
+  badge?: number
+  badgeNoun?: string
 }
 
 export function AppShell({
@@ -60,16 +76,61 @@ export function AppShell({
   const canUseFinance = hasFullAccess || user.role === 'finance' || user.role === 'business_owner'
   const canUseClaims = hasFullAccess || user.role === 'finance' || user.role === 'business_owner'
   const canViewDashboard = hasFullAccess || user.role === 'finance' || user.role === 'business_owner'
+  const quotations = useQuery({
+    ...quotationsQuery,
+    enabled: canUseSales,
+  })
+  const seenResponses = useQuery({
+    ...quotationResponseSeenQuery(user.id),
+    enabled: canUseSales,
+  })
+
+  useEffect(() => {
+    if (!canUseSales || !quotations.data || seenResponses.isPending || seenResponses.data !== null) return
+    queryClient.setQueryData(
+      queryKeys.quotationResponseSeen(user.id),
+      seedSeenResponsesIfNeeded(user.id, quotations.data),
+    )
+  }, [canUseSales, quotations.data, queryClient, seenResponses.data, seenResponses.isPending, user.id])
+
+  const quotationResponseCount = canUseSales
+    ? unseenQuotationResponseCount(quotations.data ?? [], seenResponses.data ?? null)
+    : 0
+  const pendingApprovals = useQuery({
+    ...approvalMetricsQuery,
+    enabled: canApprove,
+  })
+  const orders = useQuery({
+    ...ordersQuery,
+    enabled: canUseOrders,
+  })
+  const discrepancies = useQuery({
+    ...discrepanciesQuery,
+    enabled: canUseClaims,
+  })
+  const claims = useQuery({
+    ...claimsQuery,
+    enabled: canUseClaims,
+  })
+  const approvalCount = pendingApprovals.data?.pendingApproval ?? 0
+  const orderActionCount = (orders.data ?? []).filter((order) => order.status === 'open').length
+  const claimByDiscrepancy = new Map((claims.data ?? []).map((claim) => [claim.discrepancyId, claim] as const))
+  const claimsCount = (discrepancies.data ?? []).filter((row) => {
+    const claim = claimByDiscrepancy.get(row.id)
+    if (claim?.status === 'drafted') return true
+    if (claim) return false
+    return row.status === 'open' || row.status === 'written_off'
+  }).length
 
   const navigation: NavigationItem[] = [
     { to: '/dashboard', label: 'Dashboard', icon: 'dashboard', visible: canViewDashboard },
     { to: '/customers', label: 'Customers & Pricing', icon: 'customers', visible: canUseCustomers },
     { to: '/items', label: 'Equipment', icon: 'equipment', visible: canUseItems },
-    { to: '/quotations', label: 'Quotations', icon: 'quotations', visible: canUseSales },
-    { to: '/orders', label: 'Orders & Notes', icon: 'orders', visible: canUseOrders },
-    { to: '/approvals', label: 'Approvals', icon: 'approvals', visible: canApprove },
+    { to: '/quotations', label: 'Quotations', icon: 'quotations', visible: canUseSales, badge: quotationResponseCount, badgeNoun: 'new responses' },
+    { to: '/orders', label: 'Orders & Notes', icon: 'orders', visible: canUseOrders, badge: orderActionCount, badgeNoun: 'pending' },
+    { to: '/approvals', label: 'Approvals', icon: 'approvals', visible: canApprove, badge: approvalCount, badgeNoun: 'pending' },
     { to: '/stock', label: 'Stock', icon: 'stock', visible: canApprove },
-    { to: '/claims', label: 'Discrepancies & Claims', icon: 'claims', visible: canUseClaims },
+    { to: '/claims', label: 'Discrepancies & Claims', icon: 'claims', visible: canUseClaims, badge: claimsCount, badgeNoun: 'pending' },
     { to: '/finance', label: 'Payments & Finance', icon: 'finance', visible: canUseFinance },
   ]
 
@@ -178,11 +239,21 @@ function NavigationLinks({
         ? 'app-nav-link flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-primary'
         : 'app-nav-link flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-primary'}
       activeProps={{ className: 'app-nav-link-active' }}
+      aria-label={item.badge ? `${item.label}, ${item.badge} ${item.badgeNoun ?? 'pending'}` : item.label}
     >
       <NavIcon name={item.icon} />
       <span>{item.label}</span>
+      {item.badge ? <NavBadge count={item.badge} /> : null}
     </Link>
   ))
+}
+
+function NavBadge({ count }: { count: number }) {
+  return (
+    <span className="app-nav-badge ml-auto">
+      {count > 99 ? '99+' : count}
+    </span>
+  )
 }
 
 function NavIcon({ name }: { name: IconName }) {

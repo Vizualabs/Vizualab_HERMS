@@ -281,8 +281,25 @@ export function createMasterDataService(db: Database) {
       return saveCustomerPrices(id, input, actor, true)
     },
 
-    async listItems() {
-      return db.select().from(equipmentItems).orderBy(equipmentItems.name)
+    async listItems(actor: SessionUser) {
+      const storeId = await resolveStoreId(actor)
+      const items = await db.select().from(equipmentItems).orderBy(equipmentItems.name)
+      const stocks = items.length === 0
+        ? []
+        : await db.select({
+          equipmentItemId: stockLedger.equipmentItemId,
+          quantity: sql<number>`COALESCE(SUM(${stockLedger.quantityDelta}), 0)::int`,
+        }).from(stockLedger)
+          .where(and(
+            eq(stockLedger.storeId, storeId),
+            inArray(stockLedger.equipmentItemId, items.map((item) => item.id)),
+          ))
+          .groupBy(stockLedger.equipmentItemId)
+      const quantityByItem = new Map(stocks.map((row) => [row.equipmentItemId, Number(row.quantity)]))
+      return items.map((item) => ({
+        ...item,
+        currentStockQty: quantityByItem.get(item.id) ?? 0,
+      }))
     },
 
     async getItem(id: string, actor: SessionUser) {
