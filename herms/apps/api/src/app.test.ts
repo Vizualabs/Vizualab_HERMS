@@ -822,6 +822,7 @@ describe('Phase 1 API', () => {
       unitOfMeasure: 'unit',
       currentUnitPriceCents: 16_500,
       purchasePriceCents: null,
+      currentStockQty: 0,
       reorderThreshold: null,
       createdAt,
       updatedAt: createdAt,

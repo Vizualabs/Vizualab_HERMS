@@ -10,6 +10,11 @@ async function signIn(page: Page, email: string) {
   await page.getByRole('button', { name: 'Sign in' }).click()
   await expect(page).toHaveURL(/\/dashboard/)
   await expect(page.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible()
+  const reorderDialog = page.getByRole('alertdialog', { name: 'Reorder level reached' })
+  await reorderDialog.waitFor({ state: 'visible', timeout: 4000 }).then(async () => {
+    await reorderDialog.getByRole('button', { name: 'OK' }).click()
+    await expect(reorderDialog).toBeHidden()
+  }).catch(() => undefined)
 }
 
 test.describe('Phase 8 management dashboard', () => {
@@ -26,6 +31,7 @@ test.describe('Phase 8 management dashboard', () => {
     await expect(page.getByRole('heading', { name: 'Most missing / damaged items' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Customers most associated with loss' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Open missing / damaged records' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'At reorder level' })).toBeVisible()
     const incomeGraph = page.getByRole('group', { name: /Monthly income versus expenses/ })
     await expect(incomeGraph).toBeVisible()
     const financeMonthPoints = incomeGraph.getByRole('button', { name: /Income LKR .*Expenses LKR/ })
@@ -59,8 +65,9 @@ test.describe('Phase 8 management dashboard', () => {
     await expect(filterButton).toHaveAttribute('aria-expanded', 'false')
     await filterButton.click()
     await expect(filterButton).toHaveAttribute('aria-expanded', 'true')
-    const customer = page.getByLabel('Customer')
-    await customer.selectOption({ index: 1 })
+    const customer = page.getByRole('combobox', { name: 'Customer' })
+    await customer.click()
+    await page.getByRole('option').nth(1).click()
     await expect(page).toHaveURL(/customerId=/)
     await expect(filterButton).toContainText('1')
     await page.getByRole('button', { name: 'Clear all filters' }).click()

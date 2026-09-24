@@ -2,7 +2,8 @@ import { useQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 
 import { ApiError, type StockMovement } from '../../api'
-import { stockMovementsQuery, stockQuery } from '../../queries'
+import { itemsBelowReorder, ReorderAlerts } from '../../components/ReorderAlerts'
+import { sessionQuery, stockMovementsQuery, stockQuery } from '../../queries'
 
 export const Route = createFileRoute('/_authenticated/stock')({ component: StockPage })
 
@@ -19,8 +20,16 @@ function formatCurrency(valueCents: number) {
 }
 
 function StockPage() {
+  const session = useQuery(sessionQuery)
   const stock = useQuery(stockQuery)
   const movements = useQuery(stockMovementsQuery)
+  const reorderItems = itemsBelowReorder((stock.data ?? []).map((item) => ({
+    id: item.equipmentItemId,
+    name: item.equipmentName,
+    quantity: item.quantity,
+    reorderThreshold: item.reorderThreshold,
+    isBelowReorderThreshold: item.isBelowReorderThreshold,
+  })))
   const totals = stock.data?.reduce(
     (result, item) => ({
       valueCents: result.valueCents + item.valueCents,
@@ -54,6 +63,38 @@ function StockPage() {
           valueClassName={totals?.belowReorder ? 'text-danger' : 'text-[#159563]'}
         />
       </dl>
+
+      {session.data && (
+        <ReorderAlerts
+          userId={session.data.id}
+          items={reorderItems}
+          surface="stock"
+          ready={!stock.isPending}
+        />
+      )}
+
+      {!stock.isPending && reorderItems.length > 0 && (
+        <section aria-label="Items at reorder level" className="mt-5 rounded-xl border border-danger/30 bg-card px-5 py-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-base font-semibold">At reorder level</h2>
+            <p className="text-sm text-muted-foreground">
+              {reorderItems.length} item{reorderItems.length === 1 ? '' : 's'}
+            </p>
+          </div>
+          <ul className="mt-4 space-y-3">
+            {reorderItems.map((item) => (
+              <li key={item.id} className="text-sm">
+                <p className="font-medium">{item.name}</p>
+                <p className="mt-1 text-muted-foreground">
+                  In stock: {integerFormatter.format(item.quantity)}
+                  <span aria-hidden="true"> &middot; </span>
+                  Reorder level: {integerFormatter.format(item.reorderThreshold)}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className="mt-5 overflow-hidden rounded-xl border border-[#d6e0e2] bg-white" aria-labelledby="stock-by-item-title">
         <div className="border-b border-[#d6e0e2] px-5 py-4">

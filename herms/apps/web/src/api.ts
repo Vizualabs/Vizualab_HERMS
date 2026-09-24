@@ -66,6 +66,7 @@ export type EquipmentItem = {
   currentUnitPriceCents: number
   purchasePriceCents: number | null
   reorderThreshold: number | null
+  currentStockQty?: number
   createdAt: string
   updatedAt: string
 }

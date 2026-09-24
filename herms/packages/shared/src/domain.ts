@@ -353,6 +353,8 @@ export type DashboardStockItem = {
   quantity: number
   currentUnitPriceCents: number
   valueCents: number
+  reorderThreshold?: number | null
+  isBelowReorderThreshold?: boolean
 }
 
 export type DashboardStock = {
