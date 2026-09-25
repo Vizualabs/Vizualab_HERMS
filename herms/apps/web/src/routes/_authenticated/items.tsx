@@ -28,6 +28,16 @@ function ItemsPage() {
     enabled: isOwner && percent !== null,
   })
   const queryClient = useQueryClient()
+  const deleteItem = useMutation({
+    mutationFn: api.deleteItem,
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.items }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.stock }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboard }),
+      ])
+    },
+  })
   const createItem = useMutation({
     mutationFn: api.createItem,
     onSuccess: async () => {
@@ -55,7 +65,8 @@ function ItemsPage() {
         <p className="text-sm font-semibold uppercase tracking-widest text-primary">Master data</p>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">Equipment</h1>
         <p className="mt-2 text-muted-foreground">
-          Enter prices in LKR. Select any equipment item to edit its details or change its price.
+          Enter prices in LKR. Use the edit icon to change details, or delete unused equipment.
+          Items already used on quotations, orders, or stock notes stay in the catalogue.
         </p>
         <div className="mt-6 overflow-hidden rounded-2xl border border-border bg-card">
           {items.isPending && <p className="p-6 text-muted-foreground">Loading equipment…</p>}
@@ -66,25 +77,60 @@ function ItemsPage() {
           )}
           <ul className="divide-y divide-border">
             {items.data?.map((item) => (
-              <li key={item.id}>
+              <li key={item.id} className="flex items-center gap-4 px-5 py-4">
                 <Link
                   to="/items/$itemId"
                   params={{ itemId: item.id }}
-                  className="flex items-center justify-between gap-4 px-5 py-4 hover:bg-muted"
+                  className="min-w-0 flex-1 hover:text-primary"
                 >
-                  <div>
-                    <p className="font-medium">{item.name}</p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {item.category} · {item.unitOfMeasure}
-                    </p>
-                  </div>
-                  <span className="flex shrink-0 flex-col items-end gap-1">
-                    <span className="font-mono text-sm font-semibold">
-                      LKR {formatMinorUnits(item.currentUnitPriceCents)}
-                    </span>
-                    <span className="text-xs font-medium text-primary">Edit details</span>
-                  </span>
+                  <p className="font-medium">{item.name}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {item.category} · {item.unitOfMeasure}
+                  </p>
                 </Link>
+                <span className="shrink-0 font-mono text-sm font-semibold">
+                  LKR {formatMinorUnits(item.currentUnitPriceCents)}
+                </span>
+                <div className="flex shrink-0 items-center gap-1">
+                  <Link
+                    to="/items/$itemId"
+                    params={{ itemId: item.id }}
+                    aria-label={`Edit ${item.name}`}
+                    className="inline-flex size-9 items-center justify-center rounded-lg text-primary transition hover:bg-primary-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-soft"
+                  >
+                    <EditIcon />
+                  </Link>
+                  <button
+                    type="button"
+                    aria-label={`Delete ${item.name}`}
+                    className="inline-flex size-9 items-center justify-center rounded-lg text-danger transition hover:bg-danger-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger disabled:opacity-50"
+                    disabled={deleteItem.isPending}
+                    onClick={() => {
+                      void confirm({
+                        title: `Delete ${item.name}?`,
+                        message: `Delete ${item.name} from the equipment catalogue? This cannot be undone.`,
+                        confirmLabel: 'Delete',
+                        tone: 'danger',
+                      }).then(async (ok) => {
+                        if (!ok) return
+                        try {
+                          await deleteItem.mutateAsync(item.id)
+                        } catch (error) {
+                          await confirm({
+                            title: `Cannot delete ${item.name}`,
+                            message: error instanceof ApiError
+                              ? error.message
+                              : 'Unable to delete equipment. Try again.',
+                            confirmLabel: 'OK',
+                            hideCancel: true,
+                          })
+                        }
+                      })
+                    }}
+                  >
+                    <DeleteIcon />
+                  </button>
+                </div>
               </li>
             ))}
           </ul>
@@ -284,6 +330,23 @@ function ItemsPage() {
         )}
       </aside>
     </div>
+  )
+}
+
+function EditIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="size-4 fill-none stroke-current" strokeWidth="1.8">
+      <path d="M12 20h9" strokeLinecap="round" />
+      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function DeleteIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="size-4 fill-none stroke-current" strokeWidth="1.8">
+      <path d="M4 7h16M10 11v6M14 11v6M6 7l1 14h10l1-14M9 7V4h6v3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   )
 }
 

@@ -334,6 +334,9 @@ export function createApp({
         data: await masterData.updateItem(c.req.param('id'), parsed.data, actor(c)),
       })
     })
+    .delete('/api/items/:id', async (c) =>
+      c.json({ data: await masterData.deleteItem(c.req.param('id'), actor(c)) }),
+    )
 
   app.use('/api/items/:id/price', requireRoles('business_owner', 'sales'))
   app.use('/api/items/:id/price-history', requireRoles('business_owner', 'sales'))
