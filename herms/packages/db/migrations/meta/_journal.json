@@ -113,6 +113,13 @@
       "when": 1789441215000,
       "tag": "0015_equipment_purchase_price",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1789441216000,
+      "tag": "0016_equipment_item_purge",
+      "breakpoints": true
     }
   ]
 }

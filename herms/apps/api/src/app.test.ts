@@ -103,6 +103,7 @@ function createServices() {
       entryType: 'stock_addition',
     }),
     updateItem: async (id: string, input: object) => ({ id, ...input }),
+    deleteItem: async (id: string) => ({ id, deleted: true }),
     changeItemPrice: async (id: string, input: object) => ({ id, ...input }),
     listPriceHistory: async () => [],
     listAuditLogs: async () => [],
@@ -919,6 +920,17 @@ describe('Phase 1 API', () => {
     expect((await app.request('/api/customers', { headers: { Cookie: cookie } })).status).toBe(403)
     expect((await app.request('/api/customers/pricing', { headers: { Cookie: cookie } })).status).toBe(403)
     expect((await app.request('/api/audit-logs', { headers: { Cookie: cookie } })).status).toBe(200)
+  })
+
+  test('lets authorized users delete unused equipment', async () => {
+    const app = createTestApp()
+    const cookie = await sessionCookie(app, 'sales')
+    const response = await app.request('/api/items/item-1', {
+      method: 'DELETE',
+      headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+    })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ data: { id: 'item-1', deleted: true } })
   })
 
   test('allows Super User to access every protected feature area', async () => {

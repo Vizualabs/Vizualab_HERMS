@@ -170,13 +170,17 @@ test.describe('Payments & Finance report', () => {
     }))
     expect(outstandingScroll.clientHeight).toBeLessThanOrEqual(340)
     expect(outstandingScroll.scrollHeight).toBeGreaterThan(outstandingScroll.clientHeight)
-    await expect(page.getByRole('heading', { name: 'Record payments & expenses' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Order invoice & balance' })).toBeVisible()
+    await page.getByRole('button', { name: 'Record payment' }).click()
+    const paymentDialog = page.getByRole('dialog', { name: 'Record payment' })
+    await expect(paymentDialog).toBeVisible()
+    await expect(paymentDialog.getByRole('heading', { name: 'Order invoice & balance' })).toBeVisible()
 
-    await page.getByRole('combobox', { name: 'Order' }).click()
+    await paymentDialog.getByRole('combobox', { name: 'Order' }).click()
     await page.getByRole('option').first().click()
-    await expect(page.getByText('Ready for payment')).toBeVisible()
-    await expect(page.getByText('Order selected')).toBeVisible()
+    await expect(paymentDialog.getByText('Ready for payment')).toBeVisible()
+    await expect(paymentDialog.getByText('Order selected')).toBeVisible()
+    await paymentDialog.getByRole('button', { name: 'Close' }).click()
+    await expect(paymentDialog).toHaveCount(0)
 
     const download = page.waitForEvent('download')
     await page.getByRole('button', { name: 'Export report' }).click()
@@ -273,11 +277,15 @@ test.describe('Payments & Finance report', () => {
 
     await signInAsFinance(page)
 
-    const orderSelect = page.getByRole('combobox', { name: 'Order' })
-    const paymentAmount = page.getByLabel(/^Amount \(LKR\)/)
+    await page.getByRole('button', { name: 'Record payment' }).click()
+    const paymentDialog = page.getByRole('dialog', { name: 'Record payment' })
+    await expect(paymentDialog).toBeVisible()
+
+    const orderSelect = paymentDialog.getByRole('combobox', { name: 'Order' })
+    const paymentAmount = paymentDialog.getByLabel(/^Amount \(LKR\)/)
     await orderSelect.click()
     await page.getByRole('option', { name: /ORD-CENTS-001/ }).click()
-    await expect(page.getByText('Order selected')).toBeVisible()
+    await expect(paymentDialog.getByText('Order selected')).toBeVisible()
 
     await expect(paymentAmount).toBeEnabled()
     await expect(paymentAmount).toHaveAttribute('step', '0.01')
@@ -287,7 +295,7 @@ test.describe('Payments & Finance report', () => {
       new URL(request.url()).pathname === '/api/payments' && request.method() === 'POST')
 
     await paymentAmount.fill('0.01')
-    await page.getByRole('button', { name: 'Record payment' }).click()
+    await paymentDialog.getByRole('button', { name: 'Save payment' }).click()
 
     expect((await paymentRequest).postDataJSON()).toMatchObject({ amountCents: 1 })
     await expect(page.getByText('Payment recorded and balances updated.')).toBeVisible()

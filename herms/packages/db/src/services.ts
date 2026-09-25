@@ -18,10 +18,16 @@ import {
   auditLogs,
   customerPrices,
   customers,
+  damageClaims,
+  deliveryNoteLines,
+  discrepancies,
   equipmentItems,
   openingBalanceNoteLines,
   openingBalanceNotes,
+  orderLines,
   priceHistory,
+  quotationLines,
+  retentionNoteLines,
   stockLedger,
   stores,
   users,
@@ -38,6 +44,12 @@ function nullable(value: string | null | undefined) {
 
 function auditSnapshot(value: object | null): Record<string, unknown> | null {
   return value ? (JSON.parse(JSON.stringify(value)) as Record<string, unknown>) : null
+}
+
+function usageLabel(count: number | string | undefined, singular: string, plural: string) {
+  const value = Number(count ?? 0)
+  if (!Number.isFinite(value) || value <= 0) return null
+  return `${value} ${value === 1 ? singular : plural}`
 }
 
 function auditValues(
@@ -506,6 +518,63 @@ export function createMasterDataService(db: Database) {
         noteNumber: note.obNumber,
         entryType: note.entryType,
       }
+    },
+
+    async deleteItem(id: string, actor: AuditActor) {
+      const before = await getItem(id)
+      const usage = await db.execute<{
+        quotations: number | string
+        orders: number | string
+        deliveryNotes: number | string
+        retentionNotes: number | string
+        discrepancies: number | string
+        claims: number | string
+      }>(sql`
+        SELECT
+          (SELECT count(*) FROM ${quotationLines} WHERE ${quotationLines.equipmentItemId} = ${id}::uuid)::int AS quotations,
+          (SELECT count(*) FROM ${orderLines} WHERE ${orderLines.equipmentItemId} = ${id}::uuid)::int AS orders,
+          (SELECT count(*) FROM ${deliveryNoteLines} WHERE ${deliveryNoteLines.equipmentItemId} = ${id}::uuid)::int AS "deliveryNotes",
+          (SELECT count(*) FROM ${retentionNoteLines} WHERE ${retentionNoteLines.equipmentItemId} = ${id}::uuid)::int AS "retentionNotes",
+          (SELECT count(*) FROM ${discrepancies} WHERE ${discrepancies.equipmentItemId} = ${id}::uuid)::int AS discrepancies,
+          (SELECT count(*) FROM ${damageClaims} WHERE ${damageClaims.equipmentItemId} = ${id}::uuid)::int AS claims
+      `)
+      const usedOn = [
+        usageLabel(usage.rows[0]?.quotations, 'quotation', 'quotations'),
+        usageLabel(usage.rows[0]?.orders, 'order', 'orders'),
+        usageLabel(usage.rows[0]?.deliveryNotes, 'delivery note', 'delivery notes'),
+        usageLabel(usage.rows[0]?.retentionNotes, 'retention note', 'retention notes'),
+        usageLabel(usage.rows[0]?.discrepancies, 'discrepancy', 'discrepancies'),
+        usageLabel(usage.rows[0]?.claims, 'claim', 'claims'),
+      ].filter((part): part is string => Boolean(part))
+      if (usedOn.length > 0) {
+        throw new DataConflictError(
+          `${before.name} is used on ${usedOn.join(', ')}, so it cannot be deleted.`,
+        )
+      }
+
+      try {
+        const deleted = await db.execute<{ id: string }>(sql`
+          SELECT purge_unused_equipment_item(
+            ${id}::uuid,
+            ${actor.id}::uuid,
+            ${actor.requestId},
+            ${JSON.stringify(auditSnapshot(before))}::jsonb
+          ) AS id
+        `)
+        if (!deleted.rows[0]?.id) {
+          throw new DataConflictError(`${before.name} could not be deleted. Refresh and try again.`)
+        }
+      } catch (error) {
+        if (error instanceof DataConflictError) throw error
+        const message = error instanceof Error ? error.message : ''
+        if (/foreign key|violates|23503|23505|Failed query/i.test(message)) {
+          throw new DataConflictError(
+            `${before.name} is still linked to other records, so it cannot be deleted.`,
+          )
+        }
+        throw error
+      }
+      return { id, deleted: true as const }
     },
 
     async updateItem(id: string, input: EquipmentUpdate, actor: AuditActor) {
