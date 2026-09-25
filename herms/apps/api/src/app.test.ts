@@ -927,7 +927,7 @@ describe('Phase 1 API', () => {
     const cookie = await sessionCookie(app, 'sales')
     const response = await app.request('/api/items/item-1', {
       method: 'DELETE',
-      headers: { Cookie: cookie },
+      headers: { Cookie: cookie, 'Content-Type': 'application/json' },
     })
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ data: { id: 'item-1', deleted: true } })
