@@ -661,6 +661,8 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(input),
     }),
+  deleteItem: (id: string) =>
+    request<{ id: string; deleted: true }>(`/api/items/${id}`, { method: 'DELETE' }),
   addItemStock: (id: string, quantity: number) =>
     request<StockAdditionReceipt>(`/api/items/${id}/stock-additions`, {
       method: 'POST',

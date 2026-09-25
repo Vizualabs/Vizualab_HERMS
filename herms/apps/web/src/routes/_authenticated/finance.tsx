@@ -1,7 +1,7 @@
 import type { ExpenseInput, PaymentInput, PaymentMethod } from '@herms/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 
 import { ApiError, api, formatMoney, type MonthlyFinance } from '../../api'
 import { SearchableSelect } from '../../components/SearchableSelect'
@@ -117,6 +117,9 @@ function FinancePage() {
   const [followsCurrentMonth, setFollowsCurrentMonth] = useState(true)
   const [orderId, setOrderId] = useState('')
   const [paymentAmount, setPaymentAmount] = useState('')
+  const [entryDialog, setEntryDialog] = useState<'payment' | 'expense' | null>(null)
+  const paymentTitleId = useId()
+  const expenseTitleId = useId()
   const orders = useQuery({ ...ordersQuery, enabled: isFinance })
   const invoice = useQuery({ ...invoiceQuery(orderId), enabled: isFinance && Boolean(orderId) })
   const customerId = invoice.data?.customerId ?? ''
@@ -194,6 +197,24 @@ function FinancePage() {
               setFollowsCurrentMonth(nextMonth === currentMonth)
             }}
           />
+          {isFinance && (
+            <>
+              <button
+                type="button"
+                className="button-secondary"
+                onClick={() => setEntryDialog('payment')}
+              >
+                Record payment
+              </button>
+              <button
+                type="button"
+                className="button-secondary"
+                onClick={() => setEntryDialog('expense')}
+              >
+                Record expense
+              </button>
+            </>
+          )}
           <button
             type="button"
             className="button-secondary"
@@ -267,290 +288,283 @@ function FinancePage() {
       )}
 
       {isFinance && (
-        <section className="space-y-5 border-t border-border pt-7" aria-labelledby="finance-management-heading">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-primary-strong">Finance workspace</p>
-            <h2 id="finance-management-heading" className="mt-1">Record payments & expenses</h2>
+        <>
+          <FinanceFormDialog
+            open={entryDialog === 'payment'}
+            title="Record payment"
+            titleId={paymentTitleId}
+            wide
+            onClose={() => setEntryDialog(null)}
+          >
             <p className="mt-1 text-sm text-muted-foreground">
-              Existing payment, invoice, customer balance, and expense workflows remain available here.
+              Choose an order to review its frozen invoice, then record a full or partial payment.
             </p>
-          </div>
 
-          <section className="rounded-xl border border-border bg-card p-5 sm:p-6" aria-labelledby="order-invoice-heading">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div className="min-w-0">
-                <h3 id="order-invoice-heading" className="text-pretty">Order invoice & balance</h3>
-                <p className="mt-1 text-sm text-muted-foreground">Choose an order to review its frozen invoice and current balance before recording payment.</p>
-              </div>
-              {invoice.data && (
-                <Link
-                  to="/orders/$orderId"
-                  params={{ orderId: invoice.data.id }}
-                  className="rounded-sm text-sm font-medium text-primary-strong underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  View frozen order lines
-                </Link>
-              )}
-            </div>
-
-            <SearchableSelect
-              className="mt-5"
-              label="Order"
-              name="financeOrder"
-              value={orderId}
-              placeholder="Select an order"
-              options={orders.data?.map((order) => ({
-                value: order.id,
-                label: `${order.orderNumber} — ${order.customerName}`,
-              })) ?? []}
-              onChange={(nextOrderId) => {
-                setOrderId(nextOrderId)
-                setPaymentAmount('')
-                payment.reset()
-              }}
-            />
-            {orders.isPending && <p role="status" aria-live="polite" className="mt-3 text-sm text-muted-foreground">Loading orders…</p>}
-            {orders.error && <ErrorText error={orders.error} fallback="Unable to load orders" />}
-            {invoice.isPending && orderId && <p role="status" aria-live="polite" className="mt-3 text-sm text-muted-foreground">Loading invoice…</p>}
-            {invoice.error && <ErrorText error={invoice.error} fallback="Unable to load invoice" />}
-
-            {invoice.data && (
-              <div className="mt-5 border-t border-border pt-5">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="font-semibold">{invoice.data.orderNumber}</p>
-                    <p className="mt-1 break-words text-sm text-muted-foreground">{invoice.data.customerName}</p>
-                  </div>
-                  <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">Ready for payment</span>
-                </div>
-                <dl className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                  <MoneyCard label="Order value" value={invoice.data.orderValueCents} currency={invoice.data.currency} />
-                  <MoneyCard label="Confirmed claims" value={invoice.data.claimAmountCents} currency={invoice.data.currency} />
-                  <MoneyCard label="Paid" value={invoice.data.paidAmountCents} currency={invoice.data.currency} />
-                  <MoneyCard label="Outstanding" value={invoice.data.outstandingBalanceCents} currency={invoice.data.currency} />
-                </dl>
-              </div>
-            )}
-          </section>
-
-          <div className="grid items-stretch gap-5 xl:grid-cols-2">
-            <section className="flex min-w-0 flex-col rounded-xl border border-border bg-card p-5 sm:p-6">
-              <div className="flex flex-wrap items-start justify-between gap-3">
+            <section className="mt-5" aria-labelledby="order-invoice-heading">
+              <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <p className="text-xs font-semibold uppercase tracking-widest text-primary-strong">Order payment</p>
-                  <h3 className="mt-1 text-pretty">Record payment</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">Record a full or partial payment against the selected order.</p>
+                  <h3 id="order-invoice-heading" className="text-pretty">Order invoice & balance</h3>
                 </div>
-                <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
-                  {invoice.data ? 'Order selected' : 'Select order above'}
-                </span>
+                {invoice.data && (
+                  <Link
+                    to="/orders/$orderId"
+                    params={{ orderId: invoice.data.id }}
+                    className="rounded-sm text-sm font-medium text-primary-strong underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    View frozen order lines
+                  </Link>
+                )}
               </div>
 
-              <div className="mt-5 rounded-lg border border-border bg-muted/40 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Payment applies to</p>
-                {invoice.data ? (
-                  <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
+              <SearchableSelect
+                className="mt-4"
+                label="Order"
+                name="financeOrder"
+                value={orderId}
+                placeholder="Select an order"
+                options={orders.data?.map((order) => ({
+                  value: order.id,
+                  label: `${order.orderNumber} — ${order.customerName}`,
+                })) ?? []}
+                onChange={(nextOrderId) => {
+                  setOrderId(nextOrderId)
+                  setPaymentAmount('')
+                  payment.reset()
+                }}
+              />
+              {orders.isPending && <p role="status" aria-live="polite" className="mt-3 text-sm text-muted-foreground">Loading orders…</p>}
+              {orders.error && <ErrorText error={orders.error} fallback="Unable to load orders" />}
+              {invoice.isPending && orderId && <p role="status" aria-live="polite" className="mt-3 text-sm text-muted-foreground">Loading invoice…</p>}
+              {invoice.error && <ErrorText error={invoice.error} fallback="Unable to load invoice" />}
+
+              {invoice.data && (
+                <div className="mt-5 border-t border-border pt-5">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="min-w-0">
                       <p className="font-semibold">{invoice.data.orderNumber}</p>
                       <p className="mt-1 break-words text-sm text-muted-foreground">{invoice.data.customerName}</p>
                     </div>
-                    <div className="text-right">
-                      <p className="text-xs text-muted-foreground">Outstanding</p>
-                      <p className="mt-1 font-mono font-semibold text-danger">{formatMoney(invoice.data.outstandingBalanceCents, invoice.data.currency)}</p>
-                    </div>
+                    <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">Ready for payment</span>
                   </div>
-                ) : (
-                  <p className="mt-2 text-sm text-muted-foreground">Select an order in the invoice section above to enable payment.</p>
-                )}
-              </div>
-
-              <form
-                  className="mt-5 grid gap-4 border-t border-border pt-5 sm:grid-cols-2"
-                  onSubmit={(event) => {
-                    event.preventDefault()
-                    const form = new FormData(event.currentTarget)
-                    const amountInput = event.currentTarget.elements.namedItem('amount')
-                    if (!(amountInput instanceof HTMLInputElement)) return
-                    const amountCents = parseMajorCurrencyToMinorUnits(amountInput.value)
-                    if (amountCents === null) {
-                      amountInput.setCustomValidity('Enter a valid amount with no more than two decimal places.')
-                      amountInput.reportValidity()
-                      return
-                    }
-                    amountInput.setCustomValidity('')
-                    payment.mutate({
-                      orderId,
-                      amountCents,
-                      paymentDate: new Date(String(form.get('paymentDate'))).toISOString(),
-                      method: String(form.get('method')) as PaymentMethod,
-                    })
-                  }}
-              >
-                  <label className="flex flex-col gap-2 text-sm font-medium sm:col-span-2">
-                    Amount ({invoice.data?.currency ?? 'LKR'})
-                    <input
-                      className="input"
-                      name="amount"
-                      type="number"
-                      min="0.01"
-                      max={invoice.data ? (invoice.data.outstandingBalanceCents / 100).toFixed(2) : undefined}
-                      step="0.01"
-                      inputMode="decimal"
-                      autoComplete="off"
-                      placeholder="0.00"
-                      required
-                      disabled={!invoice.data || invoice.data.outstandingBalanceCents === 0}
-                      aria-describedby="payment-amount-help"
-                      value={paymentAmount}
-                      onChange={(event) => {
-                        event.currentTarget.setCustomValidity('')
-                        setPaymentAmount(event.currentTarget.value)
-                      }}
-                    />
-                    <span id="payment-amount-help" className="text-xs font-normal text-muted-foreground">
-                      Enter rupees and cents, for example 1500.50.
-                    </span>
-                  </label>
-                  <label className="flex flex-col gap-2 text-sm font-medium">
-                    Payment date & time
-                    <input className="input" name="paymentDate" type="datetime-local" defaultValue={localDateTimeValue()} autoComplete="off" required disabled={!invoice.data || invoice.data.outstandingBalanceCents === 0} />
-                  </label>
-                  <label className="flex flex-col gap-2 text-sm font-medium">
-                    Method
-                    <select className="input" name="method" defaultValue="bank_transfer" autoComplete="off" required disabled={!invoice.data || invoice.data.outstandingBalanceCents === 0}>
-                      <option value="cash">Cash</option>
-                      <option value="bank_transfer">Bank transfer</option>
-                      <option value="cheque">Cheque</option>
-                      <option value="other">Other</option>
-                    </select>
-                  </label>
-                  {payment.error && <div className="sm:col-span-2"><ErrorText error={payment.error} fallback="Unable to record payment" /></div>}
-                  {payment.data && <p role="status" aria-live="polite" className="text-sm font-medium text-primary-strong sm:col-span-2">Payment recorded and balances updated.</p>}
-                  <button
-                    type="submit"
-                    className="button-primary w-full sm:col-span-2"
-                    disabled={payment.isPending || !invoice.data || invoice.data.outstandingBalanceCents === 0}
-                  >
-                    {payment.isPending ? 'Recording…' : 'Record payment'}
-                  </button>
-              </form>
+                  <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <MoneyCard label="Order value" value={invoice.data.orderValueCents} currency={invoice.data.currency} />
+                    <MoneyCard label="Confirmed claims" value={invoice.data.claimAmountCents} currency={invoice.data.currency} />
+                    <MoneyCard label="Paid" value={invoice.data.paidAmountCents} currency={invoice.data.currency} />
+                    <MoneyCard label="Outstanding" value={invoice.data.outstandingBalanceCents} currency={invoice.data.currency} />
+                  </dl>
+                </div>
+              )}
             </section>
 
-            <section className="flex min-w-0 flex-col rounded-xl border border-border bg-card p-5 sm:p-6">
+            <div className="mt-5 rounded-lg border border-border bg-muted/40 p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold uppercase tracking-widest text-primary-strong">Business expense</p>
-                  <h3 className="mt-1 text-pretty">Record expense</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">Add an operating expense independently from customer orders.</p>
-                </div>
-                <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">No order required</span>
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Payment applies to</p>
+                <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
+                  {invoice.data ? 'Order selected' : 'Select an order'}
+                </span>
               </div>
-                <form
-                  className="mt-5 grid gap-4 border-t border-border pt-5 sm:grid-cols-2"
-                  onSubmit={(event) => {
-                    event.preventDefault()
-                    const formElement = event.currentTarget
-                    const form = new FormData(formElement)
-                    const amountInput = formElement.elements.namedItem('amount')
-                    if (!(amountInput instanceof HTMLInputElement)) return
-                    const amountCents = parseMajorCurrencyToMinorUnits(amountInput.value)
-                    if (amountCents === null) {
-                      amountInput.setCustomValidity('Enter a valid amount with no more than two decimal places.')
-                      amountInput.reportValidity()
-                      return
-                    }
-                    amountInput.setCustomValidity('')
-                    expense.mutate({
-                      category: String(form.get('category')),
-                      amountCents,
-                      expenseDate: new Date(String(form.get('expenseDate'))).toISOString(),
-                      description: String(form.get('description') ?? ''),
-                    }, {
-                      onSuccess: () => formElement.reset(),
-                    })
-                  }}
-                >
-                  <label className="flex flex-col gap-2 text-sm font-medium">
-                    Category
-                    <input className="input" name="category" maxLength={120} autoComplete="off" required />
-                  </label>
-                  <label className="flex flex-col gap-2 text-sm font-medium">
-                    Expense amount (LKR)
-                    <input
-                      className="input"
-                      name="amount"
-                      type="number"
-                      min="0.01"
-                      step="0.01"
-                      inputMode="decimal"
-                      autoComplete="off"
-                      required
-                      placeholder="0.00"
-                      aria-describedby="expense-amount-help"
-                    />
-                    <span id="expense-amount-help" className="text-xs font-normal text-muted-foreground">
-                      Enter Amount.
-                    </span>
-                  </label>
-                  <label className="flex flex-col gap-2 text-sm font-medium sm:col-span-2">
-                    Expense date & time
-                    <input className="input" name="expenseDate" type="datetime-local" defaultValue={localDateTimeValue()} autoComplete="off" required />
-                  </label>
-                  <label className="flex flex-col gap-2 text-sm font-medium sm:col-span-2">
-                    Description
-                    <textarea className="input min-h-24" name="description" maxLength={500} autoComplete="off" />
-                  </label>
-                  {expense.error && <div className="sm:col-span-2"><ErrorText error={expense.error} fallback="Unable to record expense" /></div>}
-                  {expense.data && <p role="status" aria-live="polite" className="text-sm font-medium text-primary-strong sm:col-span-2">Expense recorded.</p>}
-                  <button type="submit" className="button-primary w-full sm:col-span-2" disabled={expense.isPending}>
-                    {expense.isPending ? 'Recording…' : 'Record expense'}
-                  </button>
-                </form>
-            </section>
-          </div>
+              {invoice.data ? (
+                <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold">{invoice.data.orderNumber}</p>
+                    <p className="mt-1 break-words text-sm text-muted-foreground">{invoice.data.customerName}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-muted-foreground">Outstanding</p>
+                    <p className="mt-1 font-mono font-semibold text-danger">{formatMoney(invoice.data.outstandingBalanceCents, invoice.data.currency)}</p>
+                  </div>
+                </div>
+              ) : (
+                <p className="mt-2 text-sm text-muted-foreground">Select an order above to enable payment.</p>
+              )}
+            </div>
 
-          {balance.data && (
-            <section className="rounded-xl border border-border bg-card p-5 sm:p-6">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <h3 className="text-pretty">Selected customer balance</h3>
-                  <p className="mt-1 break-words text-sm text-muted-foreground">{balance.data.name}</p>
+            <form
+              className="mt-5 grid gap-4 border-t border-border pt-5 sm:grid-cols-2"
+              onSubmit={(event) => {
+                event.preventDefault()
+                const form = new FormData(event.currentTarget)
+                const amountInput = event.currentTarget.elements.namedItem('amount')
+                if (!(amountInput instanceof HTMLInputElement)) return
+                const amountCents = parseMajorCurrencyToMinorUnits(amountInput.value)
+                if (amountCents === null) {
+                  amountInput.setCustomValidity('Enter a valid amount with no more than two decimal places.')
+                  amountInput.reportValidity()
+                  return
+                }
+                amountInput.setCustomValidity('')
+                payment.mutate({
+                  orderId,
+                  amountCents,
+                  paymentDate: new Date(String(form.get('paymentDate'))).toISOString(),
+                  method: String(form.get('method')) as PaymentMethod,
+                })
+              }}
+            >
+              <label className="flex flex-col gap-2 text-sm font-medium sm:col-span-2">
+                Amount ({invoice.data?.currency ?? 'LKR'})
+                <input
+                  className="input"
+                  name="amount"
+                  type="number"
+                  min="0.01"
+                  max={invoice.data ? (invoice.data.outstandingBalanceCents / 100).toFixed(2) : undefined}
+                  step="0.01"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  placeholder="0.00"
+                  required
+                  disabled={!invoice.data || invoice.data.outstandingBalanceCents === 0}
+                  aria-describedby="payment-amount-help"
+                  value={paymentAmount}
+                  onChange={(event) => {
+                    event.currentTarget.setCustomValidity('')
+                    setPaymentAmount(event.currentTarget.value)
+                  }}
+                />
+                <span id="payment-amount-help" className="text-xs font-normal text-muted-foreground">
+                  Enter rupees and cents, for example 1500.50.
+                </span>
+              </label>
+              <label className="flex flex-col gap-2 text-sm font-medium">
+                Payment date & time
+                <input className="input" name="paymentDate" type="datetime-local" defaultValue={localDateTimeValue()} autoComplete="off" required disabled={!invoice.data || invoice.data.outstandingBalanceCents === 0} />
+              </label>
+              <label className="flex flex-col gap-2 text-sm font-medium">
+                Method
+                <select className="input" name="method" defaultValue="bank_transfer" autoComplete="off" required disabled={!invoice.data || invoice.data.outstandingBalanceCents === 0}>
+                  <option value="cash">Cash</option>
+                  <option value="bank_transfer">Bank transfer</option>
+                  <option value="cheque">Cheque</option>
+                  <option value="other">Other</option>
+                </select>
+              </label>
+              {payment.error && <div className="sm:col-span-2"><ErrorText error={payment.error} fallback="Unable to record payment" /></div>}
+              {payment.data && <p role="status" aria-live="polite" className="text-sm font-medium text-primary-strong sm:col-span-2">Payment recorded and balances updated.</p>}
+              <button
+                type="submit"
+                className="button-primary w-full sm:col-span-2"
+                disabled={payment.isPending || !invoice.data || invoice.data.outstandingBalanceCents === 0}
+              >
+                {payment.isPending ? 'Recording…' : 'Save payment'}
+              </button>
+            </form>
+
+            {balance.data && (
+              <section className="mt-5 border-t border-border pt-5">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <h3 className="text-pretty">Selected customer balance</h3>
+                    <p className="mt-1 break-words text-sm text-muted-foreground">{balance.data.name}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Total outstanding</p>
+                    <p className="mt-1 font-mono text-xl font-semibold text-danger">
+                      {formatMoney(balance.data.outstandingBalanceCents, balance.data.currency)}
+                    </p>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Total outstanding</p>
-                  <p className="mt-1 font-mono text-xl font-semibold text-danger">
-                    {formatMoney(balance.data.outstandingBalanceCents, balance.data.currency)}
-                  </p>
-                </div>
-              </div>
-              <div className="mt-5 overflow-x-auto">
-                <table className="w-full min-w-[650px] text-left">
-                  <caption className="sr-only">Orders contributing to the selected customer balance</caption>
-                  <thead>
-                    <tr className="border-b border-border">
-                      <th className="py-3">Order</th>
-                      <th className="text-right">Total billed</th>
-                      <th className="text-right">Claims</th>
-                      <th className="text-right">Paid</th>
-                      <th className="text-right">Outstanding</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {balance.data.orders.map((order) => (
-                      <tr key={order.id} className="border-b border-border last:border-0">
-                        <td className="py-3 font-medium">{order.orderNumber}</td>
-                        <td className="text-right font-mono">{formatMoney(order.invoiceValueCents, balance.data.currency)}</td>
-                        <td className="text-right font-mono">{formatMoney(order.claimAmountCents, balance.data.currency)}</td>
-                        <td className="text-right font-mono">{formatMoney(order.paidAmountCents, balance.data.currency)}</td>
-                        <td className="text-right font-mono font-semibold text-danger">{formatMoney(order.outstandingBalanceCents, balance.data.currency)}</td>
+                <div className="mt-5 overflow-x-auto">
+                  <table className="w-full min-w-[650px] text-left">
+                    <caption className="sr-only">Orders contributing to the selected customer balance</caption>
+                    <thead>
+                      <tr className="border-b border-border">
+                        <th className="py-3">Order</th>
+                        <th className="text-right">Total billed</th>
+                        <th className="text-right">Claims</th>
+                        <th className="text-right">Paid</th>
+                        <th className="text-right">Outstanding</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          )}
-        </section>
+                    </thead>
+                    <tbody>
+                      {balance.data.orders.map((order) => (
+                        <tr key={order.id} className="border-b border-border last:border-0">
+                          <td className="py-3 font-medium">{order.orderNumber}</td>
+                          <td className="text-right font-mono">{formatMoney(order.invoiceValueCents, balance.data.currency)}</td>
+                          <td className="text-right font-mono">{formatMoney(order.claimAmountCents, balance.data.currency)}</td>
+                          <td className="text-right font-mono">{formatMoney(order.paidAmountCents, balance.data.currency)}</td>
+                          <td className="text-right font-mono font-semibold text-danger">{formatMoney(order.outstandingBalanceCents, balance.data.currency)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
+          </FinanceFormDialog>
+
+          <FinanceFormDialog
+            open={entryDialog === 'expense'}
+            title="Record expense"
+            titleId={expenseTitleId}
+            onClose={() => setEntryDialog(null)}
+          >
+            <p className="mt-1 text-sm text-muted-foreground">
+              Add an operating expense independently from customer orders.
+            </p>
+            <form
+              className="mt-5 grid gap-4 border-t border-border pt-5 sm:grid-cols-2"
+              onSubmit={(event) => {
+                event.preventDefault()
+                const formElement = event.currentTarget
+                const form = new FormData(formElement)
+                const amountInput = formElement.elements.namedItem('amount')
+                if (!(amountInput instanceof HTMLInputElement)) return
+                const amountCents = parseMajorCurrencyToMinorUnits(amountInput.value)
+                if (amountCents === null) {
+                  amountInput.setCustomValidity('Enter a valid amount with no more than two decimal places.')
+                  amountInput.reportValidity()
+                  return
+                }
+                amountInput.setCustomValidity('')
+                expense.mutate({
+                  category: String(form.get('category')),
+                  amountCents,
+                  expenseDate: new Date(String(form.get('expenseDate'))).toISOString(),
+                  description: String(form.get('description') ?? ''),
+                }, {
+                  onSuccess: () => formElement.reset(),
+                })
+              }}
+            >
+              <label className="flex flex-col gap-2 text-sm font-medium">
+                Category
+                <input className="input" name="category" maxLength={120} autoComplete="off" required />
+              </label>
+              <label className="flex flex-col gap-2 text-sm font-medium">
+                Expense amount (LKR)
+                <input
+                  className="input"
+                  name="amount"
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  required
+                  placeholder="0.00"
+                  aria-describedby="expense-amount-help"
+                />
+                <span id="expense-amount-help" className="text-xs font-normal text-muted-foreground">
+                  Enter Amount.
+                </span>
+              </label>
+              <label className="flex flex-col gap-2 text-sm font-medium sm:col-span-2">
+                Expense date & time
+                <input className="input" name="expenseDate" type="datetime-local" defaultValue={localDateTimeValue()} autoComplete="off" required />
+              </label>
+              <label className="flex flex-col gap-2 text-sm font-medium sm:col-span-2">
+                Description
+                <textarea className="input min-h-24" name="description" maxLength={500} autoComplete="off" />
+              </label>
+              {expense.error && <div className="sm:col-span-2"><ErrorText error={expense.error} fallback="Unable to record expense" /></div>}
+              {expense.data && <p role="status" aria-live="polite" className="text-sm font-medium text-primary-strong sm:col-span-2">Expense recorded.</p>}
+              <button type="submit" className="button-primary w-full sm:col-span-2" disabled={expense.isPending}>
+                {expense.isPending ? 'Recording…' : 'Save expense'}
+              </button>
+            </form>
+          </FinanceFormDialog>
+        </>
       )}
     </section>
   )
@@ -822,6 +836,55 @@ function MoneyCard({ label, value, currency }: { label: string; value: number; c
       <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</dt>
       <dd className="mt-2 font-mono text-lg font-semibold">{formatMoney(value, currency)}</dd>
     </div>
+  )
+}
+
+function FinanceFormDialog({
+  open,
+  title,
+  titleId,
+  onClose,
+  children,
+  wide = false,
+}: {
+  open: boolean
+  title: string
+  titleId: string
+  onClose: () => void
+  children: ReactNode
+  wide?: boolean
+}) {
+  const dialogRef = useRef<HTMLDialogElement>(null)
+
+  useEffect(() => {
+    const dialog = dialogRef.current
+    if (!dialog) return
+    if (open) {
+      if (!dialog.open) dialog.showModal()
+      return
+    }
+    if (dialog.open) dialog.close()
+  }, [open])
+
+  return (
+    <dialog
+      ref={dialogRef}
+      aria-labelledby={titleId}
+      className={`confirm-dialog m-auto w-[calc(100%-2rem)] ${wide ? 'max-w-3xl' : 'max-w-lg'} rounded-2xl border border-border bg-card p-0 text-foreground shadow-xl backdrop:bg-foreground/35`}
+      onClose={onClose}
+    >
+      {open && (
+        <div className="max-h-[min(90vh,52rem)] overflow-y-auto p-5">
+          <div className="flex items-start justify-between gap-3">
+            <h2 id={titleId} className="text-base font-semibold">{title}</h2>
+            <button type="button" className="button-secondary" onClick={onClose}>
+              Close
+            </button>
+          </div>
+          {children}
+        </div>
+      )}
+    </dialog>
   )
 }
 
