@@ -334,6 +334,7 @@ function ApprovalFormCard({
             {rows.map((row) => {
               const count = counts[row.id] ?? ''
               const matches = count !== '' && count === row.submittedQuantity
+              const shortfall = typeof count === 'number' ? Math.max(row.issuedQuantity - count, 0) : 0
               return (
                 <tr key={row.id} className="border-b border-[#e1e8e9] last:border-0">
                   <td className="py-3.5 pr-4 font-medium text-[#071c23]">{row.itemName}</td>
@@ -361,6 +362,11 @@ function ApprovalFormCard({
                         event.currentTarget.value === '' ? '' : event.currentTarget.valueAsNumber,
                       )}
                     />
+                    {note.noteType === 'delivery_note' && shortfall > 0 && (
+                      <p className="mt-1 text-xs text-[#d72b2b]">
+                        {shortfall} will be added to discrepancies vs issued
+                      </p>
+                    )}
                   </td>
                   <td className="py-3.5 pl-3 text-right">
                     <CheckBadge matches={matches} />

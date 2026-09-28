@@ -13,10 +13,10 @@ import { createQuotationShareMessage } from '../../whatsapp'
 
 export const Route = createFileRoute('/_authenticated/quotations')({ component: QuotationsPage })
 
-type DraftLine = { key: string; equipmentItemId: string; quantity: number; customPrice: string }
-type ShareState = { quotationNumber: string; customerName: string; submissionLink: string; expiresAt: string }
+type DraftLine = { key: string; equipmentItemId: string; quantity: number | ''; customPrice: string }
+type ShareState = { id: string; quotationNumber: string; customerName: string; submissionLink: string; expiresAt: string }
 
-const emptyLine = (): DraftLine => ({ key: crypto.randomUUID(), equipmentItemId: '', quantity: 1, customPrice: '' })
+const emptyLine = (): DraftLine => ({ key: crypto.randomUUID(), equipmentItemId: '', quantity: '', customPrice: '' })
 
 function QuotationsPage() {
   const quotations = useQuery(quotationsQuery)
@@ -29,7 +29,7 @@ function QuotationsPage() {
 
   useEffect(() => {
     if (markedSeen.current || !session.data || !quotations.data) return
-    markedSeen.current = true
+    markedSeen.current = true 
     queryClient.setQueryData(
       queryKeys.quotationResponseSeen(session.data.id),
       markQuotationResponsesSeen(session.data.id, quotations.data),
@@ -66,6 +66,7 @@ function QuotationsPage() {
   const convert = useMutation({
     mutationFn: api.convertQuotation,
     onSuccess: async (order) => {
+      setShare(null)
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.quotations }),
         queryClient.invalidateQueries({ queryKey: queryKeys.orders }),
@@ -74,6 +75,15 @@ function QuotationsPage() {
       await navigate({ to: '/orders/$orderId', params: { orderId: order.id } })
     },
   })
+
+  const requestDirectConvert = async (quotationId: string, customerName: string) => {
+    const confirmed = await confirm({
+      title: 'Convert without customer approval?',
+      message: `${customerName} will not need to open the quotation link. An order will be created now, and the customer cannot approve or reject this quotation afterwards.`,
+      confirmLabel: 'Convert to order',
+    })
+    if (confirmed) convert.mutate(quotationId)
+  }
 
   const metrics = useMemo(() => quotationMetrics(quotations.data ?? []), [quotations.data])
   const selectedIds = new Set(lines.map((line) => line.equipmentItemId).filter(Boolean))
@@ -98,12 +108,19 @@ function QuotationsPage() {
     })
   }
 
-  const applyLineQuantity = async (key: string, quantity: number, equipmentItemId: string) => {
+  const applyLineQuantity = async (key: string, raw: string, equipmentItemId: string) => {
+    if (raw === '') {
+      setLines((current) => current.map((entry) => (
+        entry.key === key ? { ...entry, quantity: '' } : entry
+      )))
+      return
+    }
+    const quantity = Number(raw)
     if (!Number.isFinite(quantity)) return
     const available = availableStockQty(equipmentItemId, items.data)
     if (equipmentItemId && quantity > available) {
       setLines((current) => current.map((entry) => (
-        entry.key === key ? { ...entry, quantity: Math.max(available, 1) } : entry
+        entry.key === key ? { ...entry, quantity: available > 0 ? available : '' } : entry
       )))
       await showStockNotice(itemName(equipmentItemId, items.data), available)
       return
@@ -115,12 +132,12 @@ function QuotationsPage() {
 
   return (
     <div>
-      <header className="flex flex-wrap items-start justify-between gap-4">
+      <header className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-[#071c23]">Quotations</h1>
           <p className="mt-1 text-sm text-[#60727e]">Share a secure link by WhatsApp, SMS, or email</p>
         </div>
-        <button className="button-primary" type="button" onClick={() => setShowCreate(true)}>New quotation</button>
+        <button className="button-primary w-full sm:w-auto" type="button" onClick={() => setShowCreate(true)}>New quotation</button>
       </header>
 
       <section aria-label="Quotation summary" className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -152,7 +169,13 @@ function QuotationsPage() {
                   <td className="px-4 py-4 text-[#526977]">{quotation.lineCount}</td>
                   <td className="px-4 py-4"><StatusBadge value={quotation.status} /></td>
                   <td className="px-4 py-4 text-right font-medium text-[#071c23]">{formatMoney(quotation.totalValueCents)}</td>
-                  <td className="px-5 py-4 text-right"><QuotationAction quotation={quotation} pending={resend.isPending || convert.isPending} onResend={() => resend.mutate(quotation)} onConvert={() => convert.mutate(quotation.id)} /></td>
+                  <td className="px-5 py-4 text-right"><QuotationAction quotation={quotation} pending={resend.isPending || convert.isPending} onResend={() => resend.mutate(quotation)} onConvert={() => {
+                    if (quotation.status === 'sent') {
+                      void requestDirectConvert(quotation.id, quotation.customerName)
+                      return
+                    }
+                    convert.mutate(quotation.id)
+                  }} /></td>
                 </tr>
               ))}</tbody>
             </table>
@@ -166,7 +189,9 @@ function QuotationsPage() {
           <form onSubmit={async (event) => {
             event.preventDefault()
             const overstocked = lines.find((line) => (
-              line.equipmentItemId && line.quantity > availableStockQty(line.equipmentItemId, items.data)
+              line.equipmentItemId
+              && line.quantity !== ''
+              && line.quantity > availableStockQty(line.equipmentItemId, items.data)
             ))
             if (overstocked) {
               await showStockNotice(
@@ -180,7 +205,7 @@ function QuotationsPage() {
               pricingMode,
               lines: lines.map((line) => ({
                 equipmentItemId: line.equipmentItemId,
-                quantity: line.quantity,
+                quantity: Number(line.quantity),
                 ...(pricingMode === 'custom' ? { manualUnitPriceCents: moneyToCents(line.customPrice) } : {}),
               })),
             }
@@ -223,20 +248,22 @@ function QuotationsPage() {
                     onChange={(equipmentItemId) => {
                       const price = standardPrice(equipmentItemId, items.data, customer.data)
                       const nextAvailable = availableStockQty(equipmentItemId, items.data)
-                      if (equipmentItemId && line.quantity > nextAvailable) {
+                      if (equipmentItemId && line.quantity !== '' && line.quantity > nextAvailable) {
                         void showStockNotice(itemName(equipmentItemId, items.data), nextAvailable)
                       }
                       setLines((current) => current.map((entry) => entry.key === line.key ? {
                         ...entry,
                         equipmentItemId,
                         customPrice: centsToInput(price),
-                        quantity: equipmentItemId && line.quantity > nextAvailable ? Math.max(nextAvailable, 1) : entry.quantity,
+                        quantity: equipmentItemId && line.quantity !== '' && line.quantity > nextAvailable
+                          ? (nextAvailable > 0 ? nextAvailable : '')
+                          : entry.quantity,
                       } : entry))
                     }}
                   />
                   <div className={`mt-3 grid gap-3 ${pricingMode === 'custom' ? 'sm:grid-cols-2' : ''}`}>
-                    <label className="text-xs font-medium text-[#071c23]">Quantity<input className="input mt-1" type="number" min="1" max={line.equipmentItemId ? Math.max(available, 1) : 1_000_000} step="1" required value={Number.isFinite(line.quantity) ? line.quantity : ''} onChange={(event) => {
-                      void applyLineQuantity(line.key, event.currentTarget.valueAsNumber, line.equipmentItemId)
+                    <label className="text-xs font-medium text-[#071c23]">Quantity<input className="input mt-1" type="number" min="1" max={line.equipmentItemId ? Math.max(available, 1) : 1_000_000} step="1" required placeholder="Enter quantity" value={line.quantity} onChange={(event) => {
+                      void applyLineQuantity(line.key, event.currentTarget.value, line.equipmentItemId)
                     }} />{line.equipmentItemId && <span className="mt-1 block font-normal text-[#60727e]">In stock: {available}</span>}</label>
                     {pricingMode === 'custom' && <label className="text-xs font-medium text-[#071c23]">Unit price (LKR)<input className="input mt-1" type="number" min="0.01" max="20000000" step="0.01" required value={line.customPrice} onChange={(event) => {
                       const customPrice = event.currentTarget.value
@@ -256,9 +283,19 @@ function QuotationsPage() {
 
       {share && (
         <Modal title={`${share.quotationNumber} is ready to share`} onClose={() => setShare(null)}>
-          <p className="text-sm leading-6 text-[#526977]">The PDF is available from the quotation details. Share this secure customer link manually; no message is sent automatically.</p>
+          <p className="text-sm leading-6 text-[#526977]">Share this secure customer link if they should approve first. For a regular customer, convert to an order now without waiting for that approval.</p>
           <ManualLinkShare link={share.submissionLink} label="Customer quotation link" message={createQuotationShareMessage({ quotationNumber: share.quotationNumber, customerName: share.customerName, submissionLink: share.submissionLink })} />
           <p className="mt-3 text-xs text-[#60727e]">Link expires {new Date(share.expiresAt).toLocaleString()}.</p>
+          <div className="mt-5 flex justify-end">
+            <button
+              className="button-primary"
+              disabled={convert.isPending}
+              type="button"
+              onClick={() => void requestDirectConvert(share.id, share.customerName)}
+            >
+              {convert.isPending ? 'Converting...' : 'Convert to order now'}
+            </button>
+          </div>
         </Modal>
       )}
     </div>
@@ -276,7 +313,12 @@ function PricingChoice({ checked, title, detail, onChange }: { checked: boolean;
 function QuotationAction({ quotation, pending, onResend, onConvert }: { quotation: QuotationSummary; pending: boolean; onResend: () => void; onConvert: () => void }) {
   if (quotation.orderId) return <Link className="button-secondary inline-flex" to="/orders/$orderId" params={{ orderId: quotation.orderId }}>View order</Link>
   if (quotation.status === 'accepted') return <button className="button-primary" disabled={pending} type="button" onClick={onConvert}>Convert to order</button>
-  if (quotation.status === 'sent') return <button className="button-secondary" disabled={pending} type="button" onClick={onResend}>Resend</button>
+  if (quotation.status === 'sent') return (
+    <div className="flex flex-wrap justify-end gap-2">
+      <button className="button-secondary" disabled={pending} type="button" onClick={onResend}>Resend</button>
+      <button className="button-primary" disabled={pending} type="button" onClick={onConvert}>Convert to order</button>
+    </div>
+  )
   return <button className="button-secondary opacity-50" disabled type="button">Resend</button>
 }
 
@@ -290,7 +332,7 @@ function StatusBadge({ value }: { value: QuotationStatus }) {
 }
 
 function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
-  return <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[#071c23]/45 px-4 py-8" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section aria-modal="true" aria-labelledby="quotation-modal-title" role="dialog" className="w-full max-w-2xl rounded-2xl border border-[#d6e0e2] bg-white p-6 shadow-xl"><header className="mb-5 flex items-start justify-between gap-4"><h2 id="quotation-modal-title" className="text-xl font-semibold text-[#071c23]">{title}</h2><button aria-label="Close dialog" className="rounded-lg p-2 text-[#526977] hover:bg-[#edf3f4]" type="button" onClick={onClose}>✕</button></header>{children}</section></div>
+  return <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[#071c23]/45 px-3 py-4 sm:px-4 sm:py-8" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section aria-modal="true" aria-labelledby="quotation-modal-title" role="dialog" className="my-auto w-full max-w-2xl rounded-2xl border border-[#d6e0e2] bg-white p-4 shadow-xl sm:p-6"><header className="mb-5 flex items-start justify-between gap-4"><h2 id="quotation-modal-title" className="min-w-0 text-lg font-semibold text-[#071c23] sm:text-xl">{title}</h2><button aria-label="Close dialog" className="rounded-lg p-2 text-[#526977] hover:bg-[#edf3f4]" type="button" onClick={onClose}>✕</button></header>{children}</section></div>
 }
 
 function quotationMetrics(rows: QuotationSummary[]) {
@@ -330,5 +372,5 @@ function standardPrice(itemId: string, items: Awaited<ReturnType<typeof api.item
 function moneyToCents(value: string) { return Math.round(Number(value) * 100) }
 function centsToInput(value: number) { return value > 0 ? (value / 100).toFixed(2) : '' }
 function formatDate(value: string) { return new Date(value).toLocaleDateString('en-CA') }
-function toShareState(value: Pick<CreatedQuotation, 'quotationNumber' | 'customerName' | 'submissionLink' | 'expiresAt'> | (QuotationSummary & QuotationLink)): ShareState { return { quotationNumber: value.quotationNumber, customerName: value.customerName, submissionLink: value.submissionLink, expiresAt: value.expiresAt! } }
+function toShareState(value: Pick<CreatedQuotation, 'id' | 'quotationNumber' | 'customerName' | 'submissionLink' | 'expiresAt'> | (QuotationSummary & QuotationLink)): ShareState { return { id: value.id, quotationNumber: value.quotationNumber, customerName: value.customerName, submissionLink: value.submissionLink, expiresAt: value.expiresAt! } }
 function ErrorMessage({ error, fallback }: { error: Error; fallback: string }) { return <p role="alert" className="mt-4 rounded-xl border border-danger/20 bg-danger-soft p-4 text-sm text-danger">{error instanceof ApiError ? error.message : fallback}</p> }

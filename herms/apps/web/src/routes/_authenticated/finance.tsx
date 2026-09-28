@@ -1,4 +1,4 @@
-import type { ExpenseInput, PaymentInput, PaymentMethod } from '@herms/shared'
+import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, type ExpenseInput, type IncomeInput, type PaymentInput, type PaymentMethod } from '@herms/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
@@ -47,6 +47,20 @@ function formatMethod(method: PaymentMethod) {
   return method.replaceAll('_', ' ').replace(/^./, (character) => character.toUpperCase())
 }
 
+const NEW_EXPENSE_CATEGORY = '__new__'
+
+function categoryChoices(standard: readonly string[], recorded: string[]) {
+  const seen = new Set<string>(standard)
+  const extra: string[] = []
+  for (const value of recorded) {
+    const category = value.trim()
+    if (!category || seen.has(category)) continue
+    seen.add(category)
+    extra.push(category)
+  }
+  return [...standard, ...extra]
+}
+
 function csvCell(value: string | number) {
   const text = String(value)
   return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text
@@ -74,6 +88,15 @@ function downloadFinanceReport(report: MonthlyFinance) {
       row.customerName,
       row.orderNumber,
       formatMethod(row.method),
+      row.amountCents / 100,
+    ]),
+    [],
+    ['Other income'],
+    ['Date', 'Category', 'Description', 'Amount'],
+    ...report.recentOtherIncomes.map((row) => [
+      formatDate(row.incomeDate, report.timezone),
+      row.category,
+      row.description ?? '',
       row.amountCents / 100,
     ]),
     [],
@@ -117,8 +140,9 @@ function FinancePage() {
   const [followsCurrentMonth, setFollowsCurrentMonth] = useState(true)
   const [orderId, setOrderId] = useState('')
   const [paymentAmount, setPaymentAmount] = useState('')
-  const [entryDialog, setEntryDialog] = useState<'payment' | 'expense' | null>(null)
+  const [entryDialog, setEntryDialog] = useState<'payment' | 'income' | 'expense' | null>(null)
   const paymentTitleId = useId()
+  const incomeTitleId = useId()
   const expenseTitleId = useId()
   const orders = useQuery({ ...ordersQuery, enabled: isFinance })
   const invoice = useQuery({ ...invoiceQuery(orderId), enabled: isFinance && Boolean(orderId) })
@@ -164,6 +188,15 @@ function FinancePage() {
       ])
     },
   })
+  const otherIncome = useMutation({
+    mutationFn: (input: IncomeInput) => api.recordIncome(input),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.monthlyFinanceReports }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboard }),
+      ])
+    },
+  })
 
   if (!canView) {
     return (
@@ -182,12 +215,12 @@ function FinancePage() {
             {formatMonth(month)} <span aria-hidden="true">&middot;</span> auto-updates every minute
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="page-actions">
           <label className="sr-only" htmlFor="finance-report-month">Reporting month</label>
           <input
             id="finance-report-month"
             name="financeReportMonth"
-            className="input w-auto min-w-40"
+            className="input page-actions-span w-full min-w-0 sm:w-auto sm:min-w-40"
             type="month"
             autoComplete="off"
             value={month}
@@ -205,6 +238,13 @@ function FinancePage() {
                 onClick={() => setEntryDialog('payment')}
               >
                 Record payment
+              </button>
+              <button
+                type="button"
+                className="button-secondary"
+                onClick={() => setEntryDialog('income')}
+              >
+                Record income
               </button>
               <button
                 type="button"
@@ -278,8 +318,9 @@ function FinancePage() {
             currency={monthly.data.currency}
           />
 
-          <div className="grid gap-5 2xl:grid-cols-2">
+          <div className="grid gap-5 xl:grid-cols-2 2xl:grid-cols-3">
             <PaymentsTable report={monthly.data} />
+            <OtherIncomesTable report={monthly.data} />
             <ExpensesTable report={monthly.data} />
           </div>
 
@@ -494,6 +535,35 @@ function FinancePage() {
           </FinanceFormDialog>
 
           <FinanceFormDialog
+            open={entryDialog === 'income'}
+            title="Record income"
+            titleId={incomeTitleId}
+            onClose={() => setEntryDialog(null)}
+          >
+            <p className="mt-1 text-sm text-muted-foreground">
+              Add operating income independently from customer order payments.
+            </p>
+            <CategoryEntryForm
+              categories={INCOME_CATEGORIES}
+              recordedCategories={monthly.data?.recentOtherIncomes.map((row) => row.category) ?? []}
+              amountLabel="Income amount (LKR)"
+              dateFieldName="incomeDate"
+              isPending={otherIncome.isPending}
+              error={otherIncome.error}
+              saved={Boolean(otherIncome.data)}
+              savedMessage="Income recorded."
+              submitLabel="Save income"
+              pendingLabel="Recording…"
+              onSubmit={(entry, onSuccess) => otherIncome.mutate({
+                category: entry.category,
+                amountCents: entry.amountCents,
+                incomeDate: entry.at,
+                description: entry.description,
+              }, { onSuccess })}
+            />
+          </FinanceFormDialog>
+
+          <FinanceFormDialog
             open={entryDialog === 'expense'}
             title="Record expense"
             titleId={expenseTitleId}
@@ -502,67 +572,24 @@ function FinancePage() {
             <p className="mt-1 text-sm text-muted-foreground">
               Add an operating expense independently from customer orders.
             </p>
-            <form
-              className="mt-5 grid gap-4 border-t border-border pt-5 sm:grid-cols-2"
-              onSubmit={(event) => {
-                event.preventDefault()
-                const formElement = event.currentTarget
-                const form = new FormData(formElement)
-                const amountInput = formElement.elements.namedItem('amount')
-                if (!(amountInput instanceof HTMLInputElement)) return
-                const amountCents = parseMajorCurrencyToMinorUnits(amountInput.value)
-                if (amountCents === null) {
-                  amountInput.setCustomValidity('Enter a valid amount with no more than two decimal places.')
-                  amountInput.reportValidity()
-                  return
-                }
-                amountInput.setCustomValidity('')
-                expense.mutate({
-                  category: String(form.get('category')),
-                  amountCents,
-                  expenseDate: new Date(String(form.get('expenseDate'))).toISOString(),
-                  description: String(form.get('description') ?? ''),
-                }, {
-                  onSuccess: () => formElement.reset(),
-                })
-              }}
-            >
-              <label className="flex flex-col gap-2 text-sm font-medium">
-                Category
-                <input className="input" name="category" maxLength={120} autoComplete="off" required />
-              </label>
-              <label className="flex flex-col gap-2 text-sm font-medium">
-                Expense amount (LKR)
-                <input
-                  className="input"
-                  name="amount"
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  inputMode="decimal"
-                  autoComplete="off"
-                  required
-                  placeholder="0.00"
-                  aria-describedby="expense-amount-help"
-                />
-                <span id="expense-amount-help" className="text-xs font-normal text-muted-foreground">
-                  Enter Amount.
-                </span>
-              </label>
-              <label className="flex flex-col gap-2 text-sm font-medium sm:col-span-2">
-                Expense date & time
-                <input className="input" name="expenseDate" type="datetime-local" defaultValue={localDateTimeValue()} autoComplete="off" required />
-              </label>
-              <label className="flex flex-col gap-2 text-sm font-medium sm:col-span-2">
-                Description
-                <textarea className="input min-h-24" name="description" maxLength={500} autoComplete="off" />
-              </label>
-              {expense.error && <div className="sm:col-span-2"><ErrorText error={expense.error} fallback="Unable to record expense" /></div>}
-              {expense.data && <p role="status" aria-live="polite" className="text-sm font-medium text-primary-strong sm:col-span-2">Expense recorded.</p>}
-              <button type="submit" className="button-primary w-full sm:col-span-2" disabled={expense.isPending}>
-                {expense.isPending ? 'Recording…' : 'Save expense'}
-              </button>
-            </form>
+            <CategoryEntryForm
+              categories={EXPENSE_CATEGORIES}
+              recordedCategories={monthly.data?.recentExpenses.map((row) => row.category) ?? []}
+              amountLabel="Expense amount (LKR)"
+              dateFieldName="expenseDate"
+              isPending={expense.isPending}
+              error={expense.error}
+              saved={Boolean(expense.data)}
+              savedMessage="Expense recorded."
+              submitLabel="Save expense"
+              pendingLabel="Recording…"
+              onSubmit={(entry, onSuccess) => expense.mutate({
+                category: entry.category,
+                amountCents: entry.amountCents,
+                expenseDate: entry.at,
+                description: entry.description,
+              }, { onSuccess })}
+            />
           </FinanceFormDialog>
         </>
       )}
@@ -768,6 +795,31 @@ function PaymentsTable({ report }: { report: MonthlyFinance }) {
   )
 }
 
+function OtherIncomesTable({ report }: { report: MonthlyFinance }) {
+  return (
+    <section className="overflow-hidden rounded-xl border border-border bg-card" aria-labelledby="other-income-title">
+      <div className="border-b border-border px-5 py-4"><h2 id="other-income-title">Other income</h2></div>
+      <div className="overflow-x-auto px-5 py-3">
+        <table className="w-full min-w-[560px] text-left">
+          <caption className="sr-only">Most recently recorded operating income</caption>
+          <thead><tr className="border-b border-border"><th className="py-3">Date</th><th>Category</th><th>Description</th><th className="text-right">Amount</th></tr></thead>
+          <tbody>
+            {report.recentOtherIncomes.map((income) => (
+              <tr key={income.id} className="border-b border-border last:border-0">
+                <td className="whitespace-nowrap py-3 text-muted-foreground">{formatDate(income.incomeDate, report.timezone)}</td>
+                <td><span className="whitespace-nowrap rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">{income.category}</span></td>
+                <td className="max-w-64 truncate text-muted-foreground" title={income.description ?? undefined}>{income.description || '—'}</td>
+                <td className="whitespace-nowrap text-right font-mono">{formatMoney(income.amountCents, report.currency)}</td>
+              </tr>
+            ))}
+            {report.recentOtherIncomes.length === 0 && <tr><td colSpan={4} className="py-8 text-center text-muted-foreground">No other income recorded yet.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
+}
+
 function ExpensesTable({ report }: { report: MonthlyFinance }) {
   return (
     <section className="overflow-hidden rounded-xl border border-border bg-card" aria-labelledby="expenses-title">
@@ -839,6 +891,160 @@ function MoneyCard({ label, value, currency }: { label: string; value: number; c
   )
 }
 
+function CategoryEntryForm({
+  categories,
+  recordedCategories,
+  amountLabel,
+  dateFieldName,
+  isPending,
+  error,
+  saved,
+  savedMessage,
+  submitLabel,
+  pendingLabel,
+  onSubmit,
+}: {
+  categories: readonly string[]
+  recordedCategories: string[]
+  amountLabel: string
+  dateFieldName: string
+  isPending: boolean
+  error: Error | null
+  saved: boolean
+  savedMessage: string
+  submitLabel: string
+  pendingLabel: string
+  onSubmit: (entry: {
+    category: string
+    amountCents: number
+    at: string
+    description: string
+  }, onSuccess: () => void) => void
+}) {
+  const [category, setCategory] = useState('')
+  const [customCategory, setCustomCategory] = useState('')
+  const options = categoryChoices(categories, recordedCategories)
+  const addingCategory = category === NEW_EXPENSE_CATEGORY
+
+  return (
+    <form
+      className="mt-5 grid gap-4 border-t border-border pt-5 sm:grid-cols-2"
+      onSubmit={(event) => {
+        event.preventDefault()
+        const formElement = event.currentTarget
+        const form = new FormData(formElement)
+        const categorySelect = formElement.elements.namedItem('category')
+        const customCategoryInput = formElement.elements.namedItem('customCategory')
+        const amountInput = formElement.elements.namedItem('amount')
+        if (!(amountInput instanceof HTMLInputElement)) return
+        const selectedCategory = addingCategory ? customCategory.trim() : category
+        if (!selectedCategory) {
+          const invalid = addingCategory && customCategoryInput instanceof HTMLInputElement
+            ? customCategoryInput
+            : categorySelect instanceof HTMLSelectElement
+              ? categorySelect
+              : null
+          invalid?.setCustomValidity('Select a category.')
+          invalid?.reportValidity()
+          return
+        }
+        if (categorySelect instanceof HTMLSelectElement) categorySelect.setCustomValidity('')
+        if (customCategoryInput instanceof HTMLInputElement) customCategoryInput.setCustomValidity('')
+        const amountCents = parseMajorCurrencyToMinorUnits(amountInput.value)
+        if (amountCents === null) {
+          amountInput.setCustomValidity('Enter a valid amount with no more than two decimal places.')
+          amountInput.reportValidity()
+          return
+        }
+        amountInput.setCustomValidity('')
+        onSubmit({
+          category: selectedCategory,
+          amountCents,
+          at: new Date(String(form.get(dateFieldName))).toISOString(),
+          description: String(form.get('description') ?? ''),
+        }, () => {
+          formElement.reset()
+          setCategory('')
+          setCustomCategory('')
+        })
+      }}
+    >
+      <div className="flex flex-col gap-2 text-sm font-medium">
+        <label className="flex flex-col gap-2">
+          Category
+          <select
+            className="input"
+            name="category"
+            value={category}
+            autoComplete="off"
+            required={!addingCategory}
+            onChange={(event) => {
+              event.currentTarget.setCustomValidity('')
+              setCategory(event.target.value)
+              if (event.target.value !== NEW_EXPENSE_CATEGORY) setCustomCategory('')
+            }}
+          >
+            <option value="" disabled>Select category</option>
+            {options.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+            <option value={NEW_EXPENSE_CATEGORY}>Add new category…</option>
+          </select>
+        </label>
+        {addingCategory && (
+          <label className="flex flex-col gap-2 font-normal">
+            <span className="sr-only">New category name</span>
+            <input
+              className="input"
+              name="customCategory"
+              value={customCategory}
+              maxLength={120}
+              autoComplete="off"
+              required
+              placeholder="Enter new category"
+              onChange={(event) => {
+                event.currentTarget.setCustomValidity('')
+                setCustomCategory(event.target.value)
+              }}
+            />
+          </label>
+        )}
+      </div>
+      <label className="flex flex-col gap-2 text-sm font-medium">
+        {amountLabel}
+        <input
+          className="input"
+          name="amount"
+          type="number"
+          min="0.01"
+          step="0.01"
+          inputMode="decimal"
+          autoComplete="off"
+          required
+          placeholder="0.00"
+          aria-describedby={`${dateFieldName}-amount-help`}
+        />
+        <span id={`${dateFieldName}-amount-help`} className="text-xs font-normal text-muted-foreground">
+          Enter Amount.
+        </span>
+      </label>
+      <label className="flex flex-col gap-2 text-sm font-medium sm:col-span-2">
+        Date & time
+        <input className="input" name={dateFieldName} type="datetime-local" defaultValue={localDateTimeValue()} autoComplete="off" required />
+      </label>
+      <label className="flex flex-col gap-2 text-sm font-medium sm:col-span-2">
+        Description
+        <textarea className="input min-h-24" name="description" maxLength={500} autoComplete="off" />
+      </label>
+      {error && <div className="sm:col-span-2"><ErrorText error={error} fallback="Unable to save this entry" /></div>}
+      {saved && <p role="status" aria-live="polite" className="text-sm font-medium text-primary-strong sm:col-span-2">{savedMessage}</p>}
+      <button type="submit" className="button-primary w-full sm:col-span-2" disabled={isPending}>
+        {isPending ? pendingLabel : submitLabel}
+      </button>
+    </form>
+  )
+}
+
 function FinanceFormDialog({
   open,
   title,
@@ -877,7 +1083,7 @@ function FinanceFormDialog({
         <div className="max-h-[min(90vh,52rem)] overflow-y-auto p-5">
           <div className="flex items-start justify-between gap-3">
             <h2 id={titleId} className="text-base font-semibold">{title}</h2>
-            <button type="button" className="button-secondary" onClick={onClose}>
+            <button type="button" className="button-secondary shrink-0" onClick={onClose}>
               Close
             </button>
           </div>

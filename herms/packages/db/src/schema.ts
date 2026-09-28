@@ -266,6 +266,20 @@ export const expenses = pgTable(
   (table) => [index('expense_expense_date_idx').on(table.expenseDate)],
 )
 
+export const otherIncomes = pgTable(
+  'income',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    category: text('category').notNull(),
+    amountCents: integer('amount_cents').notNull(),
+    incomeDate: timestamp('income_date', { withTimezone: true }).notNull(),
+    description: text('description'),
+    createdBy: uuid('created_by').references(() => users.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index('income_income_date_idx').on(table.incomeDate)],
+)
+
 export const outboxEvents = pgTable(
   'outbox',
   {
@@ -505,6 +519,7 @@ export const dashboardMonthlyRollups = pgTable('dashboard_monthly_rollup', {
   confirmedClaimAmountCents: bigint('confirmed_claim_amount_cents', { mode: 'number' }).default(0).notNull(),
   receivedPaymentAmountCents: bigint('received_payment_amount_cents', { mode: 'number' }).default(0).notNull(),
   expenseAmountCents: bigint('expense_amount_cents', { mode: 'number' }).default(0).notNull(),
+  otherIncomeAmountCents: bigint('other_income_amount_cents', { mode: 'number' }).default(0).notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 })
 

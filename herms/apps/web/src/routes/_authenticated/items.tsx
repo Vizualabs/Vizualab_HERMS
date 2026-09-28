@@ -77,7 +77,7 @@ function ItemsPage() {
           )}
           <ul className="divide-y divide-border">
             {items.data?.map((item) => (
-              <li key={item.id} className="flex items-center gap-4 px-5 py-4">
+              <li key={item.id} className="flex flex-wrap items-center gap-3 px-4 py-4 sm:flex-nowrap sm:gap-4 sm:px-5">
                 <Link
                   to="/items/$itemId"
                   params={{ itemId: item.id }}
@@ -203,8 +203,8 @@ function ItemsPage() {
             label="Opening quantity"
             name="openingQuantity"
             type="number"
-            defaultValue="0"
             max="1000000"
+            placeholder="Enter quantity"
             required
           />
           <p className="text-xs text-muted-foreground">

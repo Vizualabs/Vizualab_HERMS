@@ -44,8 +44,8 @@ function RetentionNotePage() {
     <Link to="/orders/$orderId" params={{ orderId: data.orderId }} className="text-sm font-medium text-primary hover:underline">
       Back to order
     </Link>
-    <section className="mt-5 rounded-2xl border border-border bg-card p-6">
-      <div className="flex items-start justify-between gap-4">
+    <section className="mt-5 rounded-2xl border border-border bg-card p-4 sm:p-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-sm text-muted-foreground">Retention note</p>
           <h1 className="mt-1 text-3xl font-semibold">{data.rnNumber}</h1>

@@ -24,6 +24,7 @@ import {
   equipmentInputSchema,
   equipmentUpdateSchema,
   expenseInputSchema,
+  incomeInputSchema,
   financeMonthSchema,
   isSuperUser,
   loginInputSchema,
@@ -407,6 +408,11 @@ export function createApp({
       const parsed = await validatedJson(c, expenseInputSchema)
       if ('response' in parsed) return parsed.response
       return c.json({ data: await finance.recordExpense(parsed.data, actor(c)) }, 201)
+    })
+    .post('/api/incomes', requireRoles('finance'), async (c) => {
+      const parsed = await validatedJson(c, incomeInputSchema)
+      if ('response' in parsed) return parsed.response
+      return c.json({ data: await finance.recordIncome(parsed.data, actor(c)) }, 201)
     })
     .get('/api/finance/monthly', requireRoles('finance', 'business_owner'), async (c) => {
       const parsed = financeMonthSchema.safeParse(c.req.query())

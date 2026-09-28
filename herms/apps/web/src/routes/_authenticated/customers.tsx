@@ -56,7 +56,7 @@ function CustomersPage() {
             Recurring customers use a fixed price list; new customers are quoted per order.
           </p>
         </div>
-        <button className="button-primary shrink-0" type="button" onClick={() => setIsCreateOpen(true)}>
+        <button className="button-primary w-full shrink-0 sm:w-auto" type="button" onClick={() => setIsCreateOpen(true)}>
           New customer
         </button>
       </header>

@@ -14,7 +14,13 @@ test('selects equipment and edits its quotation quantity without crashing', asyn
   await chooseListedOption(page, 'Equipment for item 1', 'Dinner Plate')
 
   const quantity = page.getByLabel('Quantity')
+  await expect(quantity).toHaveValue('')
+  await expect(quantity).toHaveAttribute('placeholder', 'Enter quantity')
   await quantity.click()
+  await quantity.fill('3')
+  await expect(quantity).toHaveValue('3')
+  await quantity.fill('')
+  await expect(quantity).toHaveValue('')
   await quantity.fill('3')
 
   await expect(quantity).toHaveValue('3')

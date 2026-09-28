@@ -26,6 +26,30 @@ export const DISCREPANCY_TYPES = ['missing', 'damaged', 'not_accepted', 'other']
 export const DISCREPANCY_STATUSES = ['open', 'resolved', 'written_off', 'claimed'] as const
 export const RESPONSIBLE_PARTIES = ['customer', 'staff_member'] as const
 export const PAYMENT_METHODS = ['cash', 'bank_transfer', 'cheque', 'other'] as const
+export const EXPENSE_CATEGORIES = [
+  'Transport',
+  'Fuel',
+  'Staff wages',
+  'Equipment maintenance',
+  'Cleaning',
+  'Packaging',
+  'Utilities',
+  'Insurance',
+  'Rent',
+  'Office supplies',
+  'Other',
+] as const
+export const INCOME_CATEGORIES = [
+  'Asset sale',
+  'Scrap / salvage',
+  'Insurance payout',
+  'Interest',
+  'Late fee',
+  'Deposit forfeiture',
+  'Transport',
+  'Miscellaneous',
+  'Other',
+] as const
 export const CLAIM_STATUSES = ['drafted', 'confirmed', 'rejected'] as const
 
 export type UserRole = (typeof USER_ROLES)[number]
@@ -44,6 +68,8 @@ export type DiscrepancyType = (typeof DISCREPANCY_TYPES)[number]
 export type DiscrepancyStatus = (typeof DISCREPANCY_STATUSES)[number]
 export type ResponsibleParty = (typeof RESPONSIBLE_PARTIES)[number]
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number]
+export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number]
+export type IncomeCategory = (typeof INCOME_CATEGORIES)[number]
 export type ClaimStatus = (typeof CLAIM_STATUSES)[number]
 
 const nullableEmail = z.union([z.string().trim().email().max(254), z.literal(''), z.null()]).optional()
@@ -277,6 +303,13 @@ export const expenseInputSchema = z.object({
   description: nullableText(500),
 })
 
+export const incomeInputSchema = z.object({
+  category: z.string().trim().min(1).max(120),
+  amountCents: z.number().int().positive().max(2_000_000_000),
+  incomeDate: isoDateTime,
+  description: nullableText(500),
+})
+
 export const financeMonthSchema = z.object({
   month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Month must use YYYY-MM'),
 })
@@ -330,6 +363,7 @@ export type RetentionNoteCount = z.infer<typeof retentionNoteCountSchema>
 export type WriteOffReversal = z.infer<typeof writeOffReversalSchema>
 export type PaymentInput = z.infer<typeof paymentInputSchema>
 export type ExpenseInput = z.infer<typeof expenseInputSchema>
+export type IncomeInput = z.infer<typeof incomeInputSchema>
 export type FinanceMonth = z.infer<typeof financeMonthSchema>
 export type DashboardMonthQuery = z.infer<typeof dashboardMonthQuerySchema>
 export type DashboardFilters = z.infer<typeof dashboardFilterQuerySchema>

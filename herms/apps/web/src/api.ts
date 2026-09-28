@@ -19,6 +19,7 @@ import type {
   DeliveryNoteCount,
   DeliveryNoteCreate,
   ExpenseInput,
+  IncomeInput,
   PaymentInput,
   PaymentMethod,
   RetentionNoteCreate,
@@ -298,6 +299,16 @@ export type Expense = {
   createdAt: string
 }
 
+export type OtherIncome = {
+  id: string
+  category: string
+  amountCents: number
+  incomeDate: string
+  description: string | null
+  createdBy: string | null
+  createdAt: string
+}
+
 export type MonthlyFinance = {
   month: string
   incomeCents: number
@@ -317,6 +328,13 @@ export type MonthlyFinance = {
     customerName: string
     orderNumber: string
     method: PaymentMethod
+    amountCents: number
+  }>
+  recentOtherIncomes: Array<{
+    id: string
+    incomeDate: string
+    category: string
+    description: string | null
     amountCents: number
   }>
   recentExpenses: Array<{
@@ -711,6 +729,8 @@ export const api = {
     request<CustomerBalance>(`/api/customers/${id}/balance`),
   recordExpense: (input: ExpenseInput) =>
     request<Expense>('/api/expenses', { method: 'POST', body: JSON.stringify(input) }),
+  recordIncome: (input: IncomeInput) =>
+    request<OtherIncome>('/api/incomes', { method: 'POST', body: JSON.stringify(input) }),
   monthlyFinance: (month: string) =>
     request<MonthlyFinance>(`/api/finance/monthly?month=${encodeURIComponent(month)}`),
   claimableDiscrepancies: () =>
