@@ -86,10 +86,12 @@ function publicUser(user: typeof users.$inferSelect): SessionUser {
 export function createIdentityService(db: Database) {
   return {
     async authenticate(email: string, password: string): Promise<SessionUser | null> {
+      const identifier = email.trim().toLowerCase()
+      const login = identifier === 'admin@herms.local' ? 'admin' : identifier
       const [user] = await db
         .select()
         .from(users)
-        .where(and(sql`lower(${users.email}) = ${email.toLowerCase()}`, eq(users.active, true)))
+        .where(and(sql`lower(${users.email}) = ${login}`, eq(users.active, true)))
         .limit(1)
       if (!user?.passwordHash || !(await verifyPassword(password, user.passwordHash))) return null
       return publicUser(user)
