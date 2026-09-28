@@ -383,8 +383,7 @@
 }
 
 .confirm-dialog {
-  max-width: calc(100vw - 1.5rem);
-  max-height: min(90dvh, 52rem);
+  max-height: min(90dvh, 32rem);
 }
 
 .page-actions {

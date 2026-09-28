@@ -965,6 +965,7 @@ describe('Phase 1 API', () => {
       '/api/approvals',
       '/api/stock',
       '/api/finance/monthly?month=2026-08',
+      '/api/finance/export?month=2026-08',
       '/api/claims',
       '/api/dashboard/stock',
       '/api/dashboard/escalations',
@@ -1548,6 +1549,25 @@ describe('Phase 6 API', () => {
       '/api/customers/20000000-0000-4000-8000-000000000001/balance',
       { headers: { Cookie: ownerCookie } },
     )).status).toBe(403)
+
+    const pdf = await app.request('/api/finance/export?month=2026-08', {
+      headers: { Cookie: financeCookie },
+    })
+    expect(pdf.status).toBe(200)
+    expect(pdf.headers.get('content-type')).toContain('application/pdf')
+    expect(pdf.headers.get('content-disposition')).toContain('herms-finance-2026-08.pdf')
+    expect(pdf.headers.get('cache-control')).toBe('private, no-store')
+    expect(new TextDecoder().decode((await pdf.arrayBuffer()).slice(0, 4))).toBe('%PDF')
+    expect((await app.request('/api/finance/export?month=2026-13', {
+      headers: { Cookie: financeCookie },
+    })).status).toBe(400)
+    expect((await app.request('/api/finance/export?month=2026-08', {
+      headers: { Cookie: ownerCookie },
+    })).status).toBe(200)
+    const salesCookie = await sessionCookie(app, 'sales')
+    expect((await app.request('/api/finance/export?month=2026-08', {
+      headers: { Cookie: salesCookie },
+    })).status).toBe(403)
   })
 })
 
