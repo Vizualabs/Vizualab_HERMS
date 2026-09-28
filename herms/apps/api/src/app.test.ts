@@ -379,6 +379,18 @@ function createServices() {
       ...input,
       expenseDate: new Date(input.expenseDate),
     }),
+    recordIncome: async (input: {
+      category: string
+      amountCents: number
+      incomeDate: string
+      description?: string | null
+    }) => ({
+      id: '93100000-0000-4000-8000-000000000001',
+      createdBy: user('finance').id,
+      createdAt: new Date(),
+      ...input,
+      incomeDate: new Date(input.incomeDate),
+    }),
     getMonthly: async (month: string) => ({
       month,
       incomeCents: 500,
@@ -395,6 +407,13 @@ function createServices() {
         orderNumber: order.orderNumber,
         method: 'bank_transfer' as const,
         amountCents: 500,
+      }],
+      recentOtherIncomes: [{
+        id: '93100000-0000-4000-8000-000000000001',
+        incomeDate: '2026-08-27T06:30:00.000Z',
+        category: 'Asset sale',
+        description: 'Used chafing dish',
+        amountCents: 1500,
       }],
       recentExpenses: [{
         id: '93000000-0000-4000-8000-000000000001',
@@ -1023,6 +1042,15 @@ describe('Phase 2 API', () => {
     expect(converted.status).toBe(201)
   })
 
+  test('lets sales convert a sent quotation without waiting for customer acceptance', async () => {
+    const app = createApp({ healthCheck: async () => 1, ...createServices(), auth: TEST_AUTH })
+    const cookie = await sessionCookie(app, 'sales')
+    const converted = await app.request('/api/quotations/30000000-0000-4000-8000-000000000001/order', {
+      method: 'POST', headers: { Cookie: cookie, 'Content-Type': 'application/json' }, body: '{}',
+    })
+    expect(converted.status).toBe(201)
+  })
+
   test('denies non-Sales roles and only exposes expiry to System Admin', async () => {
     const app = createTestApp()
     const fieldCookie = await sessionCookie(app, 'field_staff')
@@ -1450,6 +1478,18 @@ describe('Phase 6 API', () => {
     })
     expect(expense.status).toBe(201)
 
+    const income = await app.request('/api/incomes', {
+      method: 'POST',
+      headers: { Cookie: financeCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        category: 'Asset sale',
+        amountCents: 1500,
+        incomeDate: '2026-08-27T12:00:00+05:30',
+        description: 'Used chafing dish',
+      }),
+    })
+    expect(income.status).toBe(201)
+
     const salesCookie = await sessionCookie(app, 'sales')
     expect((await app.request('/api/payments', {
       method: 'POST',
@@ -1485,6 +1525,7 @@ describe('Phase 6 API', () => {
         outstandingCents: number
         history: unknown[]
         recentPayments: unknown[]
+        recentOtherIncomes: unknown[]
         recentExpenses: unknown[]
         outstandingBalances: unknown[]
       }
@@ -1492,6 +1533,7 @@ describe('Phase 6 API', () => {
     expect(monthlyPayload.data.outstandingCents).toBe(2000)
     expect(monthlyPayload.data.history).toHaveLength(1)
     expect(monthlyPayload.data.recentPayments).toHaveLength(1)
+    expect(monthlyPayload.data.recentOtherIncomes).toHaveLength(1)
     expect(monthlyPayload.data.recentExpenses).toHaveLength(1)
     expect(monthlyPayload.data.outstandingBalances).toHaveLength(1)
     expect((await app.request('/api/finance/monthly?month=2026-13', {

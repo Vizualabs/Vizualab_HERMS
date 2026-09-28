@@ -488,7 +488,13 @@ export function createCommercialService(db: Database, config: CommercialConfig) 
     async convertQuotationToOrder(id: string, actor: AuditActor) {
       const before = await quotationHeader(id, actor)
       const now = new Date()
-      if (before.status !== 'accepted') throw new DataConflictError('Only an accepted quotation may be converted to an order')
+      const skipCustomerApproval = before.status === 'sent'
+      if (skipCustomerApproval && (!before.expiresAt || before.expiresAt <= now)) {
+        throw new DataConflictError('An expired quotation cannot be converted to an order')
+      }
+      if (before.status !== 'sent' && before.status !== 'accepted') {
+        throw new DataConflictError('Only a sent or accepted quotation may be converted to an order')
+      }
       const [existing] = await db.select({ id: orders.id }).from(orders).where(eq(orders.quotationId, id)).limit(1)
       if (existing) throw new DataConflictError('This quotation has already been converted to an order')
       const orderId = crypto.randomUUID()
@@ -497,8 +503,23 @@ export function createCommercialService(db: Database, config: CommercialConfig) 
         db.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${id}))`),
         db.execute(sql`INSERT INTO ${orders} (id, order_number, quotation_id, customer_id, status, total_value_cents, created_by, created_at, updated_at)
           SELECT ${orderId}::uuid, ${orderNumber}, ${id}::uuid, customer_id, 'open'::order_status, total_value_cents, ${actor.id}::uuid, ${now}, ${now}
-          FROM ${quotations} WHERE ${quotations.id} = ${id}::uuid AND ${quotations.status} = 'accepted'
+          FROM ${quotations} WHERE ${quotations.id} = ${id}::uuid
+            AND (
+              ${quotations.status} = 'accepted'
+              OR (${quotations.status} = 'sent' AND ${quotations.expiresAt} > ${now})
+            )
             AND NOT EXISTS (SELECT 1 FROM ${orders} WHERE ${orders.quotationId} = ${id}::uuid)`),
+        db.update(quotations).set({ status: 'accepted', updatedAt: now }).where(and(
+          eq(quotations.id, id),
+          eq(quotations.status, 'sent'),
+          sql`EXISTS (SELECT 1 FROM ${orders} WHERE ${orders.id} = ${orderId}::uuid)`,
+        )),
+        db.update(noteTokens).set({ status: 'used', usedAt: now }).where(and(
+          eq(noteTokens.noteType, 'quotation'),
+          eq(noteTokens.noteId, id),
+          eq(noteTokens.status, 'active'),
+          sql`EXISTS (SELECT 1 FROM ${orders} WHERE ${orders.id} = ${orderId}::uuid)`,
+        )),
         db.execute(sql`INSERT INTO ${orderLines} (id, order_id, equipment_item_id, quantity, unit_price_cents, line_total_cents)
           SELECT gen_random_uuid(), ${orderId}::uuid, equipment_item_id, quantity, unit_price_cents, line_total_cents
           FROM ${quotationLines} WHERE quotation_id = ${id}::uuid AND EXISTS (SELECT 1 FROM ${orders} WHERE ${orders.id} = ${orderId}::uuid)`),
@@ -507,6 +528,10 @@ export function createCommercialService(db: Database, config: CommercialConfig) 
               updated_at = ${now}
           WHERE id = ${before.customerId}::uuid
             AND EXISTS (SELECT 1 FROM ${orders} WHERE ${orders.id} = ${orderId}::uuid)`),
+        ...(skipCustomerApproval ? [db.execute(sql`INSERT INTO ${auditLogs} (actor_type, actor_id, action, entity_type, entity_id, before, after, request_id)
+          SELECT 'user'::audit_actor_type, ${actor.id}::uuid, 'quotation.accept', 'quotation', ${id}::uuid,
+          ${JSON.stringify(auditSnapshot(before))}::jsonb, to_jsonb(quotation.*), ${actor.requestId}
+          FROM ${quotations} WHERE ${quotations.id} = ${id}::uuid AND EXISTS (SELECT 1 FROM ${orders} WHERE ${orders.id} = ${orderId}::uuid)`)] : []),
         db.execute(sql`INSERT INTO ${auditLogs} (actor_type, actor_id, action, entity_type, entity_id, before, after, request_id)
           SELECT 'user'::audit_actor_type, ${actor.id}::uuid, 'order.create', 'order', ${orderId}::uuid,
           NULL, to_jsonb("order".*), ${actor.requestId} FROM ${orders} WHERE ${orders.id} = ${orderId}::uuid`),

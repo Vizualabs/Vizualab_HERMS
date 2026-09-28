@@ -80,6 +80,7 @@ type MonthlyRow = {
   pendingAmountCents: number | string
   receivedAmountCents: number | string
   expenseAmountCents: number | string
+  otherIncomeAmountCents: number | string
 }
 
 export function createDashboardService(db: Database, config: DashboardConfig) {
@@ -101,7 +102,10 @@ export function createDashboardService(db: Database, config: DashboardConfig) {
           AS "receivedAmountCents",
         coalesce(sum(rollup."expense_amount_cents")
           FILTER (WHERE rollup."month_start" = requested."month"), 0)::bigint
-          AS "expenseAmountCents"
+          AS "expenseAmountCents",
+        coalesce(sum(rollup."other_income_amount_cents")
+          FILTER (WHERE rollup."month_start" = requested."month"), 0)::bigint
+          AS "otherIncomeAmountCents"
       FROM requested
       LEFT JOIN ${dashboardMonthlyRollups} rollup
         ON rollup."month_start" <= requested."month"
@@ -113,12 +117,14 @@ export function createDashboardService(db: Database, config: DashboardConfig) {
       pendingAmountCents: safeInteger(row.pendingAmountCents, 'Pending payments'),
       receivedAmountCents: safeInteger(row.receivedAmountCents, 'Received payments'),
       expenseAmountCents: safeInteger(row.expenseAmountCents, 'Expenses'),
+      otherIncomeAmountCents: safeInteger(row.otherIncomeAmountCents, 'Other income'),
     }]))
     const empty = (target: string) => ({
       month: target,
       pendingAmountCents: 0,
       receivedAmountCents: 0,
       expenseAmountCents: 0,
+      otherIncomeAmountCents: 0,
     })
     return {
       current: decoded.get(month) ?? empty(month),
@@ -193,12 +199,15 @@ export function createDashboardService(db: Database, config: DashboardConfig) {
   async function getIncomeExpenses(month?: string): Promise<DashboardIncomeExpenses> {
     const selectedMonth = month ?? monthInTimezone(config.timezone)
     const rows = await monthlyRows(selectedMonth)
-    const period = (row: typeof rows.current) => ({
-      month: row.month,
-      incomeCents: row.receivedAmountCents,
-      expenseCents: row.expenseAmountCents,
-      netPositionCents: row.receivedAmountCents - row.expenseAmountCents,
-    })
+    const period = (row: typeof rows.current) => {
+      const incomeCents = row.receivedAmountCents + row.otherIncomeAmountCents
+      return {
+        month: row.month,
+        incomeCents,
+        expenseCents: row.expenseAmountCents,
+        netPositionCents: incomeCents - row.expenseAmountCents,
+      }
+    }
     return {
       currency: config.currency,
       timezone: config.timezone,

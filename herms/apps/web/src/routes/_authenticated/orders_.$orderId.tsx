@@ -118,8 +118,8 @@ function OrderDetailPage() {
   return <div>
     <Link to="/orders" className="text-sm font-medium text-primary hover:underline">Back to orders</Link>
     <div className="mt-5 grid gap-6 lg:grid-cols-[1fr_22rem]">
-      <section className="rounded-2xl border border-border bg-card p-6">
-        <div className="flex items-start justify-between gap-5">
+      <section className="rounded-2xl border border-border bg-card p-4 sm:p-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-5">
           <div>
             <p className="text-sm text-muted-foreground">Order</p>
             <h1 className="mt-1 text-3xl font-semibold">{data.orderNumber}</h1>

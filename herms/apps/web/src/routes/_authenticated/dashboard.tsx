@@ -307,7 +307,7 @@ function DashboardPage() {
             <span className="hidden sm:inline"> <span aria-hidden="true">&middot;</span> auto-updates every minute</span>
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="page-actions">
           <button
             type="button"
             className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm font-semibold text-foreground transition hover:border-primary/40 hover:bg-primary-soft/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-soft disabled:cursor-wait disabled:opacity-60"
@@ -914,7 +914,7 @@ function IncomeExpenseChart({
         <svg
           role="group"
           aria-labelledby="income-expense-chart-title income-expense-chart-description"
-          className="h-auto w-full min-w-[430px]"
+          className="h-auto w-full min-w-0"
           viewBox={`0 0 ${width} ${height}`}
         >
           <title id="income-expense-chart-title">Monthly income versus expenses</title>
@@ -1084,7 +1084,7 @@ function PaymentLineChart({ rows, currency }: { rows: ChartPayment[]; currency: 
         <svg
           role="group"
           aria-labelledby="payment-chart-title payment-chart-description"
-          className="h-auto w-full min-w-[430px]"
+          className="h-auto w-full min-w-0"
           viewBox={`0 0 ${width} ${height}`}
         >
           <title id="payment-chart-title">Received versus pending payments</title>
