@@ -64,6 +64,7 @@ import { jsonLogger, type AppLogger } from './logger'
 import { requestContext, type AppEnv } from './request-context'
 import { createQuotationPdf } from './quotation-pdf'
 import { createDashboardPdf, createDashboardXlsx } from './dashboard-export'
+import { createFinancePdf } from './finance-export'
 import { createDeliveryNotePdf, createRetentionNotePdf } from './note-pdf'
 
 export type AppDependencies = {
@@ -430,6 +431,29 @@ export function createApp({
         )
       }
       return c.json({ data: await finance.getMonthly(parsed.data.month) })
+    })
+    .get('/api/finance/export', requireRoles('finance', 'business_owner'), async (c) => {
+      const parsed = financeMonthSchema.safeParse(c.req.query())
+      if (!parsed.success) {
+        return errorResponse(
+          c,
+          400,
+          'VALIDATION_ERROR',
+          'The request contains invalid data',
+          parsed.error.issues.map((issue) => ({
+            field: issue.path.join('.') || 'query',
+            code: issue.code,
+            message: issue.message,
+          })),
+        )
+      }
+      const report = await finance.getMonthly(parsed.data.month)
+      const download = Uint8Array.from(await createFinancePdf(report))
+      return c.body(download, 200, {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="herms-finance-${report.month}.pdf"`,
+        'Cache-Control': 'private, no-store',
+      })
     })
 
   const claimRoutes = financeRoutes

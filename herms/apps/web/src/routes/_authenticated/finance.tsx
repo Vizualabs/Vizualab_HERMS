@@ -61,75 +61,6 @@ function categoryChoices(standard: readonly string[], recorded: string[]) {
   return [...standard, ...extra]
 }
 
-function csvCell(value: string | number) {
-  const text = String(value)
-  return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text
-}
-
-function downloadFinanceReport(report: MonthlyFinance) {
-  const rows: Array<Array<string | number>> = [
-    ['HERMS Payments & Finance report'],
-    ['Reporting month', formatMonth(report.month)],
-    [],
-    ['Summary'],
-    ['Received', report.incomeCents / 100],
-    ['Outstanding', report.outstandingCents / 100],
-    ['Expenses', report.expenseCents / 100],
-    ['Net position', report.netPositionCents / 100],
-    [],
-    ['Six-month history'],
-    ['Month', 'Income', 'Expenses'],
-    ...report.history.map((row) => [row.month, row.incomeCents / 100, row.expenseCents / 100]),
-    [],
-    ['Payments received'],
-    ['Date', 'Customer', 'Order', 'Method', 'Amount'],
-    ...report.recentPayments.map((row) => [
-      formatDate(row.paymentDate, report.timezone),
-      row.customerName,
-      row.orderNumber,
-      formatMethod(row.method),
-      row.amountCents / 100,
-    ]),
-    [],
-    ['Other income'],
-    ['Date', 'Category', 'Description', 'Amount'],
-    ...report.recentOtherIncomes.map((row) => [
-      formatDate(row.incomeDate, report.timezone),
-      row.category,
-      row.description ?? '',
-      row.amountCents / 100,
-    ]),
-    [],
-    ['Expenses'],
-    ['Date', 'Category', 'Description', 'Amount'],
-    ...report.recentExpenses.map((row) => [
-      formatDate(row.expenseDate, report.timezone),
-      row.category,
-      row.description ?? '',
-      row.amountCents / 100,
-    ]),
-    [],
-    ['Outstanding balances'],
-    ['Customer', 'Open orders', 'Invoiced', 'Paid', 'Outstanding'],
-    ...report.outstandingBalances.map((row) => [
-      row.customerName,
-      row.openOrders,
-      row.invoicedCents / 100,
-      row.paidCents / 100,
-      row.outstandingCents / 100,
-    ]),
-  ]
-  const csv = rows.map((row) => row.map(csvCell).join(',')).join('\r\n')
-  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
-  const anchor = document.createElement('a')
-  anchor.href = url
-  anchor.download = `herms-finance-${report.month}.csv`
-  document.body.append(anchor)
-  anchor.click()
-  anchor.remove()
-  URL.revokeObjectURL(url)
-}
-
 function FinancePage() {
   const queryClient = useQueryClient()
   const session = useQuery(sessionQuery)
@@ -197,6 +128,19 @@ function FinancePage() {
       ])
     },
   })
+  const exportReport = useMutation({
+    mutationFn: () => api.downloadFinanceExport(month),
+    onSuccess: ({ blob, filename }) => {
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = filename
+      document.body.append(anchor)
+      anchor.click()
+      anchor.remove()
+      URL.revokeObjectURL(url)
+    },
+  })
 
   if (!canView) {
     return (
@@ -258,13 +202,21 @@ function FinancePage() {
           <button
             type="button"
             className="button-secondary"
-            disabled={!monthly.data}
-            onClick={() => monthly.data && downloadFinanceReport(monthly.data)}
+            disabled={exportReport.isPending}
+            onClick={() => exportReport.mutate()}
           >
-            Export report
+            {exportReport.isPending ? 'Preparing…' : 'Export report'}
           </button>
         </div>
       </header>
+
+      {exportReport.error && (
+        <p role="alert" className="rounded-xl bg-danger-soft px-4 py-3 text-sm text-danger">
+          {exportReport.error instanceof ApiError
+            ? exportReport.error.message
+            : 'Unable to download the report'}
+        </p>
+      )}
 
       {monthly.isPending && (
         <>
@@ -334,7 +286,6 @@ function FinancePage() {
             open={entryDialog === 'payment'}
             title="Record payment"
             titleId={paymentTitleId}
-            wide
             onClose={() => setEntryDialog(null)}
           >
             <p className="mt-1 text-sm text-muted-foreground">
@@ -1034,7 +985,7 @@ function CategoryEntryForm({
       </label>
       <label className="flex flex-col gap-2 text-sm font-medium sm:col-span-2">
         Description
-        <textarea className="input min-h-24" name="description" maxLength={500} autoComplete="off" />
+        <textarea className="input min-h-16" name="description" maxLength={500} autoComplete="off" />
       </label>
       {error && <div className="sm:col-span-2"><ErrorText error={error} fallback="Unable to save this entry" /></div>}
       {saved && <p role="status" aria-live="polite" className="text-sm font-medium text-primary-strong sm:col-span-2">{savedMessage}</p>}
@@ -1051,14 +1002,12 @@ function FinanceFormDialog({
   titleId,
   onClose,
   children,
-  wide = false,
 }: {
   open: boolean
   title: string
   titleId: string
   onClose: () => void
   children: ReactNode
-  wide?: boolean
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null)
 
@@ -1076,15 +1025,20 @@ function FinanceFormDialog({
     <dialog
       ref={dialogRef}
       aria-labelledby={titleId}
-      className={`confirm-dialog m-auto w-[calc(100%-2rem)] ${wide ? 'max-w-3xl' : 'max-w-lg'} rounded-2xl border border-border bg-card p-0 text-foreground shadow-xl backdrop:bg-foreground/35`}
+      className="m-auto w-[calc(100%-2rem)] max-w-lg rounded-2xl border border-border bg-card p-0 text-foreground shadow-xl backdrop:bg-foreground/35"
       onClose={onClose}
     >
       {open && (
-        <div className="max-h-[min(90vh,52rem)] overflow-y-auto p-5">
-          <div className="flex items-start justify-between gap-3">
+        <div className="max-h-[min(85dvh,36rem)] overflow-y-auto p-5">
+          <div className="flex items-start justify-between gap-4">
             <h2 id={titleId} className="text-base font-semibold">{title}</h2>
-            <button type="button" className="button-secondary shrink-0" onClick={onClose}>
-              Close
+            <button
+              type="button"
+              aria-label="Close"
+              className="flex size-8 shrink-0 items-center justify-center rounded-lg text-xl leading-none text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={onClose}
+            >
+              &times;
             </button>
           </div>
           {children}

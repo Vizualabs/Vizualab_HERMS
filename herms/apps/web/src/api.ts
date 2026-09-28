@@ -613,15 +613,8 @@ function dashboardQuery(filters: DashboardFilters = {}) {
   return query.toString()
 }
 
-async function downloadDashboardExport(
-  format: 'pdf' | 'xlsx',
-  filters: DashboardFilters,
-) {
-  const query = dashboardQuery({ ...filters })
-  const response = await fetch(
-    `/api/dashboard/export?format=${format}${query ? `&${query}` : ''}`,
-    { credentials: 'same-origin' },
-  )
+async function downloadAttachment(path: string, fallbackFilename: string) {
+  const response = await fetch(path, { credentials: 'same-origin' })
   if (!response.ok) {
     const payload = await response.json().catch(() => null) as {
       error?: { code?: string; message?: string }
@@ -633,9 +626,26 @@ async function downloadDashboardExport(
     )
   }
   const disposition = response.headers.get('content-disposition') ?? ''
-  const filename = disposition.match(/filename="([^"]+)"/)?.[1]
-    ?? `herms-management-report.${format}`
+  const filename = disposition.match(/filename="([^"]+)"/)?.[1] ?? fallbackFilename
   return { blob: await response.blob(), filename }
+}
+
+async function downloadDashboardExport(
+  format: 'pdf' | 'xlsx',
+  filters: DashboardFilters,
+) {
+  const query = dashboardQuery({ ...filters })
+  return downloadAttachment(
+    `/api/dashboard/export?format=${format}${query ? `&${query}` : ''}`,
+    `herms-management-report.${format}`,
+  )
+}
+
+async function downloadFinanceExport(month: string) {
+  return downloadAttachment(
+    `/api/finance/export?month=${encodeURIComponent(month)}`,
+    `herms-finance-${month}.pdf`,
+  )
 }
 
 export const api = {
@@ -808,6 +818,7 @@ export const api = {
       `/api/dashboard/escalations${percent === undefined ? '' : `?percent=${encodeURIComponent(String(percent))}`}`,
     ),
   downloadDashboardExport,
+  downloadFinanceExport,
 }
 
 export function formatMinorUnits(value: number) {
