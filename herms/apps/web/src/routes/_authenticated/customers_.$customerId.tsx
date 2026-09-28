@@ -63,8 +63,8 @@ function CustomerDetailPage() {
         ← Customers
       </Link>
       <div className="mt-5 grid gap-8 lg:grid-cols-2">
-        <section className="rounded-2xl border border-border bg-card p-6">
-          <div className="flex items-start justify-between gap-4">
+        <section className="rounded-2xl border border-border bg-card p-4 sm:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="text-sm text-muted-foreground">Customer</p>
               <h1 className="mt-1 text-3xl font-semibold">{customer.data.name}</h1>

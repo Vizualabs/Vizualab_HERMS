@@ -77,3 +77,16 @@ describe('Delivery Note field-link boundary', () => {
     expect(deliveryFieldSubmissionIssue('approved', false)).toContain('not open')
   })
 })
+
+describe('Delivery Note admin count discrepancy', () => {
+  test('updates the discrepancy to issued minus admin count', async () => {
+    const delivery = await Bun.file(new URL('./delivery.ts', import.meta.url)).text()
+    const countNote = delivery.slice(
+      delivery.indexOf('async countNote'),
+      delivery.indexOf('async approveNote'),
+    )
+    expect(countNote).toContain('line.issued_qty - line.counted_qty')
+    expect(countNote).toContain('line.issued_qty > line.counted_qty')
+    expect(countNote).toContain('line.issued_qty = line.counted_qty')
+  })
+})

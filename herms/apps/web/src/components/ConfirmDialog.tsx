@@ -65,7 +65,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
         aria-labelledby={titleId}
         aria-describedby={messageId}
         role="alertdialog"
-        className="confirm-dialog m-auto w-[calc(100%-2rem)] max-w-md rounded-2xl border border-border bg-card p-0 text-foreground shadow-xl backdrop:bg-foreground/35"
+        className="confirm-dialog m-auto w-[calc(100%-1.5rem)] max-w-md overflow-y-auto rounded-2xl border border-border bg-card p-0 text-foreground shadow-xl backdrop:bg-foreground/35"
         onClose={() => {
           if (resolverRef.current) settle(false)
         }}

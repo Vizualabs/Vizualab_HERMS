@@ -183,7 +183,7 @@ export function SearchableSelect({
                     aria-selected={option.value === value}
                     aria-disabled={option.disabled || undefined}
                     disabled={option.disabled}
-                    className={`flex w-full px-3 py-2 text-left text-sm ${
+                    className={`flex w-full px-3 py-2 text-left text-sm break-words ${
                       option.disabled
                         ? 'cursor-not-allowed text-[#9aa8b0]'
                         : index === activeIndex

@@ -1,7 +1,7 @@
 import { isSuperUser, type SessionUser } from '@herms/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, useNavigate } from '@tanstack/react-router'
-import { useEffect } from 'react'
+import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
+import { useEffect, useId, useState } from 'react'
 
 import { api } from '../api'
 import {
@@ -59,6 +59,9 @@ export function AppShell({
 }) {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
+  const pathname = useRouterState({ select: (state) => state.location.pathname })
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuTitleId = useId()
   const logout = useMutation({
     mutationFn: api.logout,
     onSettled: async () => {
@@ -136,9 +139,27 @@ export function AppShell({
 
   const signOut = () => logout.mutate()
 
+  useEffect(() => {
+    setMenuOpen(false)
+  }, [pathname])
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMenuOpen(false)
+    }
+    document.addEventListener('keydown', onKeyDown)
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      document.body.style.overflow = previousOverflow
+    }
+  }, [menuOpen])
+
   return (
     <ConfirmProvider>
-    <div className="min-h-screen bg-background text-foreground lg:flex">
+    <div className="min-h-screen overflow-x-clip bg-background text-foreground lg:flex">
       <a
         href="#main-content"
         className="sr-only z-50 rounded-md bg-card px-4 py-2 text-sm font-semibold text-primary-strong focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:ring-2 focus:ring-ring"
@@ -171,32 +192,81 @@ export function AppShell({
       </aside>
 
       <div className="min-w-0 flex-1">
-        <header className="app-sidebar app-sidebar-border border-b lg:hidden">
-          <div className="flex items-center justify-between gap-4 px-4 py-3">
+        <header className="app-sidebar app-sidebar-border sticky top-0 z-40 border-b lg:hidden">
+          <div className="flex items-center gap-3 px-3 py-3">
+            <button
+              type="button"
+              className="inline-flex size-10 shrink-0 items-center justify-center rounded-lg text-sidebar-accent-foreground hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-primary"
+              aria-expanded={menuOpen}
+              aria-controls="mobile-navigation"
+              aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              {menuOpen ? <CloseMenuIcon /> : <MenuIcon />}
+            </button>
             <Brand compact />
-            <div className="min-w-0 text-right">
+            <div className="ml-auto min-w-0 text-right">
               <p className="truncate text-xs font-medium text-sidebar-accent-foreground">{user.name}</p>
-              <button
-                type="button"
-                className="mt-1 text-xs text-sidebar-foreground/75 underline-offset-4 hover:text-sidebar-accent-foreground hover:underline"
-                onClick={signOut}
-                disabled={logout.isPending}
-              >
-                Sign out
-              </button>
+              <p className="mt-0.5 truncate text-[11px] capitalize text-sidebar-foreground/65">
+                {user.role.replaceAll('_', ' ')}
+              </p>
             </div>
           </div>
-          <nav
-            aria-label="Primary navigation"
-            className="mobile-nav-scroll flex gap-1 overflow-x-auto px-3 pb-3"
-          >
-            <NavigationLinks items={navigation} mobile />
-          </nav>
         </header>
+
+        {menuOpen && (
+          <div className="fixed inset-0 z-50 lg:hidden">
+            <button
+              type="button"
+              className="absolute inset-0 bg-foreground/40"
+              aria-label="Close menu"
+              onClick={() => setMenuOpen(false)}
+            />
+            <aside
+              id="mobile-navigation"
+              aria-labelledby={menuTitleId}
+              className="app-sidebar relative flex h-full w-[min(19rem,88vw)] flex-col shadow-xl"
+            >
+              <div className="app-sidebar-border flex items-center justify-between border-b px-3 py-3">
+                <p id={menuTitleId} className="px-2 text-sm font-semibold text-sidebar-accent-foreground">
+                  Menu
+                </p>
+                <button
+                  type="button"
+                  className="inline-flex size-10 items-center justify-center rounded-lg text-sidebar-accent-foreground hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-primary"
+                  aria-label="Close menu"
+                  onClick={() => setMenuOpen(false)}
+                >
+                  <CloseMenuIcon />
+                </button>
+              </div>
+              <nav aria-label="Primary navigation" className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
+                <NavigationLinks items={navigation} />
+              </nav>
+              <div className="app-sidebar-border border-t px-3 py-4">
+                <div className="mb-3 px-3">
+                  <p className="truncate text-sm font-medium text-sidebar-accent-foreground">{user.name}</p>
+                  <p className="mt-0.5 truncate text-xs capitalize text-sidebar-foreground/65">
+                    {user.role.replaceAll('_', ' ')}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="app-nav-link flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-primary"
+                  onClick={signOut}
+                  disabled={logout.isPending}
+                >
+                  <SignOutIcon />
+                  {logout.isPending ? 'Signing out…' : 'Sign out'}
+                </button>
+              </div>
+            </aside>
+          </div>
+        )}
 
         <main
           id="main-content"
-          className="app-main mx-auto w-full max-w-[1500px] px-4 py-6 sm:px-6 lg:px-7 lg:py-6"
+          className="app-main mx-auto w-full max-w-[1500px] px-3 py-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:px-6 lg:px-7 lg:py-6"
         >
           {children}
         </main>
@@ -226,23 +296,19 @@ function Brand({ compact = false }: { compact?: boolean }) {
 
 function NavigationLinks({
   items,
-  mobile = false,
 }: {
   items: NavigationItem[]
-  mobile?: boolean
 }) {
   return items.filter((item) => item.visible).map((item) => (
     <Link
       key={item.to}
       to={item.to}
-      className={mobile
-        ? 'app-nav-link flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-primary'
-        : 'app-nav-link flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-primary'}
+      className="app-nav-link flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-primary"
       activeProps={{ className: 'app-nav-link-active' }}
       aria-label={item.badge ? `${item.label}, ${item.badge} ${item.badgeNoun ?? 'pending'}` : item.label}
     >
       <NavIcon name={item.icon} />
-      <span>{item.label}</span>
+      <span className="min-w-0 flex-1 truncate">{item.label}</span>
       {item.badge ? <NavBadge count={item.badge} /> : null}
     </Link>
   ))
@@ -294,6 +360,22 @@ function NavIcon({ name }: { name: IconName }) {
     return <svg {...common}><path d="M10.3 2.8 2.4 17a2 2 0 0 0 1.8 3h15.6a2 2 0 0 0 1.8-3L13.7 2.8a2 2 0 0 0-3.4 0Z" /><path d="M12 9v4M12 17h.01" /></svg>
   }
   return <svg {...common}><path d="M4 6h16M4 10h16M6 3v3M18 3v3" /><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M7 15h4M7 18h7" /></svg>
+}
+
+function MenuIcon() {
+  return (
+    <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+      <path d="M4 7h16M4 12h16M4 17h16" />
+    </svg>
+  )
+}
+
+function CloseMenuIcon() {
+  return (
+    <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+      <path d="M6 6l12 12M18 6 6 18" />
+    </svg>
+  )
 }
 
 function SignOutIcon() {

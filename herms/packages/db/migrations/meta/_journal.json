@@ -120,6 +120,13 @@
       "when": 1789441216000,
       "tag": "0016_equipment_item_purge",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1789441217000,
+      "tag": "0017_other_income",
+      "breakpoints": true
     }
   ]
 }

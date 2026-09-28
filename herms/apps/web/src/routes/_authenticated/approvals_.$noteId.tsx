@@ -170,7 +170,7 @@ function Header({ label, number, note }: {
   number: string
   note: ApprovalNote
 }) {
-  return <div className="flex items-start justify-between gap-4">
+  return <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
     <div>
       <p className="text-sm text-muted-foreground">{label}</p>
       <h1 className="mt-1 text-3xl font-semibold">{number}</h1>

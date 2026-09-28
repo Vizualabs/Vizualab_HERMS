@@ -81,6 +81,13 @@ async function routeStableFinanceReport(page: Page) {
             method: 'bank_transfer',
             amountCents: 25_000,
           }],
+          recentOtherIncomes: [{
+            id: 'income-report-1',
+            incomeDate: '2026-09-10T00:00:00.000Z',
+            category: 'Asset sale',
+            description: 'Used chafing dish',
+            amountCents: 8_000,
+          }],
           recentExpenses: [{
             id: 'expense-report-1',
             expenseDate: '2026-09-10T00:00:00.000Z',
@@ -181,6 +188,20 @@ test.describe('Payments & Finance report', () => {
     await expect(paymentDialog.getByText('Order selected')).toBeVisible()
     await paymentDialog.getByRole('button', { name: 'Close' }).click()
     await expect(paymentDialog).toHaveCount(0)
+
+    await page.getByRole('button', { name: 'Record expense' }).click()
+    const expenseDialog = page.getByRole('dialog', { name: 'Record expense' })
+    await expect(expenseDialog).toBeVisible()
+    const category = expenseDialog.getByLabel('Category')
+    await expect(category).toBeVisible()
+    await expect(category.getByRole('option', { name: 'Transport' })).toHaveCount(1)
+    await expect(category.getByRole('option', { name: 'Fuel' })).toHaveCount(1)
+    await category.selectOption('Transport')
+    await expect(category).toHaveValue('Transport')
+    await category.selectOption({ label: 'Add new category…' })
+    await expect(expenseDialog.getByPlaceholder('Enter new category')).toBeVisible()
+    await expenseDialog.getByRole('button', { name: 'Close' }).click()
+    await expect(expenseDialog).toHaveCount(0)
 
     const download = page.waitForEvent('download')
     await page.getByRole('button', { name: 'Export report' }).click()
@@ -324,5 +345,21 @@ test.describe('Payments & Finance report', () => {
     await expect(graph.getByText('Apr', { exact: true })).toHaveCount(0)
     await expect(graph.getByText('May', { exact: true })).toBeVisible()
     await expect(graph.getByText('Oct', { exact: true })).toBeVisible()
+  })
+
+  test('lets finance select an expense category from the dropdown', async ({ page }) => {
+    await routeStableFinanceReport(page)
+    await signInAsFinance(page)
+
+    await page.getByRole('button', { name: 'Record expense' }).click()
+    const expenseDialog = page.getByRole('dialog', { name: 'Record expense' })
+    await expect(expenseDialog).toBeVisible()
+    const category = expenseDialog.getByLabel('Category')
+    await expect(category.getByRole('option', { name: 'Transport' })).toHaveCount(1)
+    await expect(category.getByRole('option', { name: 'Staff wages' })).toHaveCount(1)
+    await category.selectOption('Fuel')
+    await expect(category).toHaveValue('Fuel')
+    await category.selectOption({ label: 'Add new category…' })
+    await expect(expenseDialog.getByPlaceholder('Enter new category')).toBeVisible()
   })
 })

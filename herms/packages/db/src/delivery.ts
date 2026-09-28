@@ -877,6 +877,29 @@ export function createDeliveryService(db: Database, config: DeliveryConfig) {
           UPDATE ${deliveryNoteLines} line SET counted_qty = input."countedQty"
           FROM input_lines input, updated_note note
           WHERE line.id = input."lineId" AND line.delivery_note_id = note.id
+          RETURNING line.*
+        ), upserted AS (
+          INSERT INTO ${discrepancies} (id, source_type, source_note_id, source_line_id, order_id, equipment_item_id, quantity, discrepancy_type, reason, responsible_party, value_cents, status, created_at, resolved_at, updated_at)
+          SELECT gen_random_uuid(), 'delivery_note', ${id}::uuid, line.id, note.order_id, line.equipment_item_id,
+            line.issued_qty - line.counted_qty,
+            COALESCE(line.mismatch_reason, 'missing'),
+            line.mismatch_detail, NULL, 0, 'open', ${now}, NULL, ${now}
+          FROM updated_lines line
+          JOIN ${deliveryNotes} note ON note.id = line.delivery_note_id
+          WHERE line.counted_qty IS NOT NULL AND line.issued_qty > line.counted_qty
+          ON CONFLICT (source_type, source_line_id) WHERE source_line_id IS NOT NULL DO UPDATE
+          SET quantity = EXCLUDED.quantity,
+            discrepancy_type = EXCLUDED.discrepancy_type,
+            reason = COALESCE(EXCLUDED.reason, ${discrepancies}.reason),
+            status = 'open', resolved_at = NULL, updated_at = EXCLUDED.updated_at
+          RETURNING id
+        ), resolved AS (
+          UPDATE ${discrepancies} discrepancy
+          SET status = 'resolved', resolved_at = ${now}, updated_at = ${now}
+          FROM updated_lines line
+          WHERE discrepancy.source_type = 'delivery_note' AND discrepancy.source_line_id = line.id
+            AND line.counted_qty IS NOT NULL AND line.issued_qty = line.counted_qty AND discrepancy.status = 'open'
+          RETURNING discrepancy.id
         ), revoked AS (
           UPDATE ${noteTokens} SET status = 'revoked'
           WHERE note_type = 'delivery_note' AND note_id = ${id}::uuid AND status IN ('active', 'used') AND EXISTS (SELECT 1 FROM updated_note)
@@ -884,6 +907,10 @@ export function createDeliveryService(db: Database, config: DeliveryConfig) {
       `)
       const [mutation] = await db.batch([
         mutationQuery,
+        db.execute(sql`INSERT INTO ${auditLogs} (actor_type, actor_id, action, entity_type, entity_id, before, after, request_id)
+          SELECT 'user'::audit_actor_type, ${actor.id}::uuid, 'discrepancy.record', 'discrepancy', id,
+          NULL, to_jsonb(discrepancy.*), ${actor.requestId} FROM ${discrepancies}
+          WHERE source_type = 'delivery_note' AND source_note_id = ${id}::uuid AND updated_at = ${now}`),
         db.execute(sql`INSERT INTO ${auditLogs} (actor_type, actor_id, action, entity_type, entity_id, before, after, request_id)
           SELECT 'user'::audit_actor_type, ${actor.id}::uuid, 'delivery_note.count', 'delivery_note', note.id,
           ${JSON.stringify(snapshot(before))}::jsonb, to_jsonb(note.*), ${actor.requestId} FROM ${deliveryNotes} note

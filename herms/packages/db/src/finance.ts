@@ -1,5 +1,6 @@
 import type {
   ExpenseInput,
+  IncomeInput,
   PaymentInput,
   SessionUser,
 } from '@herms/shared'
@@ -12,6 +13,7 @@ import {
   damageClaims,
   equipmentItems,
   expenses,
+  otherIncomes,
   orderLines,
   orders,
   payments,
@@ -333,9 +335,39 @@ export function createFinanceService(db: Database, config: FinanceConfig) {
       return expense
     },
 
+    async recordIncome(input: IncomeInput, actor: AuditActor) {
+      const income = {
+        id: crypto.randomUUID(),
+        category: input.category,
+        amountCents: input.amountCents,
+        incomeDate: new Date(input.incomeDate),
+        description: input.description || null,
+        createdBy: actor.id,
+        createdAt: new Date(),
+      }
+      await db.batch([
+        db.insert(otherIncomes).values(income),
+        db.insert(auditLogs).values({
+          actorType: 'user',
+          actorId: actor.id,
+          action: 'income.create',
+          entityType: 'income',
+          entityId: income.id,
+          before: null,
+          after: {
+            ...income,
+            incomeDate: income.incomeDate.toISOString(),
+            createdAt: income.createdAt.toISOString(),
+          },
+          requestId: actor.requestId,
+        }),
+      ])
+      return income
+    },
+
     async getMonthly(month: string) {
       const monthStart = `${month}-01`
-      const [historyResult, outstandingRows, recentPayments, recentExpenses, balanceResult] =
+      const [historyResult, outstandingRows, recentPayments, recentOtherIncomes, recentExpenses, balanceResult] =
         await Promise.all([
           db.execute<{
             month: string
@@ -351,12 +383,20 @@ export function createFinanceService(db: Database, config: FinanceConfig) {
             )
             SELECT
               to_char(report_month.month_start, 'YYYY-MM') AS month,
-              coalesce((
-                SELECT sum(payment.amount_cents)
-                FROM ${payments} AS payment
-                WHERE payment.payment_date >= report_month.month_start::timestamp AT TIME ZONE ${config.timezone}
-                  AND payment.payment_date < (report_month.month_start + interval '1 month')::timestamp AT TIME ZONE ${config.timezone}
-              ), 0)::bigint AS "incomeCents",
+              (
+                coalesce((
+                  SELECT sum(payment.amount_cents)
+                  FROM ${payments} AS payment
+                  WHERE payment.payment_date >= report_month.month_start::timestamp AT TIME ZONE ${config.timezone}
+                    AND payment.payment_date < (report_month.month_start + interval '1 month')::timestamp AT TIME ZONE ${config.timezone}
+                ), 0)
+                + coalesce((
+                  SELECT sum(other_income.amount_cents)
+                  FROM ${otherIncomes} AS other_income
+                  WHERE other_income.income_date >= report_month.month_start::timestamp AT TIME ZONE ${config.timezone}
+                    AND other_income.income_date < (report_month.month_start + interval '1 month')::timestamp AT TIME ZONE ${config.timezone}
+                ), 0)
+              )::bigint AS "incomeCents",
               coalesce((
                 SELECT sum(expense.amount_cents)
                 FROM ${expenses} AS expense
@@ -384,6 +424,17 @@ export function createFinanceService(db: Database, config: FinanceConfig) {
             .innerJoin(customers, eq(payments.customerId, customers.id))
             .innerJoin(orders, eq(payments.orderId, orders.id))
             .orderBy(desc(payments.paymentDate), desc(payments.createdAt))
+            .limit(8),
+          db
+            .select({
+              id: otherIncomes.id,
+              incomeDate: otherIncomes.incomeDate,
+              category: otherIncomes.category,
+              description: otherIncomes.description,
+              amountCents: otherIncomes.amountCents,
+            })
+            .from(otherIncomes)
+            .orderBy(desc(otherIncomes.incomeDate), desc(otherIncomes.createdAt))
             .limit(8),
           db
             .select({
@@ -477,6 +528,10 @@ export function createFinanceService(db: Database, config: FinanceConfig) {
         recentPayments: recentPayments.map((payment) => ({
           ...payment,
           paymentDate: payment.paymentDate.toISOString(),
+        })),
+        recentOtherIncomes: recentOtherIncomes.map((income) => ({
+          ...income,
+          incomeDate: income.incomeDate.toISOString(),
         })),
         recentExpenses: recentExpenses.map((expense) => ({
           ...expense,
