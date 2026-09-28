@@ -77,7 +77,7 @@ const nullableText = (max: number) =>
   z.union([z.string().trim().max(max), z.literal(''), z.null()]).optional()
 
 export const loginInputSchema = z.object({
-  email: z.string().trim().email().max(254).transform((value) => value.toLowerCase()),
+  email: z.string().trim().min(1).max(254).transform((value) => value.toLowerCase()),
   password: z.string().min(1).max(256),
 })
 
