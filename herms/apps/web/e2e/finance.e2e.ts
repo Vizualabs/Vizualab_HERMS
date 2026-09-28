@@ -123,7 +123,7 @@ async function routeStableFinanceReport(page: Page) {
 async function signInAsFinance(page: Page) {
   if (!password) throw new Error('SEED_USER_PASSWORD is required for finance E2E tests')
   await page.goto('/login')
-  await page.getByLabel('Email').fill('finance@herms.local')
+  await page.getByLabel('Username').fill('finance@herms.local')
   await page.getByLabel('Password').fill(password)
   await page.getByRole('button', { name: 'Sign in' }).click()
   await expect(page).toHaveURL(/\/dashboard/)

@@ -5,7 +5,7 @@ const password = process.env.SEED_USER_PASSWORD
 async function signIn(page: Page, email: string) {
   if (!password) throw new Error('SEED_USER_PASSWORD is required for Phase 8 E2E tests')
   await page.goto('/login')
-  await page.getByLabel('Email').fill(email)
+  await page.getByLabel('Username').fill(email)
   await page.getByLabel('Password').fill(password)
   await page.getByRole('button', { name: 'Sign in' }).click()
   await expect(page).toHaveURL(/\/dashboard/)

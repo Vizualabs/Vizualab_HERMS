@@ -5,7 +5,7 @@ const password = process.env.SEED_USER_PASSWORD
 async function signInAsOwner(page: Page) {
   if (!password) throw new Error('SEED_USER_PASSWORD is required for customer pricing E2E tests')
   await page.goto('/login')
-  await page.getByLabel('Email').fill('owner@herms.local')
+  await page.getByLabel('Username').fill('owner@herms.local')
   await page.getByLabel('Password').fill(password)
   await page.getByRole('button', { name: 'Sign in' }).click()
   await expect(page).toHaveURL(/\/dashboard/)

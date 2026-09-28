@@ -187,7 +187,7 @@ export function createApp({
       if ('response' in parsed) return parsed.response
       const user = await identity.authenticate(parsed.data.email, parsed.data.password)
       if (!user) {
-        return errorResponse(c, 401, 'INVALID_CREDENTIALS', 'Email or password is incorrect')
+        return errorResponse(c, 401, 'INVALID_CREDENTIALS', 'Username or password is incorrect')
       }
       await establishSession(c, user, auth)
       return c.json({ data: user })

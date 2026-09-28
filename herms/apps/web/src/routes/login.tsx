@@ -91,11 +91,13 @@ function LoginPage() {
             }}
           >
             <label className="block text-sm font-medium">
-              Email
+              Username
               <input
                 name="email"
-                type="email"
+                type="text"
                 autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
                 required
                 className="input mt-2 h-12"
               />
