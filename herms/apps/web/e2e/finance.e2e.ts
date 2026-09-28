@@ -107,6 +107,17 @@ async function routeStableFinanceReport(page: Page) {
       },
     })
   })
+  await page.route('**/api/finance/export?*', (route) => {
+    const month = new URL(route.request().url()).searchParams.get('month') ?? '2026-09'
+    return route.fulfill({
+      status: 200,
+      headers: {
+        'content-type': 'application/pdf',
+        'content-disposition': `attachment; filename="herms-finance-${month}.pdf"`,
+      },
+      body: '%PDF-1.4',
+    })
+  })
 }
 
 async function signInAsFinance(page: Page) {
@@ -121,7 +132,7 @@ async function signInAsFinance(page: Page) {
 }
 
 test.describe('Payments & Finance report', () => {
-  test('renders the report, preserves finance tools, and exports CSV', async ({ page }, testInfo) => {
+  test('renders the report, preserves finance tools, and exports PDF', async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 1900, height: 1000 })
     await routeStableFinanceReport(page)
     await signInAsFinance(page)
@@ -205,7 +216,7 @@ test.describe('Payments & Finance report', () => {
 
     const download = page.waitForEvent('download')
     await page.getByRole('button', { name: 'Export report' }).click()
-    expect((await download).suggestedFilename()).toMatch(/^herms-finance-\d{4}-\d{2}\.csv$/)
+    expect((await download).suggestedFilename()).toMatch(/^herms-finance-\d{4}-\d{2}\.pdf$/)
 
     await page.screenshot({
       path: testInfo.outputPath('finance-desktop.png'),
