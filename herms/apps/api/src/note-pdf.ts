@@ -78,6 +78,13 @@ function fit(value: unknown, font: PDFFont, size: number, width: number) {
 function drawPageNumber(document: PDFDocument, font: PDFFont) {
   const pages = document.getPages()
   pages.forEach((page, index) => {
+    page.drawText('HERMS Main Store', {
+      x: 50,
+      y: 22,
+      size: 8,
+      font,
+      color: rgb(0.4, 0.44, 0.48),
+    })
     page.drawText(`Page ${index + 1} of ${pages.length}`, {
       x: page.getWidth() - 92,
       y: 22,
@@ -166,7 +173,7 @@ function drawIdentity(
   reference: string,
 ) {
   const width = page.getWidth()
-  page.drawText(fit(note.storeName ?? 'HERMS', bold, 20, width - 100), { x: 50, y: page.getHeight() - 52, size: 20, font: bold, color: ink })
+  page.drawText(fit('DNP Event Organizing', bold, 20, width - 100), { x: 50, y: page.getHeight() - 52, size: 20, font: bold, color: ink })
   page.drawText(fit(note.storeAddress, regular, 9, width - 100), { x: 50, y: page.getHeight() - 70, size: 9, font: regular, color: ink })
   page.drawText(title, { x: 50, y: page.getHeight() - 112, size: 18, font: bold, color: ink })
   page.drawText(fit(number, bold, 12, 230), { x: width - 280, y: page.getHeight() - 108, size: 12, font: bold, color: ink })
